@@ -1,3 +1,6 @@
+import { caseInsensitiveSorter } from "@/lib/common/utilities";
+import { useCollections } from "@/lib/context/CollectionsContext";
+import useDebounce from "@/lib/hooks/useDebounce";
 import { SearchIcon } from "@chakra-ui/icons";
 import {
     Box,
@@ -17,9 +20,6 @@ import {
 import { mdiFilterVariant, mdiFolderUpload, mdiSort, mdiUpload } from "@mdi/js";
 import Icon from "@mdi/react";
 import { useEffect, useRef, useState } from "react";
-import { caseInsensitiveSorter } from "../common/utilities";
-import { useCollections } from "../context/CollectionsContext";
-import useDebounce from "../hooks/useDebounce";
 
 interface CollectionGridActionBarProps {
     rootCollectionId?: number;

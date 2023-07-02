@@ -4,7 +4,7 @@ import { Button, useDisclosure, useToast } from "@chakra-ui/react";
 import { useCollections } from "../context/CollectionsContext";
 import CollectionModal from "./CollectionModal";
 
-export default function CreateCollectionBtnModal() {
+export default function CreateCollectionBtn() {
     const [_, setCollections] = useCollections();
     const { isOpen, onOpen, onClose } = useDisclosure();
     const toast = useToast();

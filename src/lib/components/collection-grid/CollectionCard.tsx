@@ -16,7 +16,6 @@ import {
     MenuButton,
     MenuItem,
     MenuList,
-    SimpleGrid,
     Spinner,
     useDisclosure,
     useToast
@@ -25,46 +24,7 @@ import { mdiDotsVertical } from "@mdi/js";
 import Icon from "@mdi/react";
 import Image from "next/image";
 import { useRef, useState } from "react";
-import { useCollections } from "../context/CollectionsContext";
-import CollectionGridActionBar from "./CollectionGridActionBar";
-import CollectionModal from "./CollectionModal";
-
-interface CollectionGridProps {
-    rootCollectionId?: number;
-}
-
-export default function CollectionGrid({
-    rootCollectionId
-}: CollectionGridProps) {
-    const [collections, setCollections] = useCollections();
-
-    const collectionDeleted = (id: number) => {
-        setCollections((prev) => prev.filter((c) => c.id !== id));
-    };
-
-    const collectionEdited = (collection: Collection) => {
-        setCollections((prev) =>
-            prev.map((c) => (c.id === collection.id ? collection : c))
-        );
-    };
-
-    return (
-        <Flex direction="column" gap={5}>
-            <CollectionGridActionBar rootCollectionId={rootCollectionId} />
-            <SimpleGrid minChildWidth="15rem" spacingX={4} spacingY={8}>
-                {collections.map((collection) => (
-                    <CollectionCard
-                        key={collection.id}
-                        collection={collection}
-                        onCollectionDeleted={collectionDeleted}
-                        onCollectionEdited={collectionEdited}
-                    />
-                ))}
-                {/* {files.map(file => <CollectionCard key={file.id} file={file}/>)} */}
-            </SimpleGrid>
-        </Flex>
-    );
-}
+import CollectionModal from "../CollectionModal";
 
 interface CollectionCardProps {
     collection: Collection;
@@ -72,11 +32,11 @@ interface CollectionCardProps {
     onCollectionEdited: (collection: Collection) => void;
 }
 
-const CollectionCard = ({
+export default function CollectionCard({
     collection,
     onCollectionDeleted,
     onCollectionEdited
-}: CollectionCardProps) => {
+}: CollectionCardProps) {
     const [isHovering, setIsHovering] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const { deleteCollection, isDeleting } = useDeleteCollection();
@@ -227,4 +187,4 @@ const CollectionCard = ({
             </AlertDialog>
         </>
     );
-};
+}

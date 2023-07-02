@@ -1,9 +1,9 @@
 import { caseInsensitiveSorter } from "@/lib/common/utilities";
-import CreateCollectionBtnModal from "@/lib/components/CreateCollectionBtnModal";
+import CreateCollectionBtn from "@/lib/components/CreateCollectionBtn";
 import { Collection } from "@/lib/interfaces/collection";
 import { Flex } from "@chakra-ui/react";
 import { CollectionsProvider } from "../context/CollectionsContext";
-import CollectionGrid from "./CollectionGrid";
+import CollectionGrid from "./collection-grid/CollectionGrid";
 
 interface FrontPageCollectionsProps {
     initialCollections: Collection[];
@@ -19,7 +19,7 @@ export default function FrontPageCollections({
             )}>
             <Flex direction="column" gap={10}>
                 <CollectionGrid />
-                <CreateCollectionBtnModal />
+                <CreateCollectionBtn />
             </Flex>
         </CollectionsProvider>
     );
