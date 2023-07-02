@@ -1,4 +1,5 @@
-import { withGet, withUser } from "@/lib/common/route-helpers";
+import { ApiRoute } from "@/lib/common/api-route";
+import { withUser } from "@/lib/common/route-helpers";
 import { Collection } from "@/lib/interfaces/collection";
 import { CollectionService } from "@/lib/services/collection.service";
 import type { NextApiRequest, NextApiResponse } from "next";
@@ -9,7 +10,7 @@ type ResponseData = {
     collections?: Collection[];
 };
 
-export default withGet(withUser(handler));
+export default ApiRoute.get(handler);
 
 async function handler(
     req: NextApiRequest,

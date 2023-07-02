@@ -1,5 +1,5 @@
+import { ApiRoute } from "@/lib/common/api-route";
 import Log from "@/lib/common/log";
-import { withPost, withUser } from "@/lib/common/route-helpers";
 import type { NextApiRequest, NextApiResponse } from "next";
 
 interface Data {
@@ -7,7 +7,7 @@ interface Data {
     error?: string;
 }
 
-export default withPost(withUser(handler));
+export default ApiRoute.post(handler);
 
 function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
     try {

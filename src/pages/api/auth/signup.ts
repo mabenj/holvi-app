@@ -1,4 +1,4 @@
-import { withPost, withoutUser } from "@/lib/common/route-helpers";
+import { ApiRoute } from "@/lib/common/api-route";
 import AuthService from "@/lib/services/auth.service";
 import type { NextApiRequest, NextApiResponse } from "next";
 
@@ -9,7 +9,7 @@ interface ResponseData {
     serverError?: string;
 }
 
-export default withPost(withoutUser(handler));
+export default ApiRoute.post(handler, false);
 
 async function handler(
     req: NextApiRequest,
