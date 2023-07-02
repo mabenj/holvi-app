@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Collection } from "../interfaces/collection";
 
-export function useCreateCollection(initialCollection?: Collection) {
+export function useCollectionModal(initialCollection?: Collection) {
     const [name, setName] = useState(initialCollection?.name || "");
     const [nameError, setNameError] = useState("");
     const [tags, setTags] = useState<string[]>(initialCollection?.tags || []);
@@ -41,7 +41,9 @@ export function useCreateCollection(initialCollection?: Collection) {
         const collection: Collection = {
             id: data.collection.id,
             name: data.collection.name,
-            tags: data.collection.tags
+            tags: data.collection.tags,
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt
         };
         return Promise.resolve(collection);
     };

@@ -84,14 +84,16 @@ export function isValidUsername(username: string) {
 }
 
 export function caseInsensitiveSorter<T, K extends keyof T>(
-    key: K
+    key: K,
+    asc: boolean = true
 ): (a: T, b: T) => number {
     return (a: T, b: T) => {
         const valueA = String(a[key]).toLowerCase();
         const valueB = String(b[key]).toLowerCase();
 
-        return valueA.localeCompare(valueB, undefined, {
+        const result = valueA.localeCompare(valueB, undefined, {
             sensitivity: "accent"
         });
+        return asc ? result : -result;
     };
 }

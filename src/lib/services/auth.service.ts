@@ -45,8 +45,8 @@ export default class AuthService {
                     user: {
                         id: data.id,
                         username: data.username,
-                        createdAt: data.created_at,
-                        updatedAt: data.updated_at
+                        createdAt: data.created_at.getTime(),
+                        updatedAt: data.updated_at.getTime()
                     }
                 };
             })
@@ -73,16 +73,16 @@ export default class AuthService {
             user.password_salt,
             password
         );
-        if (correctPwd) {
-            return {
-                id: user.id,
-                username: user.username,
-                createdAt: user.created_at,
-                updatedAt: user.updated_at
-            };
+        if (!correctPwd) {
+            return null;
         }
-
-        return null;
+        
+        return {
+            id: user.id,
+            username: user.username,
+            createdAt: user.created_at.getTime(),
+            updatedAt: user.updated_at.getTime()
+        };
     }
 
     static async validateUser(session: IronSession): Promise<User | null> {
@@ -111,8 +111,8 @@ export default class AuthService {
         return {
             id: user.id,
             username: user.username,
-            createdAt: user.created_at,
-            updatedAt: user.updated_at
+            createdAt: user.created_at.getTime(),
+            updatedAt: user.updated_at.getTime()
         };
     }
 }

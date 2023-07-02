@@ -1,4 +1,4 @@
-import { useCreateCollection } from "@/lib/hooks/useCreateCollection";
+import { useCollectionModal } from "@/lib/hooks/useCollectionModal";
 import { Collection } from "@/lib/interfaces/collection";
 import {
     Box,
@@ -48,7 +48,7 @@ export default function CollectionModal({
         tags,
         isLoading,
         saveCollection
-    } = useCreateCollection(initialCollection);
+    } = useCollectionModal(initialCollection);
 
     const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();

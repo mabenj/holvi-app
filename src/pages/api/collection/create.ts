@@ -1,6 +1,5 @@
 import { withPost, withUser } from "@/lib/common/api-route-helpers";
 import { Collection } from "@/lib/interfaces/collection";
-import AuthService from "@/lib/services/auth.service";
 import { CollectionService } from "@/lib/services/collection.service";
 import type { NextApiRequest, NextApiResponse } from "next";
 
@@ -16,16 +15,6 @@ async function handler(
     req: NextApiRequest,
     res: NextApiResponse<ResponseData>
 ) {
-    if (req.method !== "POST") {
-        res.status(404);
-        return;
-    }
-    const user = await AuthService.validateUser(req.session);
-    if (!user) {
-        res.status(401).json({ status: "error" });
-        return;
-    }
-
     try {
         const { name, tags } = JSON.parse(req.body);
         const collectionService = new CollectionService(req.session.user.id);

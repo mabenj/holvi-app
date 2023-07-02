@@ -11,13 +11,15 @@ import {
     MenuButton,
     MenuItemOption,
     MenuList,
-    MenuOptionGroup
+    MenuOptionGroup,
+    useToast
 } from "@chakra-ui/react";
 import { mdiFilterVariant, mdiFolderUpload, mdiSort, mdiUpload } from "@mdi/js";
 import Icon from "@mdi/react";
 import { useEffect, useRef, useState } from "react";
-import useDebounce from "../hooks/useDebounce";
+import { caseInsensitiveSorter } from "../common/utilities";
 import { useCollections } from "../context/CollectionsContext";
+import useDebounce from "../hooks/useDebounce";
 
 interface CollectionGridActionBarProps {
     rootCollectionId?: number;
@@ -26,7 +28,8 @@ interface CollectionGridActionBarProps {
 export default function CollectionGridActionBar({
     rootCollectionId
 }: CollectionGridActionBarProps) {
-    const [collections, setCollections] = useCollections()
+    const [_, setCollections] = useCollections();
+    const toast = useToast();
 
     const listAllFiles = () => {
         alert("List all files"); //TODO
@@ -37,7 +40,25 @@ export default function CollectionGridActionBar({
     };
 
     const sort = (field: string, asc: boolean) => {
-        alert(`Sort: ${field} asc=${asc}`); //TODO
+        switch (field) {
+            case "name": {
+                setCollections((prev) => [
+                    ...prev.sort(caseInsensitiveSorter("name", asc))
+                ]);
+                break;
+            }
+            case "date": {
+                setCollections((prev) => [
+                    ...prev.sort(caseInsensitiveSorter("createdAt", asc))
+                ]);
+                break;
+            }
+            default:
+                toast({
+                    description: `Cannot sort by '${field}'`,
+                    status: "error"
+                });
+        }
     };
 
     const search = (query: string) => {
@@ -150,8 +171,8 @@ const SortBtn = ({
                     value={sortField}>
                     <MenuItemOption value="+name">Name (A-Z)</MenuItemOption>
                     <MenuItemOption value="-name">Name (Z-A)</MenuItemOption>
-                    <MenuItemOption value="+date">Newest first</MenuItemOption>
-                    <MenuItemOption value="-date">Oldest first</MenuItemOption>
+                    <MenuItemOption value="-date">Newest first</MenuItemOption>
+                    <MenuItemOption value="+date">Oldest first</MenuItemOption>
                 </MenuOptionGroup>
             </MenuList>
         </Menu>

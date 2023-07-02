@@ -38,7 +38,7 @@ export class CollectionService {
             `UPDATE collections
             SET label = $1, updated_at = $2
             WHERE id = $3 AND user_id = $4
-            RETURNING id, label`,
+            RETURNING id, label, created_at, updated_at`,
             [collection.name, new Date(), collection.id, this.userId]
         );
         if (!updatedCollection) {
@@ -54,7 +54,9 @@ export class CollectionService {
             collection: {
                 id: updatedCollection.id,
                 name: updatedCollection.label,
-                tags: tags
+                tags: tags,
+                createdAt: updatedCollection.created_at.getTime(),
+                updatedAt: updatedCollection.updated_at.getTime()
             }
         };
     }
@@ -92,7 +94,9 @@ export class CollectionService {
             collection: {
                 id: collection.id,
                 name: collection.label,
-                tags: insertedTags
+                tags: insertedTags,
+                createdAt: collection.created_at.getTime(),
+                updatedAt: collection.updated_at.getTime()
             }
         };
     }
@@ -113,7 +117,9 @@ export class CollectionService {
         }
         const collection: Collection = {
             id: result[0].id,
-            name: result[0].label,
+            name: result[0].collection_label,
+            createdAt: result[0].created_at.getTime(),
+            updatedAt: result[0].updated_at.getTime(),
             tags: result.map((row) => row.tag_label)
         };
         return {
@@ -131,7 +137,7 @@ export class CollectionService {
         );
 
         const collectionsById: Record<number, Collection> = result.reduce(
-            (acc, curr) => {
+            (acc: Record<number, Collection>, curr) => {
                 const {
                     id,
                     collection_label,
@@ -142,14 +148,16 @@ export class CollectionService {
                 acc[id] = {
                     id: id,
                     name: collection_label,
-                    tags: acc[id]?.tags ?? []
+                    tags: acc[id]?.tags ?? [],
+                    createdAt: created_at.getTime(),
+                    updatedAt: updated_at.getTime()
                 };
                 if (tag_label) {
                     acc[id].tags.push(tag_label);
                 }
                 return acc;
             },
-            {} as Record<number, Collection>
+            {}
         );
 
         return Object.values(collectionsById);
