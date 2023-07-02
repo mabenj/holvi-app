@@ -5,7 +5,7 @@ export function useDeleteCollection() {
 
     const deleteCollection = async (id: number) => {
         setIsDeleting(true);
-        const response = await fetch(`/api/collection/delete/${id}`, {
+        const response = await fetch(`/api/collections/delete/${id}`, {
             method: "DELETE"
         });
         setIsDeleting(false);

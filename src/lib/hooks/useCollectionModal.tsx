@@ -18,14 +18,14 @@ export function useCollectionModal(initialCollection?: Collection) {
         setIsLoading(true);
         let response: Response;
         if (isNew) {
-            response = await fetch("api/collection/create", {
+            response = await fetch("/api/collections/create", {
                 method: "POST",
                 body: JSON.stringify({ name, tags })
             });
             setName("");
             setTags([]);
         } else {
-            response = await fetch("api/collection/update", {
+            response = await fetch("/api/collections/update", {
                 method: "POST",
                 body: JSON.stringify({ id: initialCollection.id, name, tags })
             });
