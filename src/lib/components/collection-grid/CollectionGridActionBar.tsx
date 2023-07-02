@@ -28,7 +28,7 @@ interface CollectionGridActionBarProps {
 export default function CollectionGridActionBar({
     rootCollectionId
 }: CollectionGridActionBarProps) {
-    const [_, setCollections] = useCollections();
+    const { setCollections } = useCollections();
     const toast = useToast();
 
     const listAllFiles = () => {

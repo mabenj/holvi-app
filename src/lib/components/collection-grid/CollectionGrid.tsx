@@ -1,4 +1,3 @@
-import { Collection } from "@/lib/interfaces/collection";
 import { Flex, SimpleGrid } from "@chakra-ui/react";
 import { useCollections } from "../../context/CollectionsContext";
 import CollectionCard from "./CollectionCard";
@@ -11,17 +10,7 @@ interface CollectionGridProps {
 export default function CollectionGrid({
     rootCollectionId
 }: CollectionGridProps) {
-    const [collections, setCollections] = useCollections();
-
-    const collectionDeleted = (id: number) => {
-        setCollections((prev) => prev.filter((c) => c.id !== id));
-    };
-
-    const collectionEdited = (collection: Collection) => {
-        setCollections((prev) =>
-            prev.map((c) => (c.id === collection.id ? collection : c))
-        );
-    };
+    const { collections, setCollections } = useCollections();
 
     return (
         <Flex direction="column" gap={5}>
@@ -31,8 +20,6 @@ export default function CollectionGrid({
                     <CollectionCard
                         key={collection.id}
                         collection={collection}
-                        onCollectionDeleted={collectionDeleted}
-                        onCollectionEdited={collectionEdited}
                     />
                 ))}
                 {/* {files.map(file => <CollectionCard key={file.id} file={file}/>)} */}

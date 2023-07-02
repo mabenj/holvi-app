@@ -13,7 +13,6 @@ export default function Layout({ user, children }: LayoutProps) {
     return (
         <>
             <Head>
-                <title>HomeWork</title>
                 <meta
                     name="viewport"
                     content="width=device-width, initial-scale=1"

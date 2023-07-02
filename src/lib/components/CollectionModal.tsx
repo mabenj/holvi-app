@@ -18,7 +18,8 @@ import {
     ModalOverlay,
     Tag,
     TagCloseButton,
-    TagLabel
+    TagLabel,
+    useToast
 } from "@chakra-ui/react";
 import { FormEvent, KeyboardEvent, useState } from "react";
 import { getErrorMessage } from "../common/utilities";
@@ -27,16 +28,12 @@ interface CollectionModalProps {
     isOpen: boolean;
     mode: "edit" | "create";
     onClose: () => void;
-    onSaved: (collection: Collection) => void;
-    onError: (msg?: string) => void;
     initialCollection?: Collection;
 }
 
 export default function CollectionModal({
     isOpen,
     onClose,
-    onSaved,
-    onError,
     mode,
     initialCollection
 }: CollectionModalProps) {
@@ -49,15 +46,26 @@ export default function CollectionModal({
         isLoading,
         saveCollection
     } = useCollectionModal(initialCollection);
+    const toast = useToast();
 
     const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         try {
-            const collection = await saveCollection();
-            onSaved(collection);
+            await saveCollection();
             onClose();
+            toast({
+                description: `Collection ${
+                    mode === "edit" ? "modified" : "created"
+                }`,
+                status: "success"
+            });
         } catch (error) {
-            onError(getErrorMessage(error));
+            toast({
+                description: `Could not ${
+                    mode === "edit" ? "edit" : "create"
+                } collection: ${getErrorMessage(error)}`,
+                status: "success"
+            });
         }
     };
 

@@ -1,39 +1,42 @@
-import { withSessionSsr } from "@/lib/common/iron-session";
-import FrontPageCollections from "@/lib/components/FrontPageCollections";
+import { withUserSsr } from "@/lib/common/route-helpers";
+import CollectionModal from "@/lib/components/CollectionModal";
 import Layout from "@/lib/components/Layout";
-import { Collection } from "@/lib/interfaces/collection";
+import CollectionGrid from "@/lib/components/collection-grid/CollectionGrid";
 import { User } from "@/lib/interfaces/user";
-import { CollectionService } from "@/lib/services/collection.service";
+import { AddIcon } from "@chakra-ui/icons";
+import { Button, Flex, useDisclosure } from "@chakra-ui/react";
 import Head from "next/head";
 
-export const getServerSideProps = withSessionSsr(
+export const getServerSideProps = withUserSsr(
     async function getServerSideProps({ req }) {
-        const collections = await new CollectionService(
-            req.session.user.id
-        ).getAll();
         return {
             props: {
-                user: req.session.user,
-                collections: collections
+                user: req.session.user
             }
         };
     }
 );
 
-export default function Home({
-    user,
-    collections
-}: {
-    user: User;
-    collections: Collection[];
-}) {
+export default function Home({ user }: { user: User }) {
+    const { isOpen, onOpen, onClose } = useDisclosure();
+
     return (
         <>
             <Head>
                 <title>HomeWork</title>
             </Head>
             <Layout user={user}>
-                <FrontPageCollections initialCollections={collections} />
+                <Flex direction="column" gap={10}>
+                    <CollectionGrid />
+                    <Button onClick={onOpen} leftIcon={<AddIcon />}>
+                        Create Collection
+                    </Button>
+                    <CollectionModal
+                        isOpen={isOpen}
+                        onClose={onClose}
+                        mode="create"
+                    />
+                </Flex>
             </Layout>
         </>
     );

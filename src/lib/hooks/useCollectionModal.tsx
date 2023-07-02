@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useCollections } from "../context/CollectionsContext";
 import { Collection } from "../interfaces/collection";
 
 export function useCollectionModal(initialCollection?: Collection) {
@@ -6,6 +7,7 @@ export function useCollectionModal(initialCollection?: Collection) {
     const [nameError, setNameError] = useState("");
     const [tags, setTags] = useState<string[]>(initialCollection?.tags || []);
     const [isLoading, setIsLoading] = useState(false);
+    const { setCollections } = useCollections();
 
     const isNew = !initialCollection;
 
@@ -45,6 +47,13 @@ export function useCollectionModal(initialCollection?: Collection) {
             createdAt: data.createdAt,
             updatedAt: data.updatedAt
         };
+        if (isNew) {
+            setCollections((prev) => [...prev, collection]);
+        } else {
+            setCollections((prev) =>
+                prev.map((c) => (c.id === collection.id ? collection : c))
+            );
+        }
         return Promise.resolve(collection);
     };
 

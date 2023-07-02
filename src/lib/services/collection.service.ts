@@ -106,7 +106,7 @@ export class CollectionService {
             return { notFound: true };
         }
         const result = await Database.sql(
-            `SELECT c.id, c.label as collection_label, c.created_at. c.updated_at, ct.label as tag_label
+            `SELECT c.id, c.label as collection_label, c.created_at, c.updated_at, ct.label as tag_label
             FROM collections c
             LEFT JOIN collection_tags ct ON c.id = ct.collection_id
             WHERE c.user_id = $1 AND c.id = $2`,
@@ -120,7 +120,7 @@ export class CollectionService {
             name: result[0].collection_label,
             createdAt: result[0].created_at.getTime(),
             updatedAt: result[0].updated_at.getTime(),
-            tags: result.map((row) => row.tag_label)
+            tags: result.map((row) => row.tag_label).filter((tag) => !!tag)
         };
         return {
             collection

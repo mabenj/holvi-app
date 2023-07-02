@@ -1,4 +1,4 @@
-import { withPost, withoutUser } from "@/lib/common/api-route-helpers";
+import { withPost, withoutUser } from "@/lib/common/route-helpers";
 import AuthService from "@/lib/services/auth.service";
 import type { NextApiRequest, NextApiResponse } from "next";
 

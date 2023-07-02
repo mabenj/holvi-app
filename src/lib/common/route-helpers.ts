@@ -1,12 +1,43 @@
-import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import {
+    GetServerSidePropsContext,
+    GetServerSidePropsResult,
+    NextApiHandler,
+    NextApiRequest,
+    NextApiResponse
+} from "next";
 import AuthService from "../services/auth.service";
-import { withSessionRoute } from "./iron-session";
+import { withSessionRoute, withSessionSsr } from "./iron-session";
+import Log from "./log";
 
 enum HttpMethod {
     GET = "GET",
     POST = "POST",
     DELETE = "DELETE",
     PUT = "PUT"
+}
+
+export function withUserSsr<
+    P extends { [key: string]: unknown } = { [key: string]: unknown }
+>(
+    handler: (
+        context: GetServerSidePropsContext
+    ) => GetServerSidePropsResult<P> | Promise<GetServerSidePropsResult<P>>
+) {
+    return withSessionSsr(async (context) => {
+        const user = await AuthService.validateUser(context.req.session);
+        if (!user) {
+            return {
+                redirect: {
+                    destination: "/login",
+                    statusCode: 401,
+                    permanent: false
+                }
+            };
+        }
+        context.req.session.user = user;
+        await context.req.session.save();
+        return handler(context);
+    });
 }
 
 export function withUser(handler: NextApiHandler) {
@@ -16,7 +47,8 @@ export function withUser(handler: NextApiHandler) {
             res.status(401).end();
             return;
         }
-
+        req.session.user = user;
+        await req.session.save();
         return handler(req, res);
     });
 }
@@ -54,6 +86,7 @@ export function withPut(handler: NextApiHandler) {
 
 function withMethod(method: HttpMethod, handler: NextApiHandler) {
     return (req: NextApiRequest, res: NextApiResponse) => {
+        Log.info(`${method}: ${req.url}`);
         if (req.method !== method) {
             res.status(404).end();
             return;

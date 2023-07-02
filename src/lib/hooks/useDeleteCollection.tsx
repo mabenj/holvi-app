@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useCollections } from "../context/CollectionsContext";
 
 export function useDeleteCollection() {
     const [isDeleting, setIsDeleting] = useState(false);
+    const { setCollections } = useCollections();
 
     const deleteCollection = async (id: number) => {
         setIsDeleting(true);
@@ -13,6 +15,7 @@ export function useDeleteCollection() {
         if (status === "error" || error) {
             return Promise.reject(error);
         }
+        setCollections((prev) => prev.filter((c) => c.id !== id));
         return Promise.resolve();
     };
 

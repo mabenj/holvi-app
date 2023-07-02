@@ -28,15 +28,9 @@ import CollectionModal from "../CollectionModal";
 
 interface CollectionCardProps {
     collection: Collection;
-    onCollectionDeleted: (id: number) => void;
-    onCollectionEdited: (collection: Collection) => void;
 }
 
-export default function CollectionCard({
-    collection,
-    onCollectionDeleted,
-    onCollectionEdited
-}: CollectionCardProps) {
+export default function CollectionCard({ collection }: CollectionCardProps) {
     const [isHovering, setIsHovering] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const { deleteCollection, isDeleting } = useDeleteCollection();
@@ -56,7 +50,6 @@ export default function CollectionCard({
     const handleDelete = () => {
         deleteCollection(collection.id)
             .then(() => {
-                onCollectionDeleted(collection.id);
                 toast({
                     description: "Collection deleted",
                     status: "success"
@@ -68,24 +61,6 @@ export default function CollectionCard({
                     status: "error"
                 })
             );
-    };
-
-    const handleEditSaved = (edited: Collection) => {
-        onCollectionEdited(edited);
-        toast({
-            description: "Collection saved",
-            status: "success"
-        });
-    };
-
-    const handleEditError = (errorMsg?: string) => {
-        if (!errorMsg) {
-            return;
-        }
-        toast({
-            description: errorMsg,
-            status: "error"
-        });
     };
 
     return (
@@ -150,8 +125,6 @@ export default function CollectionCard({
                 isOpen={isModalOpen}
                 onClose={onModalClose}
                 mode="edit"
-                onError={handleEditError}
-                onSaved={handleEditSaved}
                 initialCollection={collection}
             />
             <AlertDialog

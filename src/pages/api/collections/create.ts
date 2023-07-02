@@ -1,4 +1,4 @@
-import { withPost, withUser } from "@/lib/common/api-route-helpers";
+import { withPost, withUser } from "@/lib/common/route-helpers";
 import { Collection } from "@/lib/interfaces/collection";
 import { CollectionService } from "@/lib/services/collection.service";
 import type { NextApiRequest, NextApiResponse } from "next";
