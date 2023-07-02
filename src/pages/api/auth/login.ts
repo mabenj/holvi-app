@@ -20,7 +20,7 @@ async function handler(
                 ? await AuthService.loginUser(username, password)
                 : null;
         if (!user) {
-            res.status(400).json({
+            res.status(401).json({
                 status: "error",
                 error: "Username doesn't exist or the password is wrong"
             });
