@@ -76,7 +76,7 @@ export default class AuthService {
         if (!correctPwd) {
             return null;
         }
-        
+
         return {
             id: user.id,
             username: user.username,
@@ -103,7 +103,6 @@ export default class AuthService {
             return null;
         }
         if (user.require_sign_in) {
-            // TODO: add require_sign_in column at some point
             await session.destroy();
             return null;
         }
