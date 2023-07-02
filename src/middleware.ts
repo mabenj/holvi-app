@@ -1,4 +1,3 @@
-// /middleware.ts
 import { getIronSession } from "iron-session/edge";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
