@@ -1,3 +1,4 @@
+import { useRouter } from "next/router";
 import { useState } from "react";
 
 export function useLogin() {
@@ -6,6 +7,7 @@ export function useLogin() {
     const [error, setError] = useState("");
     const [isLoggingIn, setIsLoggingIn] = useState(false);
     const [isSigningOut, setIsSigningOut] = useState(false);
+    const { push } = useRouter();
 
     const login = async () => {
         if (!username || !password) {
@@ -25,6 +27,7 @@ export function useLogin() {
             return Promise.reject();
         }
 
+        push("/");
         return Promise.resolve();
     };
 
@@ -37,6 +40,7 @@ export function useLogin() {
             if (response.status !== 200) {
                 throw new Error();
             }
+            push("/login");
             return Promise.resolve();
         } catch {
             return Promise.reject("Could not sign out");

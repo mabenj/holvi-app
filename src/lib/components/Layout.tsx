@@ -1,6 +1,6 @@
+import { Link } from "@chakra-ui/next-js";
 import { Box, Button, Container, Flex, useToast } from "@chakra-ui/react";
 import Head from "next/head";
-import { useRouter } from "next/router";
 import { useLogin } from "../hooks/useLogin";
 import { User } from "../interfaces/user";
 
@@ -32,18 +32,16 @@ export default function Layout({ user, children }: LayoutProps) {
 
 const Navbar = ({ username }: { username?: string }) => {
     const { logout, isSigningOut } = useLogin();
-    const { push } = useRouter();
     const toast = useToast();
 
     const handleLogout = () => {
         logout()
-            .then(() => {
-                push("/login");
+            .then(() =>
                 toast({
                     description: "You have been signed out",
                     status: "info"
-                });
-            })
+                })
+            )
             .catch((error) =>
                 toast({
                     description: error,
@@ -59,7 +57,9 @@ const Navbar = ({ username }: { username?: string }) => {
                 justifyContent="space-between"
                 w="100%"
                 p={4}>
-                <span>HomeWork</span>
+                <Link href="/" _hover={{ textDecoration: "none" }}>
+                    HomeWork
+                </Link>
                 <Flex alignItems="center" gap={3}>
                     <span>
                         Logged in as <strong>{username}</strong>

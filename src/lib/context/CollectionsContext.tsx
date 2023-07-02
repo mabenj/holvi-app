@@ -54,15 +54,12 @@ export function CollectionsProvider({
 }
 
 const fetcher = (url: string) =>
-    fetch(url)
-        .then((r) => {
-            console.log("getting all");
-            return r.json();
-        })
-        .then((data) =>
-            data.status === "ok"
-                ? (data.collections as Collection[]).sort(
-                      caseInsensitiveSorter("name")
-                  )
-                : []
+    fetch(url).then(async (response) => {
+        const data = await response.json();
+        if (data.status !== "ok" || data.error) {
+            throw new Error(data.error);
+        }
+        return (data.collections as Collection[]).sort(
+            caseInsensitiveSorter("name")
         );
+    });
