@@ -1,22 +1,37 @@
 {
-  "name": "homework-app",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
-  },
-  "dependencies": {
-    "@types/node": "20.3.2",
-    "@types/react": "18.2.14",
-    "@types/react-dom": "18.2.6",
-    "eslint": "8.43.0",
-    "eslint-config-next": "13.4.7",
-    "next": "13.4.7",
-    "react": "18.2.0",
-    "react-dom": "18.2.0",
-    "typescript": "5.1.5"
-  }
+    "name": "homework-app",
+    "version": "0.1.0",
+    "private": true,
+    "scripts": {
+        "dev": "next dev",
+        "build": "next build",
+        "start": "next start",
+        "lint": "next lint"
+    },
+    "dependencies": {
+        "@chakra-ui/icons": "^2.0.19",
+        "@chakra-ui/next-js": "^2.1.4",
+        "@chakra-ui/react": "^2.7.1",
+        "@emotion/react": "^11.11.1",
+        "@emotion/styled": "^11.11.0",
+        "@mdi/js": "^7.2.96",
+        "@mdi/react": "^1.6.1",
+        "@types/node": "20.3.2",
+        "@types/react": "18.2.14",
+        "@types/react-dom": "18.2.6",
+        "bcrypt": "^5.1.0",
+        "chakra-multiselect": "^0.4.5",
+        "eslint": "8.43.0",
+        "eslint-config-next": "13.4.7",
+        "framer-motion": "^10.12.17",
+        "iron-session": "^6.3.1",
+        "next": "13.4.7",
+        "pg-promise": "^11.5.0",
+        "react": "18.2.0",
+        "react-dom": "18.2.0",
+        "typescript": "5.1.5"
+    },
+    "devDependencies": {
+        "@types/bcrypt": "^5.0.0"
+    }
 }

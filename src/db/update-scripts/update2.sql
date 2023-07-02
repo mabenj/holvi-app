@@ -1,0 +1,28 @@
+CREATE TABLE IF NOT EXISTS albums (
+    id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(id) ON DELETE CASCADE,
+    label CITEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS album_tags (
+    id SERIAL PRIMARY KEY,
+    album_id INT REFERENCES albums(id) ON DELETE CASCADE,
+    label CITEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS files (
+    id SERIAL PRIMARY KEY,
+    album_id INT REFERENCES albums(id) ON DELETE CASCADE,
+    filepath CITEXT NOT NULL UNIQUE,
+    file_type VARCHAR(100) NOT NULL,
+    label CITEXT NOT NULL,
+    uploaded_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS file_tags (
+    id SERIAL PRIMARY KEY,
+    file_id INT REFERENCES files(id) ON DELETE CASCADE,
+    label CITEXT NOT NULL
+);
