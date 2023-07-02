@@ -2,7 +2,14 @@ import { useDeleteCollection } from "@/lib/hooks/useDeleteCollection";
 import { Collection } from "@/lib/interfaces/collection";
 import { Link } from "@chakra-ui/next-js";
 import {
+    AlertDialog,
+    AlertDialogBody,
+    AlertDialogContent,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogOverlay,
     Box,
+    Button,
     Flex,
     IconButton,
     Menu,
@@ -17,7 +24,7 @@ import {
 import { mdiDotsVertical } from "@mdi/js";
 import Icon from "@mdi/react";
 import Image from "next/image";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useCollections } from "../context/CollectionsContext";
 import CollectionGridActionBar from "./CollectionGridActionBar";
 import CollectionModal from "./CollectionModal";
@@ -78,6 +85,12 @@ const CollectionCard = ({
         onOpen: onModalOpen,
         onClose: onModalClose
     } = useDisclosure();
+    const {
+        isOpen: isAlertOpen,
+        onOpen: onAlertOpen,
+        onClose: onAlertClose
+    } = useDisclosure();
+    const cancelDeleteRef = useRef(null);
     const toast = useToast();
 
     const handleDelete = () => {
@@ -153,10 +166,10 @@ const CollectionCard = ({
                             />
 
                             <MenuList>
-                                <MenuItem onClick={() => onModalOpen()}>
+                                <MenuItem onClick={onModalOpen}>
                                     Edit collection
                                 </MenuItem>
-                                <MenuItem onClick={handleDelete}>
+                                <MenuItem onClick={onAlertOpen}>
                                     Delete collection
                                 </MenuItem>
                             </MenuList>
@@ -181,6 +194,37 @@ const CollectionCard = ({
                 onSaved={handleEditSaved}
                 initialCollection={collection}
             />
+            <AlertDialog
+                isOpen={isAlertOpen}
+                leastDestructiveRef={cancelDeleteRef}
+                onClose={onAlertClose}
+                isCentered>
+                <AlertDialogOverlay>
+                    <AlertDialogContent>
+                        <AlertDialogHeader fontSize="lg" fontWeight="bold">
+                            Delete collection
+                        </AlertDialogHeader>
+
+                        <AlertDialogBody>
+                            Are you sure? You cannot undo this afterwards.
+                        </AlertDialogBody>
+
+                        <AlertDialogFooter>
+                            <Button
+                                ref={cancelDeleteRef}
+                                onClick={onAlertClose}>
+                                Cancel
+                            </Button>
+                            <Button
+                                colorScheme="red"
+                                onClick={handleDelete}
+                                ml={3}>
+                                Delete
+                            </Button>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialogOverlay>
+            </AlertDialog>
         </>
     );
 };
