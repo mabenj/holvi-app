@@ -1,7 +1,7 @@
-import { mkdir, readdir, rename, rm, stat } from "fs/promises";
+import { mkdir, readFile, readdir, rename, rm, stat } from "fs/promises";
+import imageSize from "image-size";
 import path from "path";
 import Log from "./log";
-import imageSize from "image-size";
 
 export async function createDirIfNotExists(dir: string) {
     try {
@@ -28,10 +28,18 @@ export async function moveDirectoryContents(
     );
 }
 
-export function getImageDimensions(path: string){
-    return imageSize(path)
+export function getImageDimensions(path: string) {
+    return imageSize(path);
 }
 
-export async function deleteDirectory(path: string){
+export async function deleteDirectory(path: string) {
     await rm(path, { recursive: true, force: true });
+}
+
+export async function readBytes(path: string) {
+    try{
+        return readFile(path)
+    }catch{
+        return null;
+    }
 }

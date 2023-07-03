@@ -4,7 +4,8 @@ import path from "path";
 import {
     deleteDirectory,
     getImageDimensions,
-    moveDirectoryContents
+    moveDirectoryContents,
+    readBytes
 } from "../common/file-system-helpers";
 import Log from "../common/log";
 import parseForm from "../common/parse-form";
@@ -36,8 +37,47 @@ interface UploadResult {
     files?: CollectionFile[];
 }
 
+interface GetFileResult {
+    file?: Buffer;
+    mimeType?: string;
+    notFound?: boolean;
+}
+
 export class CollectionService {
     constructor(private readonly userId: number) {}
+
+    async getFile(
+        collectionId: number,
+        fileId: number
+    ): Promise<GetFileResult> {
+        if (!collectionId || isNaN(collectionId) || !fileId || isNaN(fileId)) {
+            return { notFound: true };
+        }
+
+        const result = await Database.sqlOne(
+            `SELECT f.filepath, f.file_type
+            FROM files f
+            JOIN collections c on f.collection_id = c.id
+            JOIN users u on c.user_id = u.id
+            WHERE u.id = $1 AND c.id = $2 AND f.id = $3`,
+            [this.userId, collectionId, fileId]
+        );
+        if (!result) {
+            return { notFound: true };
+        }
+
+        const mimeType = result.file_type;
+        const file = await readBytes(
+            path.join(this.getDataDir(), result.filepath)
+        );
+        if (!file) {
+            return {
+                notFound: true
+            };
+        }
+
+        return { file, mimeType };
+    }
 
     async uploadFiles(
         collectionId: number,
@@ -316,15 +356,19 @@ export class CollectionService {
     }
 
     private getUserCollectionDir(collectionId: number) {
+        return path.join(
+            this.getDataDir(),
+            this.userId.toString(),
+            collectionId.toString()
+        );
+    }
+
+    private getDataDir() {
         if (!process.env.DATA_DIR) {
             throw new Error(
                 "Data directory not defined, use environment variable 'DATA_DIR'"
             );
         }
-        return path.join(
-            process.env.DATA_DIR,
-            this.userId.toString(),
-            collectionId.toString()
-        );
+        return process.env.DATA_DIR;
     }
 }
