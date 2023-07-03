@@ -1,8 +1,11 @@
 import Database from "@/db/Database";
-import { rename, rm } from "fs/promises";
-import imageSize from "image-size";
 import { NextApiRequest } from "next";
 import path from "path";
+import {
+    deleteDirectory,
+    getImageDimensions,
+    moveDirectoryContents
+} from "../common/file-system-helpers";
 import Log from "../common/log";
 import parseForm from "../common/parse-form";
 import { Collection } from "../interfaces/collection";
@@ -53,11 +56,9 @@ export class CollectionService {
             collectionId.toString()
         );
         const workingDir = path.join(
-            process.env.DATA_DIR,
-            relativeDir,
+            this.getUserCollectionDir(collectionId),
             "upload"
         );
-        const targetDir = path.join(process.env.DATA_DIR, relativeDir);
         try {
             const { fields, files } = await parseForm(
                 req,
@@ -65,13 +66,9 @@ export class CollectionService {
                 (percent) => Log.info(`Upload progress ${percent}%`)
             );
             const fileList = Object.keys(files).flatMap((file) => files[file]);
-            await Promise.all(
-                fileList.map((file) =>
-                    rename(
-                        path.join(workingDir, file.newFilename || ""),
-                        path.join(targetDir, file.newFilename || "")
-                    )
-                )
+            await moveDirectoryContents(
+                workingDir,
+                this.getUserCollectionDir(collectionId)
             );
 
             const timestamp = new Date().toISOString();
@@ -86,7 +83,7 @@ export class CollectionService {
                 );
                 const isImage = file.mimetype?.includes("image") || false;
                 const { width, height } = isImage
-                    ? imageSize(absolutePath)
+                    ? getImageDimensions(absolutePath)
                     : { width: -1, height: -1 };
                 return {
                     collection_id: collectionId,
@@ -119,7 +116,7 @@ export class CollectionService {
                 }))
             };
         } finally {
-            await rm(workingDir, { recursive: true, force: true });
+            await deleteDirectory(workingDir);
         }
     }
 
@@ -164,10 +161,12 @@ export class CollectionService {
         if (isNaN(collectionId)) {
             return { error: `Invalid collection id '${collectionId}'` };
         }
+        const collectionDir = this.getUserCollectionDir(collectionId);
         await Database.sqlOne(
             "DELETE FROM collections WHERE user_id = $1 AND id = $2",
             [this.userId, collectionId]
         );
+        await deleteDirectory(collectionDir);
         return {};
     }
 
@@ -313,6 +312,19 @@ export class CollectionService {
         await Database.sql(
             `DELETE from collection_tags WHERE collection_id = $1`,
             [collectionId]
+        );
+    }
+
+    private getUserCollectionDir(collectionId: number) {
+        if (!process.env.DATA_DIR) {
+            throw new Error(
+                "Data directory not defined, use environment variable 'DATA_DIR'"
+            );
+        }
+        return path.join(
+            process.env.DATA_DIR,
+            this.userId.toString(),
+            collectionId.toString()
         );
     }
 }

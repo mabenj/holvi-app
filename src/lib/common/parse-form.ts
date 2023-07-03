@@ -3,6 +3,7 @@ import { mkdir, stat } from "fs/promises";
 import { nanoid } from "nanoid";
 import { NextApiRequest } from "next";
 import Log from "./log";
+import { createDirIfNotExists } from "./file-system-helpers";
 
 const DEFAULT_MAX_FILE_SIZE_KB = 1024 * 1024 * 1024 * 4; // 4gb
 const DEFAULT_TOTAL_MAX_FILE_SIZE_KB = 1024 * 1024 * 1024 * 16; // 16gb
@@ -14,15 +15,9 @@ export default function parseForm(
 ): Promise<{ fields: formidable.Fields; files: formidable.Files }> {
     return new Promise(async (resolve, reject) => {
         try {
-            await stat(uploadDir);
-        } catch (e: any) {
-            if (e.code === "ENOENT") {
-                await mkdir(uploadDir, { recursive: true });
-            } else {
-                Log.error("Error creating upload directory", e);
-                reject(e);
-                return;
-            }
+            await createDirIfNotExists(uploadDir)
+        } catch (e) {
+            reject(e);
         }
 
         const form = formidable({
