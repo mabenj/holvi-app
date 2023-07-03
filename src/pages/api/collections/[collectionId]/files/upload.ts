@@ -1,17 +1,16 @@
 import { ApiRoute } from "@/lib/common/api-route";
+import { ApiResponse } from "@/lib/interfaces/api-response";
 import { CollectionFile } from "@/lib/interfaces/collection-file";
 import { CollectionService } from "@/lib/services/collection.service";
 import type { NextApiRequest, NextApiResponse } from "next";
 
-interface ResponseData {
-    status: "ok" | "error";
-    error?: string;
+interface Result {
     files?: CollectionFile[];
 };
 
 async function uploadFiles(
     req: NextApiRequest,
-    res: NextApiResponse<ResponseData>
+    res: NextApiResponse<ApiResponse<Result>>
 ) {
     const { collectionId } = req.query;
     const collectionService = new CollectionService(req.session.user.id);

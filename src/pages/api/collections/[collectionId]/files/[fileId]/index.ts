@@ -1,14 +1,12 @@
 import { ApiRoute } from "@/lib/common/api-route";
+import { ApiResponse } from "@/lib/interfaces/api-response";
 import type { NextApiRequest, NextApiResponse } from "next";
 
-interface ResponseData {
-    status: "ok" | "error";
-    error?: string;
-}
+interface GetResult {}
 
 async function getFile(
     req: NextApiRequest,
-    res: NextApiResponse<ResponseData>
+    res: NextApiResponse<ApiResponse<GetResult>>
 ) {
     // const { collectionId } = req.query;
     // const collectionService = new CollectionService(req.session.user.id);
@@ -26,7 +24,7 @@ async function getFile(
 
 async function deleteFile(
     req: NextApiRequest,
-    res: NextApiResponse<ResponseData>
+    res: NextApiResponse<ApiResponse>
 ) {
     // const { collectionId } = req.query;
     // const collectionService = new CollectionService(req.session.user.id);

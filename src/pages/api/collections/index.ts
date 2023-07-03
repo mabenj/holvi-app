@@ -1,29 +1,24 @@
 import { ApiRoute } from "@/lib/common/api-route";
+import { ApiResponse } from "@/lib/interfaces/api-response";
 import { Collection } from "@/lib/interfaces/collection";
 import { CollectionService } from "@/lib/services/collection.service";
 import type { NextApiRequest, NextApiResponse } from "next";
 
-interface GetCollectionsResponse {
-    status: "ok" | "error";
-    error?: string;
+interface GetAllResult {
     collections?: Collection[];
 }
 
-interface UpdateCollectionResponse {
-    status: "ok" | "error";
-    error?: string;
+interface UpdateResult {
     collection?: Collection;
 }
 
-interface CreateCollectionResponse {
-    status: "ok" | "error";
-    error?: string;
+interface CreateResult {
     collection?: Collection;
 }
 
 async function getCollections(
     req: NextApiRequest,
-    res: NextApiResponse<GetCollectionsResponse>
+    res: NextApiResponse<ApiResponse<GetAllResult>>
 ) {
     const collectionService = new CollectionService(req.session.user.id);
     const collections = await collectionService.getAll();
@@ -32,7 +27,7 @@ async function getCollections(
 
 async function updateCollection(
     req: NextApiRequest,
-    res: NextApiResponse<UpdateCollectionResponse>
+    res: NextApiResponse<ApiResponse<UpdateResult>>
 ) {
     const collection = JSON.parse(req.body) as Collection;
     const collectionService = new CollectionService(req.session.user.id);
@@ -48,7 +43,7 @@ async function updateCollection(
 
 async function createCollection(
     req: NextApiRequest,
-    res: NextApiResponse<CreateCollectionResponse>
+    res: NextApiResponse<ApiResponse<CreateResult>>
 ) {
     const { name, tags } = JSON.parse(req.body);
     const collectionService = new CollectionService(req.session.user.id);

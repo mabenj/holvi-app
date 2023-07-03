@@ -1,13 +1,9 @@
 import { ApiRoute } from "@/lib/common/api-route";
+import { ApiResponse } from "@/lib/interfaces/api-response";
 import AuthService from "@/lib/services/auth.service";
 import type { NextApiRequest, NextApiResponse } from "next";
 
-interface ResponseData {
-    status: "ok" | "error";
-    error?: string;
-}
-
-async function post(req: NextApiRequest, res: NextApiResponse<ResponseData>) {
+async function post(req: NextApiRequest, res: NextApiResponse<ApiResponse>) {
     const { username, password } = JSON.parse(req.body);
     const user =
         username && password

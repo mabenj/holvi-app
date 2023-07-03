@@ -1,15 +1,11 @@
 import { ApiRoute } from "@/lib/common/api-route";
+import { ApiResponse } from "@/lib/interfaces/api-response";
 import { CollectionService } from "@/lib/services/collection.service";
 import type { NextApiRequest, NextApiResponse } from "next";
 
-interface ResponseData {
-    status: "ok" | "error";
-    error?: string;
-}
-
 async function deleteCollection(
     req: NextApiRequest,
-    res: NextApiResponse<ResponseData>
+    res: NextApiResponse<ApiResponse>
 ) {
     const { collectionId } = req.query;
     const collectionService = new CollectionService(req.session.user.id);
