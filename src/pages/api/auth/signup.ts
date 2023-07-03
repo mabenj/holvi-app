@@ -9,32 +9,22 @@ interface ResponseData {
     serverError?: string;
 }
 
-export default ApiRoute.post(handler, false);
+export default ApiRoute.create({ authenticate: false, post });
 
-async function handler(
-    req: NextApiRequest,
-    res: NextApiResponse<ResponseData>
-) {
+async function post(req: NextApiRequest, res: NextApiResponse<ResponseData>) {
     const { username, password } = JSON.parse(req.body);
-    try {
-        const { usernameError, passwordError, user } =
-            await AuthService.registerUser(username, password);
-        if (!user || usernameError || passwordError) {
-            res.status(400).json({
-                status: "error",
-                usernameError,
-                passwordError
-            });
-            return;
-        }
-
-        req.session.user = user;
-        await req.session.save();
-        res.status(201).json({ status: "ok" });
-    } catch (error) {
-        res.status(500).json({
+    const { usernameError, passwordError, user } =
+        await AuthService.registerUser(username, password);
+    if (!user || usernameError || passwordError) {
+        res.status(400).json({
             status: "error",
-            serverError: JSON.stringify(error)
+            usernameError,
+            passwordError
         });
+        return;
     }
+
+    req.session.user = user;
+    await req.session.save();
+    res.status(201).json({ status: "ok" });
 }

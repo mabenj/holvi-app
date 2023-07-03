@@ -9,39 +9,71 @@ enum HttpMethod {
     PUT = "PUT"
 }
 
+interface ApiRouteOptions {
+    authenticate?: boolean;
+    get?: NextApiHandler;
+    post?: NextApiHandler;
+    delete?: NextApiHandler;
+    put?: NextApiHandler;
+}
+
 export class ApiRoute {
-    static get(handler: NextApiHandler, authenticate: boolean = true) {
-        return this.withMethod(HttpMethod.GET, authenticate, handler);
-    }
+    static create(options: ApiRouteOptions) {
+        const {
+            authenticate = true,
+            get: getHandler,
+            post: postHandler,
+            delete: deleteHandler,
+            put: putHandler
+        } = options;
 
-    static post(handler: NextApiHandler, authenticate: boolean = true) {
-        return this.withMethod(HttpMethod.POST, authenticate, handler);
-    }
-
-    static delete(handler: NextApiHandler, authenticate: boolean = true) {
-        return this.withMethod(HttpMethod.DELETE, authenticate, handler);
-    }
-
-    static put(handler: NextApiHandler, authenticate: boolean = true) {
-        return this.withMethod(HttpMethod.PUT, authenticate, handler);
-    }
-
-    private static withMethod(
-        method: HttpMethod,
-        authenticate: boolean,
-        handler: NextApiHandler
-    ) {
-        const checkMethod = (req: NextApiRequest, res: NextApiResponse) => {
-            Log.info(`${method}: ${req.url}`);
-            if (req.method !== method) {
+        const handle = (req: NextApiRequest, res: NextApiResponse) => {
+            Log.info(`${req.method}: ${req.url}`);
+            try {
+                switch (req.method) {
+                    case HttpMethod.GET: {
+                        if (typeof getHandler !== "function") {
+                            break;
+                        }
+                        return getHandler(req, res);
+                    }
+                    case HttpMethod.POST: {
+                        if (typeof postHandler !== "function") {
+                            break;
+                        }
+                        return postHandler(req, res);
+                    }
+                    case HttpMethod.DELETE: {
+                        if (typeof deleteHandler !== "function") {
+                            break;
+                        }
+                        return deleteHandler(req, res);
+                    }
+                    case HttpMethod.PUT: {
+                        if (typeof putHandler !== "function") {
+                            break;
+                        }
+                        return putHandler(req, res);
+                    }
+                    default:
+                    // nothing
+                }
                 res.status(405).end();
-                return;
+            } catch (error) {
+                Log.error(
+                    `Error handling ${req.method} method to ${req.url}`,
+                    error
+                );
+                res.status(500).json({
+                    status: "error",
+                    error: "Internal server error"
+                });
             }
-            return handler(req, res);
         };
+
         if (authenticate) {
-            return withUser(checkMethod);
+            return withUser(handle);
         }
-        return withoutUser(checkMethod);
+        return withoutUser(handle);
     }
 }
