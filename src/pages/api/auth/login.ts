@@ -2,12 +2,10 @@ import { ApiRoute } from "@/lib/common/api-route";
 import AuthService from "@/lib/services/auth.service";
 import type { NextApiRequest, NextApiResponse } from "next";
 
-type ResponseData = {
+interface ResponseData {
     status: "ok" | "error";
     error?: string;
-};
-
-export default ApiRoute.create({ authenticate: false, post });
+}
 
 async function post(req: NextApiRequest, res: NextApiResponse<ResponseData>) {
     const { username, password } = JSON.parse(req.body);
@@ -27,3 +25,5 @@ async function post(req: NextApiRequest, res: NextApiResponse<ResponseData>) {
     await req.session.save();
     res.status(200).json({ status: "ok" });
 }
+
+export default ApiRoute.create({ authenticate: false, post });

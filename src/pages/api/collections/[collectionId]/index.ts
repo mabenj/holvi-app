@@ -2,14 +2,12 @@ import { ApiRoute } from "@/lib/common/api-route";
 import { CollectionService } from "@/lib/services/collection.service";
 import type { NextApiRequest, NextApiResponse } from "next";
 
-type ResponseData = {
+interface ResponseData {
     status: "ok" | "error";
     error?: string;
-};
+}
 
-export default ApiRoute.create({ delete: handler });
-
-async function handler(
+async function deleteCollection(
     req: NextApiRequest,
     res: NextApiResponse<ResponseData>
 ) {
@@ -24,3 +22,5 @@ async function handler(
     }
     res.status(200).json({ status: "ok" });
 }
+
+export default ApiRoute.create({ delete: deleteCollection });

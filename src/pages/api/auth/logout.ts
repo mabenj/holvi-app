@@ -6,9 +6,9 @@ interface Data {
     error?: string;
 }
 
-export default ApiRoute.create({ post });
-
 function post(req: NextApiRequest, res: NextApiResponse<Data>) {
     req.session.destroy();
     res.status(200).json({ status: "ok" });
 }
+
+export default ApiRoute.create({ post });

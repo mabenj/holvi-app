@@ -26,7 +26,7 @@ export function CollectionsProvider({
     children: React.ReactNode;
 }) {
     const { data, isLoading, error } = useSWR<Collection[]>(
-        "/api/collections/getAll",
+        "/api/collections",
         fetcher
     );
     const [collections, setCollections] = useState<Collection[]>([]);

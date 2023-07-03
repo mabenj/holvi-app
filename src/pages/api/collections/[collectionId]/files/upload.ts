@@ -3,15 +3,16 @@ import { CollectionFile } from "@/lib/interfaces/collection-file";
 import { CollectionService } from "@/lib/services/collection.service";
 import type { NextApiRequest, NextApiResponse } from "next";
 
-type ResponseData = {
+interface ResponseData {
     status: "ok" | "error";
     error?: string;
     files?: CollectionFile[];
 };
 
-export default ApiRoute.create({ put });
-
-async function put(req: NextApiRequest, res: NextApiResponse<ResponseData>) {
+async function uploadFiles(
+    req: NextApiRequest,
+    res: NextApiResponse<ResponseData>
+) {
     const { collectionId } = req.query;
     const collectionService = new CollectionService(req.session.user.id);
     const { error, files } = await collectionService.uploadFiles(
@@ -30,3 +31,5 @@ export const config = {
         bodyParser: false
     }
 };
+
+export default ApiRoute.create({ put: uploadFiles });

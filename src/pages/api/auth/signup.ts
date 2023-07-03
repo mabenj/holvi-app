@@ -9,8 +9,6 @@ interface ResponseData {
     serverError?: string;
 }
 
-export default ApiRoute.create({ authenticate: false, post });
-
 async function post(req: NextApiRequest, res: NextApiResponse<ResponseData>) {
     const { username, password } = JSON.parse(req.body);
     const { usernameError, passwordError, user } =
@@ -28,3 +26,5 @@ async function post(req: NextApiRequest, res: NextApiResponse<ResponseData>) {
     await req.session.save();
     res.status(201).json({ status: "ok" });
 }
+
+export default ApiRoute.create({ authenticate: false, post });

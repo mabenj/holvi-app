@@ -20,15 +20,15 @@ export function useCollectionModal(initialCollection?: Collection) {
         setIsLoading(true);
         let response: Response;
         if (isNew) {
-            response = await fetch("/api/collections/create", {
+            response = await fetch("/api/collections", {
                 method: "POST",
                 body: JSON.stringify({ name, tags })
             });
             setName("");
             setTags([]);
         } else {
-            response = await fetch("/api/collections/update", {
-                method: "POST",
+            response = await fetch("/api/collections", {
+                method: "PUT",
                 body: JSON.stringify({ id: initialCollection.id, name, tags })
             });
         }
