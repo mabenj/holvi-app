@@ -27,7 +27,7 @@ export function useLogin() {
             return Promise.reject();
         }
 
-        push("/");
+        await push("/");
         return Promise.resolve();
     };
 
@@ -40,7 +40,7 @@ export function useLogin() {
             if (response.status !== 200) {
                 throw new Error();
             }
-            push("/login");
+            await push("/login");
             return Promise.resolve();
         } catch {
             return Promise.reject("Could not sign out");

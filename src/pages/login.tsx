@@ -127,7 +127,6 @@ const SignUpModal = () => {
         isLoading,
         signUp
     } = useSignUp();
-    const { push } = useRouter();
     const toast = useToast();
     const { isOpen, onOpen, onClose } = useDisclosure();
 
@@ -140,7 +139,6 @@ const SignUpModal = () => {
                     description: "Successfully signed up",
                     status: "success"
                 });
-                push("/");
             })
             .catch((error) =>
                 toast({
