@@ -34,7 +34,7 @@ export class ApiRoute {
         const checkMethod = (req: NextApiRequest, res: NextApiResponse) => {
             Log.info(`${method}: ${req.url}`);
             if (req.method !== method) {
-                res.status(404).end();
+                res.status(405).end();
                 return;
             }
             return handler(req, res);

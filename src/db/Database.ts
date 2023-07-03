@@ -33,19 +33,22 @@ export default class Database {
     static bulkInsert<T = any>(
         table: string,
         rows: Record<string, any>[],
-        columns: string[],
         returnColumns?: string[]
     ): Promise<T[]> {
         if (rows.length < 1) {
             return Promise.resolve([]);
         }
-        const insertQuery = pgp().helpers.insert(rows, columns, table);
+        const insertQuery = pgp().helpers.insert(
+            rows,
+            Object.keys(rows[0]),
+            table
+        );
         try {
             return Database.sql(
                 insertQuery +
                     (returnColumns
                         ? ` RETURNING ${returnColumns?.join(", ")}`
-                        : "")
+                        : " RETURNING *")
             );
         } catch (error) {
             Log.error(`Database error: ${getErrorMessage(error)}`);

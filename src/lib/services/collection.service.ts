@@ -1,5 +1,12 @@
 import Database from "@/db/Database";
+import { rename, rm } from "fs/promises";
+import imageSize from "image-size";
+import { NextApiRequest } from "next";
+import path from "path";
+import Log from "../common/log";
+import parseForm from "../common/parse-form";
 import { Collection } from "../interfaces/collection";
+import { CollectionFile } from "../interfaces/collection-file";
 
 interface CreateResult {
     collection?: Collection;
@@ -21,8 +28,100 @@ interface DeleteResult {
     error?: string;
 }
 
+interface UploadResult {
+    error?: string;
+    files?: CollectionFile[];
+}
+
 export class CollectionService {
     constructor(private readonly userId: number) {}
+
+    async uploadFiles(
+        collectionId: number,
+        req: NextApiRequest
+    ): Promise<UploadResult> {
+        if (!collectionId || isNaN(collectionId)) {
+            return { error: `Invalid collection id '${collectionId}'` };
+        }
+        if (!process.env.DATA_DIR) {
+            throw new Error(
+                "Data directory not defined, use environment variable 'DATA_DIR'"
+            );
+        }
+        const relativeDir = path.join(
+            this.userId.toString(),
+            collectionId.toString()
+        );
+        const workingDir = path.join(
+            process.env.DATA_DIR,
+            relativeDir,
+            "upload"
+        );
+        const targetDir = path.join(process.env.DATA_DIR, relativeDir);
+        try {
+            const { fields, files } = await parseForm(
+                req,
+                workingDir,
+                (percent) => Log.info(`Upload progress ${percent}%`)
+            );
+            const fileList = Object.keys(files).flatMap((file) => files[file]);
+            await Promise.all(
+                fileList.map((file) =>
+                    rename(
+                        path.join(workingDir, file.newFilename || ""),
+                        path.join(targetDir, file.newFilename || "")
+                    )
+                )
+            );
+
+            const timestamp = new Date().toISOString();
+            const fileRows = fileList.map((file, i) => {
+                const relativePath = path.join(
+                    relativeDir,
+                    file.newFilename || `file_${i}_${timestamp}`
+                );
+                const absolutePath = path.join(
+                    process.env.DATA_DIR!,
+                    relativePath
+                );
+                const isImage = file.mimetype?.includes("image") || false;
+                const { width, height } = isImage
+                    ? imageSize(absolutePath)
+                    : { width: -1, height: -1 };
+                return {
+                    collection_id: collectionId,
+                    label: file.originalFilename || `file_${i}_${timestamp}`,
+                    file_type: file.mimetype || "unknown",
+                    filepath: relativePath,
+                    thumbnail_path: relativePath,
+                    width: width || -1,
+                    height: height || -1,
+                    thumbnail_width: width || -1,
+                    thumbnail_height: height || -1
+                };
+            });
+
+            const result = await Database.bulkInsert("files", fileRows);
+            return {
+                files: result.map((row) => ({
+                    id: row.id,
+                    collectionId: row.collection_id,
+                    name: row.label,
+                    mimeType: row.file_type,
+                    src: `/api/collections/${row.collection_id}/files/${row.id}`,
+                    thumbnailSrc: `/api/collections/${row.collection_id}/files/${row.id}`,
+                    width: row.width,
+                    height: row.height,
+                    thumbnailWidth: row.thumbnail_width,
+                    thumbnailHeight: row.thumbnail_height,
+                    createdAt: row.created_at.getTime(),
+                    updatedAt: row.updated_at.getTime()
+                }))
+            };
+        } finally {
+            await rm(workingDir, { recursive: true, force: true });
+        }
+    }
 
     async update(collection: Collection): Promise<UpdateResult> {
         if (!collection.id) {
@@ -205,7 +304,6 @@ export class CollectionService {
         const insertedTags = await Database.bulkInsert(
             "collection_tags",
             tagRows,
-            ["collection_id", "label"],
             ["label"]
         );
         return insertedTags.map(({ label }) => label);

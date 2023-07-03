@@ -16,6 +16,7 @@
         "@emotion/styled": "^11.11.0",
         "@mdi/js": "^7.2.96",
         "@mdi/react": "^1.6.1",
+        "@types/formidable": "^3.4.0",
         "@types/node": "20.3.2",
         "@types/react": "18.2.14",
         "@types/react-dom": "18.2.6",
@@ -23,7 +24,9 @@
         "eslint": "8.43.0",
         "eslint-config-next": "13.4.7",
         "framer-motion": "^10.12.17",
+        "image-size": "^1.0.2",
         "iron-session": "^6.3.1",
+        "nanoid": "^4.0.2",
         "next": "13.4.7",
         "pg-promise": "^11.5.0",
         "react": "18.2.0",
@@ -32,6 +35,7 @@
         "typescript": "5.1.5"
     },
     "devDependencies": {
-        "@types/bcrypt": "^5.0.0"
+        "@types/bcrypt": "^5.0.0",
+        "formidable": "^3.5.0"
     }
 }
