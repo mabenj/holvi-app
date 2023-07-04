@@ -29,8 +29,8 @@ export default function Login() {
     return (
         <>
             <Head>
-                <title>HomeWork - Login</title>
-                <meta name="description" content="Login to HomeWork" />
+                <title>Holvi - Login</title>
+                <meta name="description" content="Login to Holvi" />
             </Head>
             <main>
                 <Container maxW="lg">

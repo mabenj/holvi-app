@@ -1,7 +1,6 @@
-
 export const sessionOptions = {
     password: "jfAyFugpUMg3jUbAtKYJob1B8g8LGZwe",
-    cookieName: "homeworkapp",
+    cookieName: "holviapp",
     cookieOptions: {
         maxAge: undefined,
         secure: process.env.NODE_ENV === "production",

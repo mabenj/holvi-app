@@ -1,7 +1,7 @@
 FROM postgres:latest
 
 ENV POSTGRES_USER=admin
-ENV POSTGRES_DB=homeworkapp
+ENV POSTGRES_DB=holvi
 
 COPY update-scripts/*.sql /docker-entrypoint-initdb.d/update-scripts/
 

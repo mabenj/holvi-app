@@ -23,7 +23,7 @@ export default function Home({ user }: { user: User }) {
     return (
         <>
             <Head>
-                <title>HomeWork</title>
+                <title>Holvi</title>
             </Head>
             <Layout user={user}>
                 <Flex direction="column" gap={10}>

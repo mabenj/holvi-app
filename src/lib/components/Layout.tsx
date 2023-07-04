@@ -58,7 +58,7 @@ const Navbar = ({ username }: { username?: string }) => {
                 w="100%"
                 p={4}>
                 <Link href="/" _hover={{ textDecoration: "none" }}>
-                    HomeWork
+                    holvi
                 </Link>
                 <Flex alignItems="center" gap={3}>
                     <span>
