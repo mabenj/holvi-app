@@ -2,14 +2,17 @@ import { withSessionSsr } from "@/lib/common/iron-session";
 import { isUuidv4 } from "@/lib/common/utilities";
 import Layout from "@/lib/components/Layout";
 import { useCollections } from "@/lib/context/CollectionsContext";
+import { useUpload } from "@/lib/hooks/useUpload";
 import { Collection } from "@/lib/interfaces/collection";
 import { User } from "@/lib/interfaces/user";
 import { Link } from "@chakra-ui/next-js";
 import {
+    Box,
     Breadcrumb,
     BreadcrumbItem,
     BreadcrumbLink,
-    Button
+    Button,
+    Progress
 } from "@chakra-ui/react";
 import { mdiUpload } from "@mdi/js";
 import Icon from "@mdi/react";
@@ -18,11 +21,11 @@ import { useEffect, useRef, useState } from "react";
 
 export const getServerSideProps = withSessionSsr(
     async function getServerSideProps({ req, query }) {
-        const collectionId = query.collectionId?.toString()
-        if(!collectionId || !isUuidv4(collectionId)){
+        const collectionId = query.collectionId?.toString();
+        if (!collectionId || !isUuidv4(collectionId)) {
             return {
                 notFound: true
-            }
+            };
         }
         return {
             props: {
@@ -44,6 +47,10 @@ export default function CollectionPage({
         Collection | undefined
     >();
     const { collections } = useCollections();
+    const { upload, progress, isUploading } = useUpload(
+        "POST",
+        `/api/collections/${currentCollection?.id}/files/upload`
+    );
 
     useEffect(
         () =>
@@ -54,7 +61,7 @@ export default function CollectionPage({
         [collections]
     );
 
-    const upload = async (files: FileList | null) => {
+    const handleUpload = async (files: FileList | null) => {
         const fileList = Array.from(files || []);
         if (!currentCollection || fileList.length === 0) {
             return;
@@ -62,12 +69,8 @@ export default function CollectionPage({
         try {
             let formData = new FormData();
             fileList.forEach((file) => formData.append("media", file));
-            const res = await fetch(
-                `/api/collections/${currentCollection.id}/files/upload`,
-                { method: "PUT", body: formData }
-            );
-            const data = await res.json();
-            alert(data);
+            const response = await upload(formData);
+            alert(JSON.stringify(response));
         } catch (error) {
             alert(JSON.stringify(error));
         }
@@ -80,7 +83,21 @@ export default function CollectionPage({
             </Head>
             <Layout user={user}>
                 <Breadcrumbs collectionName={currentCollection?.name || ""} />
-                <UploadFilesBtn onUpload={upload} />
+                <Box py={5} />
+                <UploadFilesBtn onUpload={handleUpload} />
+                <Box py={5} />
+
+                {progress && isUploading ? (
+                    <Progress
+                        hasStripe
+                        size="xs"
+                        value={progress}
+                        position="absolute"
+                        top={0}
+                        left={0}
+                        right={0}
+                    />
+                ) : null}
             </Layout>
         </>
     );
