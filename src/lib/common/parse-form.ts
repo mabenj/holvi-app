@@ -1,8 +1,6 @@
 import formidable from "formidable";
-import { mkdir, stat } from "fs/promises";
 import { nanoid } from "nanoid";
 import { NextApiRequest } from "next";
-import Log from "./log";
 import { createDirIfNotExists } from "./file-system-helpers";
 
 const DEFAULT_MAX_FILE_SIZE_KB = 1024 * 1024 * 1024 * 4; // 4gb
@@ -15,7 +13,7 @@ export default function parseForm(
 ): Promise<{ fields: formidable.Fields; files: formidable.Files }> {
     return new Promise(async (resolve, reject) => {
         try {
-            await createDirIfNotExists(uploadDir)
+            await createDirIfNotExists(uploadDir);
         } catch (e) {
             reject(e);
         }

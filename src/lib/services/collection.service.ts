@@ -1,6 +1,7 @@
 import Database from "@/db/Database";
 import { NextApiRequest } from "next";
 import path from "path";
+import { Op } from "sequelize";
 import {
     deleteDirectory,
     getImageDimensions,
@@ -9,6 +10,7 @@ import {
 } from "../common/file-system-helpers";
 import Log from "../common/log";
 import parseForm from "../common/parse-form";
+import { EMPTY_UUIDV4, isUuidv4 } from "../common/utilities";
 import { Collection } from "../interfaces/collection";
 import { CollectionFile } from "../interfaces/collection-file";
 
@@ -44,46 +46,58 @@ interface GetFileResult {
 }
 
 export class CollectionService {
-    constructor(private readonly userId: number) {}
+    constructor(private readonly userId: string) {}
 
     async getFile(
-        collectionId: number,
-        fileId: number
+        collectionId: string,
+        fileId: string
     ): Promise<GetFileResult> {
-        if (!collectionId || isNaN(collectionId) || !fileId || isNaN(fileId)) {
+        if (
+            !collectionId ||
+            !isUuidv4(collectionId) ||
+            !fileId ||
+            !isUuidv4(fileId)
+        ) {
             return { notFound: true };
         }
 
-        const result = await Database.sqlOne(
-            `SELECT f.filepath, f.file_type
-            FROM files f
-            JOIN collections c on f.collection_id = c.id
-            JOIN users u on c.user_id = u.id
-            WHERE u.id = $1 AND c.id = $2 AND f.id = $3`,
-            [this.userId, collectionId, fileId]
-        );
-        if (!result) {
-            return { notFound: true };
+        const db = await Database.getInstance();
+        const collectionFile = await db.models.CollectionFile.findOne({
+            where: {
+                CollectionId: collectionId,
+                id: fileId
+            },
+            attributes: ["mimeType", "path"],
+            include: {
+                model: db.models.Collection,
+                required: true,
+                where: {
+                    UserId: this.userId
+                }
+            }
+        });
+        if (!collectionFile) {
+            return {
+                notFound: true
+            };
         }
 
-        const mimeType = result.file_type;
         const file = await readBytes(
-            path.join(this.getDataDir(), result.filepath)
+            path.join(this.getDataDir(), collectionFile.path)
         );
         if (!file) {
             return {
                 notFound: true
             };
         }
-
-        return { file, mimeType };
+        return { mimeType: collectionFile.mimeType, file };
     }
 
     async uploadFiles(
-        collectionId: number,
+        collectionId: string,
         req: NextApiRequest
     ): Promise<UploadResult> {
-        if (!collectionId || isNaN(collectionId)) {
+        if (!collectionId || !isUuidv4(collectionId)) {
             return { error: `Invalid collection id '${collectionId}'` };
         }
         if (!process.env.DATA_DIR) {
@@ -91,70 +105,79 @@ export class CollectionService {
                 "Data directory not defined, use environment variable 'DATA_DIR'"
             );
         }
-        const relativeDir = path.join(
-            this.userId.toString(),
-            collectionId.toString()
-        );
+
         const workingDir = path.join(
             this.getUserCollectionDir(collectionId),
             "upload"
         );
         try {
+            // move files to working directory
             const { fields, files } = await parseForm(
                 req,
                 workingDir,
                 (percent) => Log.info(`Upload progress ${percent}%`)
             );
             const fileList = Object.keys(files).flatMap((file) => files[file]);
+            const timestamp = new Date().toISOString();
+            const fileRows = fileList.map((file, i) => {
+                const fallbackName = `${timestamp}_${i}`;
+                const tempPath = path.join(
+                    workingDir,
+                    file.newFilename || fallbackName
+                );
+                const finalPath = path.join(
+                    this.userId.toString(),
+                    collectionId,
+                    file.newFilename || fallbackName
+                );
+                const isImage = file.mimetype?.includes("image") || false;
+                const { width, height } = isImage
+                    ? getImageDimensions(tempPath)
+                    : { width: -1, height: -1 };
+                return {
+                    name: file.originalFilename || fallbackName,
+                    mimeType: file.mimetype || "unknown",
+                    path: finalPath,
+                    width: width || -1,
+                    height: height || -1,
+                    thumbnailWidth: width || -1,
+                    thumbnailHeight: height || -1,
+                    CollectionId: collectionId
+                };
+            });
+
+            // insert info into db
+            const insertedRows = await Database.withTransaction(
+                async (transaction, db) =>
+                    db.models.CollectionFile.bulkCreate(fileRows, {
+                        transaction
+                    })
+            );
+
+            // move files from working directory to user directory
             await moveDirectoryContents(
                 workingDir,
                 this.getUserCollectionDir(collectionId)
             );
 
-            const timestamp = new Date().toISOString();
-            const fileRows = fileList.map((file, i) => {
-                const relativePath = path.join(
-                    relativeDir,
-                    file.newFilename || `file_${i}_${timestamp}`
-                );
-                const absolutePath = path.join(
-                    process.env.DATA_DIR!,
-                    relativePath
-                );
-                const isImage = file.mimetype?.includes("image") || false;
-                const { width, height } = isImage
-                    ? getImageDimensions(absolutePath)
-                    : { width: -1, height: -1 };
-                return {
-                    collection_id: collectionId,
-                    label: file.originalFilename || `file_${i}_${timestamp}`,
-                    file_type: file.mimetype || "unknown",
-                    filepath: relativePath,
-                    thumbnail_path: relativePath,
-                    width: width || -1,
-                    height: height || -1,
-                    thumbnail_width: width || -1,
-                    thumbnail_height: height || -1
-                };
-            });
-
-            const result = await Database.bulkInsert("files", fileRows);
             return {
-                files: result.map((row) => ({
+                files: insertedRows.map((row) => ({
                     id: row.id,
-                    collectionId: row.collection_id,
-                    name: row.label,
-                    mimeType: row.file_type,
-                    src: `/api/collections/${row.collection_id}/files/${row.id}`,
-                    thumbnailSrc: `/api/collections/${row.collection_id}/files/${row.id}`,
+                    collectionId: row.CollectionId,
+                    name: row.name,
+                    mimeType: row.mimeType,
+                    src: `/api/collections/${row.CollectionId}/files/${row.id}`,
+                    thumbnailSrc: `/api/collections/${row.CollectionId}/files/${row.id}`,
                     width: row.width,
                     height: row.height,
-                    thumbnailWidth: row.thumbnail_width,
-                    thumbnailHeight: row.thumbnail_height,
-                    createdAt: row.created_at.getTime(),
-                    updatedAt: row.updated_at.getTime()
+                    thumbnailWidth: row.thumbnailWidth,
+                    thumbnailHeight: row.thumbnailHeight,
+                    createdAt: row.createdAt.getTime(),
+                    updatedAt: row.updatedAt.getTime()
                 }))
             };
+        } catch (error) {
+            throw new Error("Error uploading file(s)", { cause: error });
         } finally {
             await deleteDirectory(workingDir);
         }
@@ -170,44 +193,69 @@ export class CollectionService {
         if (await this.nameTaken(collection.name, collection.id)) {
             return { error: "Collection name already exists" };
         }
-        const updatedCollection = await Database.sqlOne(
-            `UPDATE collections
-            SET label = $1, updated_at = $2
-            WHERE id = $3 AND user_id = $4
-            RETURNING id, label, created_at, updated_at`,
-            [collection.name, new Date(), collection.id, this.userId]
-        );
-        if (!updatedCollection) {
-            return { notFound: true };
-        }
-        let tags: string[];
-        if (collection.tags.length > 0) {
-            tags = await this.setTags(updatedCollection.id, collection.tags);
-        } else {
-            tags = await this.getTags(updatedCollection.id);
-        }
-        return {
-            collection: {
-                id: updatedCollection.id,
-                name: updatedCollection.label,
-                tags: tags,
-                createdAt: updatedCollection.created_at.getTime(),
-                updatedAt: updatedCollection.updated_at.getTime()
+        return Database.withTransaction(async (transaction, db) => {
+            const collectionInDb = await db.models.Collection.findOne({
+                where: {
+                    UserId: this.userId,
+                    id: collection.id
+                }
+            });
+            if (!collectionInDb) {
+                return { notFound: true };
             }
-        };
+            collectionInDb.name = collection.name;
+            await collectionInDb.save({ transaction });
+
+            await db.models.Tag.destroy({
+                where: {
+                    CollectionId: collectionInDb.id
+                }
+            });
+            const insertedTags = await db.models.Tag.bulkCreate(
+                collection.tags.map((tag) => ({
+                    name: tag,
+                    CollectionId: collection.id
+                })),
+                { transaction }
+            );
+            return {
+                collection: {
+                    id: collectionInDb.id,
+                    name: collectionInDb.name,
+                    createdAt: collectionInDb.createdAt.getTime(),
+                    updatedAt: collectionInDb.updatedAt.getTime(),
+                    tags: insertedTags.map((tag) => tag.name)
+                }
+            };
+        }).catch((error) => {
+            throw new Error(
+                `Error updating collection '${collection.name}'`,
+                error
+            );
+        });
     }
 
-    async delete(collectionId: number): Promise<DeleteResult> {
-        if (isNaN(collectionId)) {
+    async delete(collectionId: string): Promise<DeleteResult> {
+        if (!isUuidv4(collectionId)) {
             return { error: `Invalid collection id '${collectionId}'` };
         }
         const collectionDir = this.getUserCollectionDir(collectionId);
-        await Database.sqlOne(
-            "DELETE FROM collections WHERE user_id = $1 AND id = $2",
-            [this.userId, collectionId]
-        );
-        await deleteDirectory(collectionDir);
-        return {};
+
+        return Database.withTransaction(async (transaction, db) => {
+            await db.models.Collection.destroy({
+                where: {
+                    UserId: this.userId,
+                    id: collectionId
+                },
+                transaction
+            });
+            await deleteDirectory(collectionDir);
+            return {};
+        }).catch((error) => {
+            throw new Error(`Error deleting collection '${collectionId}'`, {
+                cause: error
+            });
+        });
     }
 
     async create(name: string, tags: string): Promise<CreateResult> {
@@ -217,149 +265,109 @@ export class CollectionService {
         if (!Array.isArray(tags)) {
             return { error: "Invalid collection tags" };
         }
-
         if (await this.nameTaken(name)) {
             return { error: "Collection name already exists" };
         }
+        return Database.withTransaction(async (transaction, db) => {
+            const collection = await db.models.Collection.create(
+                {
+                    name,
+                    UserId: this.userId
+                },
+                { transaction }
+            );
+            const insertedTags = await db.models.Tag.bulkCreate(
+                tags.map((tag) => ({
+                    name: tag,
+                    CollectionId: collection.id
+                })),
+                { transaction }
+            );
+            return {
+                collection: {
+                    id: collection.id,
+                    name: collection.name,
+                    createdAt: collection.createdAt.getTime(),
+                    updatedAt: collection.updatedAt.getTime(),
+                    tags: insertedTags.map((tag) => tag.name)
+                }
+            };
+        }).catch((error) => {
+            throw new Error("Error creating collection", { cause: error });
+        });
+    }
 
-        const collection = await Database.sqlOne(
-            "INSERT INTO collections(user_id, label) VALUES ($1, $2) RETURNING *",
-            [this.userId, name]
-        );
-        const insertedTags = await this.setTags(collection.id, tags);
-
+    async get(collectionId: string): Promise<GetResult> {
+        if (!isUuidv4(collectionId)) {
+            return {
+                notFound: true
+            };
+        }
+        const db = await Database.getInstance();
+        const collection = await db.models.Collection.findOne({
+            where: {
+                UserId: this.userId,
+                id: collectionId
+            },
+            include: db.models.Tag
+        });
+        if (!collection) {
+            return { notFound: true };
+        }
         return {
             collection: {
                 id: collection.id,
-                name: collection.label,
-                tags: insertedTags,
-                createdAt: collection.created_at.getTime(),
-                updatedAt: collection.updated_at.getTime()
+                name: collection.name,
+                tags: collection.Tags?.map((tag) => tag.name) || [],
+                createdAt: collection.createdAt.getTime(),
+                updatedAt: collection.updatedAt.getTime()
             }
         };
     }
 
-    async get(collectionId: number): Promise<GetResult> {
-        if (isNaN(collectionId)) {
-            return { notFound: true };
-        }
-        const result = await Database.sql(
-            `SELECT c.id, c.label as collection_label, c.created_at, c.updated_at, ct.label as tag_label
-            FROM collections c
-            LEFT JOIN collection_tags ct ON c.id = ct.collection_id
-            WHERE c.user_id = $1 AND c.id = $2`,
-            [this.userId, collectionId]
-        );
-        if (result.length === 0) {
-            return { notFound: true };
-        }
-        const collection: Collection = {
-            id: result[0].id,
-            name: result[0].collection_label,
-            createdAt: result[0].created_at.getTime(),
-            updatedAt: result[0].updated_at.getTime(),
-            tags: result.map((row) => row.tag_label).filter((tag) => !!tag)
-        };
-        return {
-            collection
-        };
-    }
-
-    async getAll() {
-        const result = await Database.sql(
-            `SELECT c.id, c.label as collection_label, c.created_at, c.updated_at, ct.label as tag_label
-            FROM collections c
-            LEFT JOIN collection_tags ct ON c.id = ct.collection_id
-            WHERE c.user_id = $1`,
-            [this.userId]
-        );
-
-        const collectionsById: Record<number, Collection> = result.reduce(
-            (acc: Record<number, Collection>, curr) => {
-                const {
-                    id,
-                    collection_label,
-                    created_at,
-                    updated_at,
-                    tag_label
-                } = curr;
-                acc[id] = {
-                    id: id,
-                    name: collection_label,
-                    tags: acc[id]?.tags ?? [],
-                    createdAt: created_at.getTime(),
-                    updatedAt: updated_at.getTime()
-                };
-                if (tag_label) {
-                    acc[id].tags.push(tag_label);
-                }
-                return acc;
-            },
-            {}
-        );
-
-        return Object.values(collectionsById);
-    }
-
-    private async nameTaken(name: string, collectionId?: number) {
-        let existing: any[];
-        if (collectionId) {
-            existing = await Database.sql(
-                "SELECT id FROM collections WHERE user_id = $1 AND id != $2 AND label = $3 LIMIT 1",
-                [this.userId, collectionId, name.trim()]
-            );
-        } else {
-            existing = await Database.sql(
-                "SELECT id FROM collections WHERE user_id = $1 AND label = $2 LIMIT 1",
-                [this.userId, name.trim()]
+    async getAll(): Promise<Collection[]> {
+        try {
+            const db = await Database.getInstance();
+            const result = await db.models.Collection.findAll({
+                where: {
+                    UserId: this.userId
+                },
+                include: db.models.Tag
+            });
+            return result.map((collection) => ({
+                id: collection.id,
+                name: collection.name,
+                tags: collection.Tags?.map((tag) => tag.name) || [],
+                createdAt: collection.createdAt.getTime(),
+                updatedAt: collection.updatedAt.getTime()
+            }));
+        } catch (error) {
+            throw new Error(
+                `Error fetching collections for user '${this.userId}'`,
+                { cause: error }
             );
         }
+    }
+
+    private async nameTaken(name: string, collectionId?: string) {
+        const db = await Database.getInstance();
+        const existing = await db.models.Collection.findAll({
+            where: {
+                UserId: this.userId,
+                id: {
+                    [Op.ne]: collectionId || EMPTY_UUIDV4
+                },
+                name: name.trim()
+            }
+        });
         return existing.length > 0;
     }
 
-    private async getTags(collectionId: number) {
-        const result = await Database.sql(
-            `SELECT ct.label as tag_label
-            FROM collections c
-            LEFT JOIN collection_tags ct ON c.id = ct.collection_id
-            WHERE c.user_id = $1 AND c.id = $2`,
-            [this.userId, collectionId]
-        );
-        return result.map(({ tag_label }) => tag_label);
-    }
-
-    private async setTags(
-        collectionId: number,
-        tags: string[]
-    ): Promise<string[]> {
-        if (tags.length === 0) {
-            return [];
-        }
-        await this.deleteAllTags(collectionId);
-        const tagRows = tags.map((tag) => ({
-            collection_id: collectionId,
-            label: tag
-        }));
-        const insertedTags = await Database.bulkInsert(
-            "collection_tags",
-            tagRows,
-            ["label"]
-        );
-        return insertedTags.map(({ label }) => label);
-    }
-
-    private async deleteAllTags(collectionId: number) {
-        await Database.sql(
-            `DELETE from collection_tags WHERE collection_id = $1`,
-            [collectionId]
-        );
-    }
-
-    private getUserCollectionDir(collectionId: number) {
+    private getUserCollectionDir(collectionId: string) {
         return path.join(
             this.getDataDir(),
             this.userId.toString(),
-            collectionId.toString()
+            collectionId
         );
     }
 

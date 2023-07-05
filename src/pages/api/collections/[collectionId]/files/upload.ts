@@ -6,7 +6,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 
 interface Result {
     files?: CollectionFile[];
-};
+}
 
 async function uploadFiles(
     req: NextApiRequest,
@@ -15,7 +15,7 @@ async function uploadFiles(
     const { collectionId } = req.query;
     const collectionService = new CollectionService(req.session.user.id);
     const { error, files } = await collectionService.uploadFiles(
-        parseInt(collectionId?.toString() || ""),
+        collectionId?.toString() || "",
         req
     );
     if (error) {

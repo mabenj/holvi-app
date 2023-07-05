@@ -1,71 +1,100 @@
 import Log from "@/lib/common/log";
-import { getErrorMessage } from "@/lib/common/utilities";
-import pgp from "pg-promise";
-import pg from "pg-promise/typescript/pg-subset";
+import { Sequelize, Transaction } from "sequelize";
+import { Collection } from "./models/Collection";
+import { CollectionFile } from "./models/CollectionFile";
+import { Tag } from "./models/Tag";
+import { User } from "./models/User";
 
 export default class Database {
-    private static db: pgp.IDatabase<{}, pg.IClient>;
+    private static instance: Database;
+    private readonly sequelize;
 
-    static async sql<T = any>(text: string, values?: any[]): Promise<T[]> {
-        try {
-            return Database.getDb().any<T>({
-                text,
-                values
-            });
-        } catch (error) {
-            Log.error(`Database error: ${getErrorMessage(error)}`);
-            return Promise.reject("Database error");
-        }
+    public get models() {
+        return {
+            User: User,
+            Collection: Collection,
+            CollectionFile: CollectionFile,
+            Tag: Tag
+        };
     }
 
-    static sqlOne<T = any>(text: string, values?: any[]): Promise<T | null> {
-        try {
-            return Database.getDb().oneOrNone<T>({
-                text,
-                values
-            });
-        } catch (error) {
-            Log.error(`Database error: ${getErrorMessage(error)}`);
-            return Promise.reject("Database error");
-        }
-    }
-
-    static bulkInsert<T = any>(
-        table: string,
-        rows: Record<string, any>[],
-        returnColumns?: string[]
-    ): Promise<T[]> {
-        if (rows.length < 1) {
-            return Promise.resolve([]);
-        }
-        const insertQuery = pgp().helpers.insert(
-            rows,
-            Object.keys(rows[0]),
-            table
-        );
-        try {
-            return Database.sql(
-                insertQuery +
-                    (returnColumns
-                        ? ` RETURNING ${returnColumns?.join(", ")}`
-                        : " RETURNING *")
-            );
-        } catch (error) {
-            Log.error(`Database error: ${getErrorMessage(error)}`);
-            return Promise.reject("Database error");
-        }
-    }
-
-    private static getDb() {
+    private constructor() {
         if (!process.env.DB_CONNECTION_STRING) {
             throw new Error(
                 "Database connection string is not defined (use environment variable 'DB_CONNECTION_STRING')"
             );
         }
-        if (!this.db) {
-            Log.info("Connecting to database");
-            this.db = pgp()(process.env.DB_CONNECTION_STRING);
+        this.sequelize = new Sequelize(process.env.DB_CONNECTION_STRING, {
+            benchmark: true,
+            logging: false
+        });
+    }
+
+    public transaction() {
+        return this.sequelize.transaction();
+    }
+
+    public static async getInstance() {
+        if (!Database.instance) {
+            Database.instance = new Database();
+            await this.init();
         }
-        return this.db;
+        return Database.instance;
+    }
+
+    public static async withTransaction<T>(
+        handler: (transaction: Transaction, db: Database) => Promise<T>
+    ) {
+        const db = await Database.getInstance();
+        const transaction = await db.transaction();
+        try {
+            const result = await handler(transaction, db);
+            transaction.commit();
+            return result;
+        } catch (error) {
+            await transaction.rollback();
+            throw error;
+        }
+    }
+
+    private static async init() {
+        try {
+            await Database.instance.sequelize.authenticate();
+            Log.info("Database connection established");
+        } catch (error) {
+            Log.error("Unable to connect to the database", error);
+            return;
+        }
+
+        try {
+            User.initModel(Database.instance.sequelize);
+            Collection.initModel(Database.instance.sequelize);
+            CollectionFile.initModel(Database.instance.sequelize);
+            Tag.initModel(Database.instance.sequelize);
+
+            User.hasMany(Collection);
+            Collection.belongsTo(User, {
+                foreignKey: {
+                    allowNull: false
+                }
+            });
+            Collection.hasMany(CollectionFile, { onDelete: "CASCADE" });
+            Collection.hasMany(Tag, { onDelete: "CASCADE" });
+            CollectionFile.belongsTo(Collection, {
+                foreignKey: {
+                    allowNull: false
+                }
+            });
+            CollectionFile.hasMany(Tag, { onDelete: "CASCADE" });
+            Tag.belongsTo(Collection);
+            Tag.belongsTo(CollectionFile);
+
+            Log.info("Initializing models");
+            await Database.instance.sequelize.sync({ alter: true });
+            Log.info("Models initialized");
+        } catch (error) {
+            Log.error("Error initializing models", error);
+            return;
+        }
     }
 }

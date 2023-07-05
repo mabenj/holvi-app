@@ -1,2 +1,0 @@
-ALTER TABLE users
-ADD require_sign_in INT NOT NULL DEFAULT 0;

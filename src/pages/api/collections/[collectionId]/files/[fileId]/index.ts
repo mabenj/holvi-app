@@ -12,8 +12,8 @@ async function getFile(
     const { collectionId, fileId } = req.query;
     const collectionService = new CollectionService(req.session.user.id);
     const { file, mimeType, notFound } = await collectionService.getFile(
-        parseInt(collectionId?.toString() || ""),
-        parseInt(fileId?.toString() || "")
+        collectionId?.toString() || "",
+        fileId?.toString() || ""
     );
     if (!file || !mimeType || notFound) {
         res.status(404).json({ status: "error" });

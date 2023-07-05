@@ -1,4 +1,5 @@
 import { withSessionSsr } from "@/lib/common/iron-session";
+import { isUuidv4 } from "@/lib/common/utilities";
 import Layout from "@/lib/components/Layout";
 import { useCollections } from "@/lib/context/CollectionsContext";
 import { Collection } from "@/lib/interfaces/collection";
@@ -17,11 +18,11 @@ import { useEffect, useRef, useState } from "react";
 
 export const getServerSideProps = withSessionSsr(
     async function getServerSideProps({ req, query }) {
-        const collectionId = parseInt(query.collectionId?.toString() || "");
-        if (isNaN(collectionId)) {
+        const collectionId = query.collectionId?.toString()
+        if(!collectionId || !isUuidv4(collectionId)){
             return {
                 notFound: true
-            };
+            }
         }
         return {
             props: {
@@ -37,7 +38,7 @@ export default function CollectionPage({
     collectionId
 }: {
     user: User;
-    collectionId: number;
+    collectionId: string;
 }) {
     const [currentCollection, setCurrentCollection] = useState<
         Collection | undefined

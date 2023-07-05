@@ -1,6 +1,4 @@
 export interface User {
-    id: number;
+    id: string;
     username: string;
-    createdAt: number;
-    updatedAt: number;
 }

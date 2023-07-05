@@ -1,6 +1,6 @@
 export interface Collection {
+    id: string;
     name: string;
-    id: number;
     tags: string[];
     createdAt: number;
     updatedAt: number;

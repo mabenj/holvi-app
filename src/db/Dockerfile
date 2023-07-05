@@ -3,10 +3,6 @@ FROM postgres:latest
 ENV POSTGRES_USER=admin
 ENV POSTGRES_DB=holvi
 
-COPY update-scripts/*.sql /docker-entrypoint-initdb.d/update-scripts/
-
-COPY entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/entrypoint.sh
-ENTRYPOINT ["entrypoint.sh"]
+RUN echo "create extension if not exists citext;" > /docker-entrypoint-initdb.d/init.sql
 
 EXPOSE 5432

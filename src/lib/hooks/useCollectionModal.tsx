@@ -24,8 +24,6 @@ export function useCollectionModal(initialCollection?: Collection) {
                 method: "POST",
                 body: JSON.stringify({ name, tags })
             });
-            setName("");
-            setTags([]);
         } else {
             response = await fetch("/api/collections", {
                 method: "PUT",
@@ -38,6 +36,11 @@ export function useCollectionModal(initialCollection?: Collection) {
 
         if (data.status === "error") {
             return Promise.reject();
+        }
+
+        if (isNew) {
+            setName("");
+            setNameError("");
         }
 
         const collection: Collection = {

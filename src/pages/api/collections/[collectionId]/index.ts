@@ -10,7 +10,7 @@ async function deleteCollection(
     const { collectionId } = req.query;
     const collectionService = new CollectionService(req.session.user.id);
     const { error } = await collectionService.delete(
-        parseInt(collectionId?.toString() || "")
+        collectionId?.toString() || ""
     );
     if (error) {
         res.status(400).json({ status: "error", error });

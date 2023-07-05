@@ -16,6 +16,14 @@ const DIVISIONS = [
     { amount: Number.POSITIVE_INFINITY, name: "years" }
 ];
 
+export const EMPTY_UUIDV4 = "00000000-0000-0000-0000-000000000000";
+
+export function isUuidv4(uuid: string) {
+    return /^[0-9A-F]{8}-[0-9A-F]{4}-[4][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/i.test(
+        uuid
+    );
+}
+
 export function timeAgo(date: Date) {
     if (!date) {
         return undefined;

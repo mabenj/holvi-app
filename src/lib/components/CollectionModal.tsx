@@ -60,12 +60,13 @@ export default function CollectionModal({
                 status: "success"
             });
         } catch (error) {
-            toast({
-                description: `Could not ${
-                    mode === "edit" ? "edit" : "create"
-                } collection: ${getErrorMessage(error)}`,
-                status: "success"
-            });
+            error &&
+                toast({
+                    description: `Could not ${
+                        mode === "edit" ? "edit" : "create"
+                    } collection: ${getErrorMessage(error)}`,
+                    status: "error"
+                });
         }
     };
 
@@ -136,8 +137,8 @@ const TagInput = ({
 
     const addTag = (tag: string) => {
         setInputValue("");
-        tag = tag.trim().toLowerCase();
-        if (value.includes(tag)) {
+        tag = tag.trim();
+        if (value.includes(tag.toLowerCase())) {
             return;
         }
         onChange([...value, tag]);
@@ -145,9 +146,15 @@ const TagInput = ({
 
     const handleInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
         switch (e.key) {
-            case ",":
-            case "Enter":
-            case "Tab": {
+            case "Enter": {
+                if (!inputValue) {
+                    // submit
+                    break;
+                }
+                // fall through
+            }
+            case "Tab":
+            case ",": {
                 e.preventDefault();
                 addTag(inputValue);
                 break;
