@@ -1,3 +1,7 @@
+import { CollectionDto } from "../interfaces/collection-dto";
+import { CollectionFileDto } from "../interfaces/collection-file-dto";
+import { CollectionGridItem, ItemType } from "../interfaces/collection-grid-item";
+
 const FORMATTER = new Intl.RelativeTimeFormat("en", {
     localeMatcher: "best fit",
     numeric: "auto",
@@ -50,7 +54,7 @@ export function getErrorMessage(error: unknown) {
     if (error instanceof Error || error instanceof ErrorEvent)
         return error.message;
     const str = String(error);
-    return str === "Undefined" ? undefined : str;
+    return str === "Undefined" ? "Unknown error" : str;
 }
 
 export function prettyNumber(number: number | undefined) {
@@ -104,4 +108,38 @@ export function caseInsensitiveSorter<T, K extends keyof T>(
         });
         return asc ? result : -result;
     };
+}
+
+export function filesToGridItems(files: CollectionFileDto[]): CollectionGridItem[] {
+    return files
+        .map((file) => ({
+            id: file.id,
+            name: file.name,
+            type: file.mimeType.includes("video")
+                ? "video"
+                : ("image" as ItemType),
+            tags: [], // TODO
+            timestamp: new Date(file.createdAt),
+            src: file.src,
+            width: file.width,
+            height: file.height,
+            thumbnailSrc: file.thumbnailSrc,
+            thumbnailWidth: file.thumbnailWidth,
+            thumbnailHeight: file.thumbnailHeight
+        }))
+        .sort(caseInsensitiveSorter("name"));
+}
+
+export function collectionsToGridItems(
+    collections: CollectionDto[]
+): CollectionGridItem[] {
+    return collections
+        .map((collection) => ({
+            id: collection.id,
+            name: collection.name,
+            type: "collection" as ItemType,
+            tags: collection.tags,
+            timestamp: new Date(collection.createdAt)
+        }))
+        .sort(caseInsensitiveSorter("name"));
 }

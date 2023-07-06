@@ -5,7 +5,7 @@ export function useUpload(method: "POST" | "PUT", url: string) {
     const [isUploading, setIsUploading] = useState(false);
 
     const upload = (formData: FormData) =>
-        new Promise((resolve, reject) => {
+        new Promise<any>((resolve, reject) => {
             const xhr = new XMLHttpRequest();
 
             xhr.upload.addEventListener(

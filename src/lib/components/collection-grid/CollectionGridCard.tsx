@@ -1,6 +1,8 @@
+import { collectionsToGridItems } from "@/lib/common/utilities";
+import { useCollectionGrid } from "@/lib/context/CollectionGridContext";
 import { useDeleteCollection } from "@/lib/hooks/useDeleteCollection";
 import { CollectionDto } from "@/lib/interfaces/collection-dto";
-import { Link } from "@chakra-ui/next-js";
+import { CollectionGridItem } from "@/lib/interfaces/collection-grid-item";
 import {
     AlertDialog,
     AlertDialogBody,
@@ -12,6 +14,7 @@ import {
     Button,
     Flex,
     IconButton,
+    Link,
     Menu,
     MenuButton,
     MenuItem,
@@ -25,13 +28,15 @@ import Icon from "@mdi/react";
 import Image from "next/image";
 import { useRouter } from "next/router";
 import { useRef, useState } from "react";
+import folderImage from "../../../../public/folder.png";
 import CollectionModal from "../CollectionModal";
 
-interface CollectionCardProps {
-    collection: CollectionDto;
-}
-
-export default function CollectionCard({ collection }: CollectionCardProps) {
+export default function CollectionGridCard({
+    item
+}: {
+    item: CollectionGridItem;
+}) {
+    const { setGridItems } = useCollectionGrid();
     const [isHovering, setIsHovering] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const { deleteCollection, isDeleting } = useDeleteCollection();
@@ -49,20 +54,62 @@ export default function CollectionCard({ collection }: CollectionCardProps) {
     const router = useRouter();
     const toast = useToast();
 
-    const handleDelete = () => {
-        deleteCollection(collection.id)
-            .then(() => {
+    const isCollection = item.type === "collection";
+    const isVideo = item.type === "video";
+
+    const handleClick = () => {
+        switch (item.type) {
+            case "collection":
+                router.push(`/collections/${item.id}`);
+                break;
+            case "image":
+                // TODO: open image (react-photo-view)
+                break;
+            case "video":
+                //TODO view video
+                break;
+            default:
                 toast({
-                    description: "Collection deleted",
-                    status: "success"
-                });
-            })
-            .catch((error) =>
-                toast({
-                    description: error,
+                    description: "Unsupported file type",
                     status: "error"
-                })
-            );
+                });
+        }
+    };
+
+    const handleCollectionSaved = (collection: CollectionDto) => {
+        setGridItems((prev) =>
+            prev.map((c) =>
+                c.id === collection.id
+                    ? collectionsToGridItems([collection])[0]
+                    : c
+            )
+        );
+    };
+
+    const handleDelete = async () => {
+        try {
+            if (isCollection) {
+                await deleteCollection(item.id);
+            } else {
+                //TODO
+                throw new Error("Not implemented");
+            }
+            toast({
+                description: `${
+                    isCollection ? "Collection" : isVideo ? "Video" : "Image"
+                } deleted`,
+                status: "success"
+            });
+        } catch (error) {
+            toast({
+                description: `Error deleting ${
+                    isCollection ? "collection" : isVideo ? "video" : "image"
+                }`,
+                status: "error"
+            });
+        } finally {
+            onAlertClose();
+        }
     };
 
     return (
@@ -70,26 +117,23 @@ export default function CollectionCard({ collection }: CollectionCardProps) {
             <Flex direction="column" alignItems="center" gap={2}>
                 <Box
                     w="100%"
-                    h="10rem"
+                    h="14rem"
                     position="relative"
                     cursor="pointer"
                     onMouseEnter={() => setIsHovering(true)}
                     onMouseLeave={() => setIsHovering(false)}>
                     <Image
-                        src={`https://picsum.photos/seed/${collection.name}/600/400`}
-                        alt="placeholder"
+                        src={isCollection ? folderImage : item.thumbnailSrc!}
+                        alt={item.name}
                         fill
                         style={{
                             objectFit: "cover",
-                            borderRadius: "5px",
                             filter:
-                                isHovering || isMenuOpen
-                                    ? "brightness(40%)"
+                                !isCollection && (isHovering || isMenuOpen)
+                                    ? "brightness(60%)"
                                     : ""
                         }}
-                        onClick={() =>
-                            router.push(`/collections/${collection.id}`)
-                        }
+                        onClick={handleClick}
                     />
                     {(isHovering || isMenuOpen) && (
                         <Menu
@@ -107,10 +151,11 @@ export default function CollectionCard({ collection }: CollectionCardProps) {
 
                             <MenuList>
                                 <MenuItem onClick={onModalOpen}>
-                                    Edit collection
+                                    Edit {isCollection ? "collection" : "file"}
                                 </MenuItem>
                                 <MenuItem onClick={onAlertOpen}>
-                                    Delete collection
+                                    Delete{" "}
+                                    {isCollection ? "collection" : "file"}
                                 </MenuItem>
                             </MenuList>
                         </Menu>
@@ -120,18 +165,28 @@ export default function CollectionCard({ collection }: CollectionCardProps) {
                     )}
                 </Box>
                 <Link
-                    href={`/collections/${collection.id}`}
+                    href={isCollection ? `/collections/${item.id}` : undefined}
+                    onClick={isCollection ? undefined : handleClick}
                     onMouseEnter={() => setIsHovering(true)}
-                    onMouseLeave={() => setIsHovering(false)}>
-                    {collection.name}
+                    onMouseLeave={() => setIsHovering(false)}
+                    textColor="gray.600">
+                    {item.name}
                 </Link>
             </Flex>
-            <CollectionModal
-                isOpen={isModalOpen}
-                onClose={onModalClose}
-                mode="edit"
-                initialCollection={collection}
-            />
+            {isCollection && (
+                <CollectionModal
+                    isOpen={isModalOpen}
+                    onClose={onModalClose}
+                    onSave={handleCollectionSaved}
+                    mode="edit"
+                    initialCollection={{
+                        id: item.id,
+                        name: item.name,
+                        tags: item.tags
+                    }}
+                />
+            )}
+
             <AlertDialog
                 isOpen={isAlertOpen}
                 leastDestructiveRef={cancelDeleteRef}

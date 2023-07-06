@@ -1,13 +1,11 @@
 import { useState } from "react";
-import { useCollections } from "../context/CollectionsContext";
 import { CollectionDto } from "../interfaces/collection-dto";
 
-export function useCollectionModal(initialCollection?: CollectionDto) {
+export function useCollectionModal(initialCollection?: Partial<CollectionDto>) {
     const [name, setName] = useState(initialCollection?.name || "");
     const [nameError, setNameError] = useState("");
     const [tags, setTags] = useState<string[]>(initialCollection?.tags || []);
     const [isLoading, setIsLoading] = useState(false);
-    const { setCollections } = useCollections();
 
     const isNew = !initialCollection;
 
@@ -50,13 +48,7 @@ export function useCollectionModal(initialCollection?: CollectionDto) {
             createdAt: data.createdAt,
             updatedAt: data.updatedAt
         };
-        if (isNew) {
-            setCollections((prev) => [...prev, collection]);
-        } else {
-            setCollections((prev) =>
-                prev.map((c) => (c.id === collection.id ? collection : c))
-            );
-        }
+        
         return Promise.resolve(collection);
     };
 

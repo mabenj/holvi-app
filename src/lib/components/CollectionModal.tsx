@@ -28,12 +28,14 @@ interface CollectionModalProps {
     isOpen: boolean;
     mode: "edit" | "create";
     onClose: () => void;
-    initialCollection?: CollectionDto;
+    onSave: (collection: CollectionDto) => void;
+    initialCollection?: Partial<CollectionDto>;
 }
 
 export default function CollectionModal({
     isOpen,
     onClose,
+    onSave,
     mode,
     initialCollection
 }: CollectionModalProps) {
@@ -51,7 +53,8 @@ export default function CollectionModal({
     const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         try {
-            await saveCollection();
+            const collection = await saveCollection();
+            onSave(collection);
             onClose();
             toast({
                 description: `Collection ${
