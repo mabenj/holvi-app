@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useCollections } from "../context/CollectionsContext";
-import { Collection } from "../interfaces/collection";
+import { CollectionDto } from "../interfaces/collection-dto";
 
-export function useCollectionModal(initialCollection?: Collection) {
+export function useCollectionModal(initialCollection?: CollectionDto) {
     const [name, setName] = useState(initialCollection?.name || "");
     const [nameError, setNameError] = useState("");
     const [tags, setTags] = useState<string[]>(initialCollection?.tags || []);
@@ -43,7 +43,7 @@ export function useCollectionModal(initialCollection?: Collection) {
             setNameError("");
         }
 
-        const collection: Collection = {
+        const collection: CollectionDto = {
             id: data.collection.id,
             name: data.collection.name,
             tags: data.collection.tags,

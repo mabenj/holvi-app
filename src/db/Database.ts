@@ -91,7 +91,8 @@ export default class Database {
 
             Log.info("Initializing models");
             await Database.instance.sequelize.sync({ alter: true });
-            Log.info("Models initialized");
+
+            Log.info("Database initialized");
         } catch (error) {
             Log.error("Error initializing models", error);
             return;

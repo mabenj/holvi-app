@@ -1,19 +1,19 @@
 import { ApiRoute } from "@/lib/common/api-route";
 import { ApiResponse } from "@/lib/interfaces/api-response";
-import { Collection } from "@/lib/interfaces/collection";
+import { CollectionDto } from "@/lib/interfaces/collection-dto";
 import { CollectionService } from "@/lib/services/collection.service";
 import type { NextApiRequest, NextApiResponse } from "next";
 
 interface GetAllResult {
-    collections?: Collection[];
+    collections?: CollectionDto[];
 }
 
 interface UpdateResult {
-    collection?: Collection;
+    collection?: CollectionDto;
 }
 
 interface CreateResult {
-    collection?: Collection;
+    collection?: CollectionDto;
 }
 
 async function getCollections(
@@ -29,7 +29,7 @@ async function updateCollection(
     req: NextApiRequest,
     res: NextApiResponse<ApiResponse<UpdateResult>>
 ) {
-    const collection = JSON.parse(req.body) as Collection;
+    const collection = JSON.parse(req.body) as CollectionDto;
     const collectionService = new CollectionService(req.session.user.id);
     const { collection: updated, error } = await collectionService.update(
         collection

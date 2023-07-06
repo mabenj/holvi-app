@@ -1,5 +1,5 @@
 import { useDeleteCollection } from "@/lib/hooks/useDeleteCollection";
-import { Collection } from "@/lib/interfaces/collection";
+import { CollectionDto } from "@/lib/interfaces/collection-dto";
 import { Link } from "@chakra-ui/next-js";
 import {
     AlertDialog,
@@ -28,7 +28,7 @@ import { useRef, useState } from "react";
 import CollectionModal from "../CollectionModal";
 
 interface CollectionCardProps {
-    collection: Collection;
+    collection: CollectionDto;
 }
 
 export default function CollectionCard({ collection }: CollectionCardProps) {

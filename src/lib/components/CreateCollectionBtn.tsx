@@ -1,7 +1,5 @@
-import { Collection } from "@/lib/interfaces/collection";
 import { AddIcon } from "@chakra-ui/icons";
-import { Button, useDisclosure, useToast } from "@chakra-ui/react";
-import { useCollections } from "../context/CollectionsContext";
+import { Button, useDisclosure } from "@chakra-ui/react";
 import CollectionModal from "./CollectionModal";
 
 export default function CreateCollectionBtn() {
@@ -13,11 +11,7 @@ export default function CreateCollectionBtn() {
                 Create Collection
             </Button>
 
-            <CollectionModal
-                isOpen={isOpen}
-                onClose={onClose}
-                mode="create"
-            />
+            <CollectionModal isOpen={isOpen} onClose={onClose} mode="create" />
         </>
     );
 }

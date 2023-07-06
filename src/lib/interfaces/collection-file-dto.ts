@@ -1,4 +1,4 @@
-export interface CollectionFile {
+export interface CollectionFileDto {
     id: string;
     collectionId: string;
     name: string;

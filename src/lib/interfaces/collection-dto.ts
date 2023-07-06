@@ -1,4 +1,4 @@
-export interface Collection {
+export interface CollectionDto {
     id: string;
     name: string;
     tags: string[];

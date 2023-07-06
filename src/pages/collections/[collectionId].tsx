@@ -1,11 +1,11 @@
 import { withSessionSsr } from "@/lib/common/iron-session";
 import { isUuidv4 } from "@/lib/common/utilities";
 import Layout from "@/lib/components/Layout";
-import { useCollections } from "@/lib/context/CollectionsContext";
 import { useUpload } from "@/lib/hooks/useUpload";
-import { Collection } from "@/lib/interfaces/collection";
-import { User } from "@/lib/interfaces/user";
-import { Link } from "@chakra-ui/next-js";
+import { CollectionDto } from "@/lib/interfaces/collection-dto";
+import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
+import { UserDto } from "@/lib/interfaces/user-dto";
+import { Image, Link } from "@chakra-ui/next-js";
 import {
     Box,
     Breadcrumb,
@@ -18,6 +18,9 @@ import { mdiUpload } from "@mdi/js";
 import Icon from "@mdi/react";
 import Head from "next/head";
 import { useEffect, useRef, useState } from "react";
+import useSWR from "swr";
+
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export const getServerSideProps = withSessionSsr(
     async function getServerSideProps({ req, query }) {
@@ -40,26 +43,31 @@ export default function CollectionPage({
     user,
     collectionId
 }: {
-    user: User;
+    user: UserDto;
     collectionId: string;
 }) {
+    const { data, error, isLoading } = useSWR(
+        `/api/collections/${collectionId}/files`,
+        fetcher
+    );
+
     const [currentCollection, setCurrentCollection] = useState<
-        Collection | undefined
+        CollectionDto | undefined
     >();
-    const { collections } = useCollections();
+    const [files, setFiles] = useState<CollectionFileDto[]>([]);
+
     const { upload, progress, isUploading } = useUpload(
         "POST",
         `/api/collections/${currentCollection?.id}/files/upload`
     );
 
-    useEffect(
-        () =>
-            setCurrentCollection(
-                collections.find((c) => c.id === collectionId)
-            ),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [collections]
-    );
+    useEffect(() => {
+        if (!data) {
+            return;
+        }
+        setCurrentCollection(data.collection);
+        setFiles(data.files || []);
+    }, [data]);
 
     const handleUpload = async (files: FileList | null) => {
         const fileList = Array.from(files || []);
@@ -98,6 +106,16 @@ export default function CollectionPage({
                         right={0}
                     />
                 ) : null}
+
+                {files.map((file) => (
+                    <Image
+                        key={file.id}
+                        src={file.src}
+                        alt={file.name}
+                        width={file.width}
+                        height={file.height}
+                    />
+                ))}
             </Layout>
         </>
     );

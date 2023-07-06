@@ -1,4 +1,4 @@
-import { User } from "@/lib/interfaces/user";
+import { UserDto } from "@/lib/interfaces/user-dto";
 import { IronSessionOptions } from "iron-session";
 import { withIronSessionApiRoute, withIronSessionSsr } from "iron-session/next";
 import {
@@ -7,8 +7,6 @@ import {
     NextApiHandler
 } from "next";
 import { sessionOptions } from "./session-options";
-
-
 
 export function withSessionRoute(handler: NextApiHandler) {
     return withIronSessionApiRoute(handler, sessionOptions);
@@ -27,6 +25,6 @@ export function withSessionSsr<
 
 declare module "iron-session" {
     interface IronSessionData {
-        user: User;
+        user: UserDto;
     }
 }

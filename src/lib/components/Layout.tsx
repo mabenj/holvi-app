@@ -2,10 +2,10 @@ import { Link } from "@chakra-ui/next-js";
 import { Box, Button, Container, Flex, useToast } from "@chakra-ui/react";
 import Head from "next/head";
 import { useLogin } from "../hooks/useLogin";
-import { User } from "../interfaces/user";
+import { UserDto } from "../interfaces/user-dto";
 
 interface LayoutProps {
-    user?: User;
+    user?: UserDto;
     children: React.ReactNode;
 }
 

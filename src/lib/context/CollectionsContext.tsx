@@ -2,11 +2,11 @@ import { useToast } from "@chakra-ui/react";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import useSWR from "swr";
 import { caseInsensitiveSorter } from "../common/utilities";
-import { Collection } from "../interfaces/collection";
+import { CollectionDto } from "../interfaces/collection-dto";
 
 interface CollectionsContext {
-    collections: Collection[];
-    setCollections: React.Dispatch<React.SetStateAction<Collection[]>>;
+    collections: CollectionDto[];
+    setCollections: React.Dispatch<React.SetStateAction<CollectionDto[]>>;
     isLoading: boolean;
 }
 
@@ -25,11 +25,11 @@ export function CollectionsProvider({
 }: {
     children: React.ReactNode;
 }) {
-    const { data, isLoading, error } = useSWR<Collection[]>(
+    const { data, isLoading, error } = useSWR<CollectionDto[]>(
         "/api/collections",
         fetcher
     );
-    const [collections, setCollections] = useState<Collection[]>([]);
+    const [collections, setCollections] = useState<CollectionDto[]>([]);
     const toast = useToast();
 
     useEffect(() => setCollections(data || []), [data]);
@@ -59,7 +59,7 @@ const fetcher = (url: string) =>
         if (data.status !== "ok" || data.error) {
             throw new Error(data.error);
         }
-        return (data.collections as Collection[]).sort(
+        return (data.collections as CollectionDto[]).sort(
             caseInsensitiveSorter("name")
         );
     });

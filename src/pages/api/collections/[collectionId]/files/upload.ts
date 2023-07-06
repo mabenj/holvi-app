@@ -1,11 +1,11 @@
 import { ApiRoute } from "@/lib/common/api-route";
 import { ApiResponse } from "@/lib/interfaces/api-response";
-import { CollectionFile } from "@/lib/interfaces/collection-file";
+import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
 import { CollectionService } from "@/lib/services/collection.service";
 import type { NextApiRequest, NextApiResponse } from "next";
 
 interface Result {
-    files?: CollectionFile[];
+    files?: CollectionFileDto[];
 }
 
 async function uploadFiles(

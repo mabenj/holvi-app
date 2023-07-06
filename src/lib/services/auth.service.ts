@@ -3,12 +3,12 @@ import { isValidPassword, isValidUsername } from "@/lib/common/utilities";
 import { IronSession } from "iron-session";
 import Cryptography from "../common/cryptography";
 import Log from "../common/log";
-import { User } from "../interfaces/user";
+import { UserDto } from "../interfaces/user-dto";
 
 interface RegisterUserResult {
     usernameError?: string;
     passwordError?: string;
-    user?: User;
+    user?: UserDto;
 }
 
 export default class AuthService {
@@ -64,7 +64,7 @@ export default class AuthService {
     static async loginUser(
         username: string,
         password: string
-    ): Promise<User | null> {
+    ): Promise<UserDto | null> {
         const db = await Database.getInstance();
         const user = await db.models.User.findOne({
             where: { username },
@@ -88,7 +88,7 @@ export default class AuthService {
         };
     }
 
-    static async validateUser(session: IronSession): Promise<User | null> {
+    static async validateUser(session: IronSession): Promise<UserDto | null> {
         if (!session) {
             return null;
         }

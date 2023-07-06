@@ -1,5 +1,5 @@
 import { useCollectionModal } from "@/lib/hooks/useCollectionModal";
-import { Collection } from "@/lib/interfaces/collection";
+import { CollectionDto } from "@/lib/interfaces/collection-dto";
 import {
     Box,
     Button,
@@ -28,7 +28,7 @@ interface CollectionModalProps {
     isOpen: boolean;
     mode: "edit" | "create";
     onClose: () => void;
-    initialCollection?: Collection;
+    initialCollection?: CollectionDto;
 }
 
 export default function CollectionModal({

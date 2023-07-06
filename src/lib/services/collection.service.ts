@@ -11,21 +11,21 @@ import {
 import Log from "../common/log";
 import parseForm from "../common/parse-form";
 import { EMPTY_UUIDV4, isUuidv4 } from "../common/utilities";
-import { Collection } from "../interfaces/collection";
-import { CollectionFile } from "../interfaces/collection-file";
+import { CollectionDto } from "../interfaces/collection-dto";
+import { CollectionFileDto } from "../interfaces/collection-file-dto";
 
 interface CreateResult {
-    collection?: Collection;
+    collection?: CollectionDto;
     error?: string;
 }
 
 interface GetResult {
-    collection?: Collection;
+    collection?: CollectionDto;
     notFound?: boolean;
 }
 
 interface UpdateResult {
-    collection?: Collection;
+    collection?: CollectionDto;
     notFound?: boolean;
     error?: string;
 }
@@ -36,7 +36,7 @@ interface DeleteResult {
 
 interface UploadResult {
     error?: string;
-    files?: CollectionFile[];
+    files?: CollectionFileDto[];
 }
 
 interface GetFileResult {
@@ -45,8 +45,61 @@ interface GetFileResult {
     notFound?: boolean;
 }
 
+interface GetCollectionFilesResult {
+    notFound?: boolean;
+    collection?: CollectionDto;
+    files?: CollectionFileDto[];
+}
+
 export class CollectionService {
     constructor(private readonly userId: string) {}
+
+    async getCollectionFiles(
+        collectionId: string
+    ): Promise<GetCollectionFilesResult> {
+        if (!collectionId || !isUuidv4(collectionId)) {
+            return {
+                notFound: true
+            };
+        }
+        const db = await Database.getInstance();
+        const collection = await db.models.Collection.findOne({
+            where: {
+                UserId: this.userId,
+                id: collectionId
+            },
+            include: [db.models.CollectionFile, db.models.Tag]
+        });
+        if (!collection) {
+            return {
+                notFound: true
+            };
+        }
+        return {
+            collection: {
+                id: collection.id,
+                name: collection.name,
+                createdAt: collection.createdAt.getTime(),
+                updatedAt: collection.updatedAt.getTime(),
+                tags: collection.Tags?.map((tag) => tag.name) || []
+            },
+            files:
+                collection.CollectionFiles?.map((file) => ({
+                    id: file.id,
+                    collectionId: file.CollectionId,
+                    name: file.name,
+                    mimeType: file.mimeType,
+                    src: `/api/collections/${file.CollectionId}/files/${file.id}`,
+                    width: file.width,
+                    height: file.height,
+                    thumbnailSrc: `/api/collections/${file.CollectionId}/files/${file.id}`,
+                    thumbnailWidth: file.thumbnailWidth,
+                    thumbnailHeight: file.thumbnailHeight,
+                    createdAt: file.createdAt.getTime(),
+                    updatedAt: file.updatedAt.getTime()
+                })) || []
+        };
+    }
 
     async getFile(
         collectionId: string,
@@ -183,7 +236,7 @@ export class CollectionService {
         }
     }
 
-    async update(collection: Collection): Promise<UpdateResult> {
+    async update(collection: CollectionDto): Promise<UpdateResult> {
         if (!collection.id) {
             return { notFound: true };
         }
@@ -325,7 +378,7 @@ export class CollectionService {
         };
     }
 
-    async getAll(): Promise<Collection[]> {
+    async getAll(): Promise<CollectionDto[]> {
         try {
             const db = await Database.getInstance();
             const result = await db.models.Collection.findAll({
