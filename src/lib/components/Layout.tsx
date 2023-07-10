@@ -21,7 +21,7 @@ export default function Layout({ user, children }: LayoutProps) {
             </Head>
             <Navbar username={user?.username} />
             <main>
-                <Container maxW="7xl">
+                <Container maxW="7xl" p={[0, 0, 0, 5]}>
                     <Box py={10} />
                     {children}
                 </Container>

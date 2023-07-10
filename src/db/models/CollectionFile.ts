@@ -21,6 +21,7 @@ export class CollectionFile extends Model<
     declare path: string;
     declare width?: number;
     declare height?: number;
+    declare thumbnailPath?: string;
     declare thumbnailWidth?: number;
     declare thumbnailHeight?: number;
 
@@ -57,6 +58,10 @@ export class CollectionFile extends Model<
                 },
                 height: {
                     type: DataTypes.INTEGER
+                },
+                thumbnailPath: {
+                    type: DataTypes.CITEXT,
+                    unique: true
                 },
                 thumbnailWidth: {
                     type: DataTypes.INTEGER

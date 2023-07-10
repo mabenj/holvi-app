@@ -1,4 +1,5 @@
 import Log from "@/lib/common/log";
+import { sleep } from "@/lib/common/utilities";
 import { Sequelize, Transaction } from "sequelize";
 import { Collection } from "./models/Collection";
 import { CollectionFile } from "./models/CollectionFile";
@@ -8,6 +9,7 @@ import { User } from "./models/User";
 export default class Database {
     private static instance: Database;
     private readonly sequelize;
+    private initializing = false;
 
     public get models() {
         return {
@@ -35,6 +37,9 @@ export default class Database {
     }
 
     public static async getInstance() {
+        while (Database.instance?.initializing) {
+            await sleep(100);
+        }
         if (!Database.instance) {
             Database.instance = new Database();
             await this.init();
@@ -58,11 +63,13 @@ export default class Database {
     }
 
     private static async init() {
+        Database.instance.initializing = true;
         try {
             await Database.instance.sequelize.authenticate();
             Log.info("Database connection established");
         } catch (error) {
             Log.error("Unable to connect to the database", error);
+            Database.instance.initializing = false;
             return;
         }
 
@@ -96,6 +103,8 @@ export default class Database {
         } catch (error) {
             Log.error("Error initializing models", error);
             return;
+        } finally {
+            Database.instance.initializing = false;
         }
     }
 }

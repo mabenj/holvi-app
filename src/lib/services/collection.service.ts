@@ -4,6 +4,7 @@ import path from "path";
 import { Op } from "sequelize";
 import {
     deleteDirectory,
+    generateThumbnail,
     getImageDimensions,
     moveDirectoryContents,
     readBytes
@@ -92,7 +93,7 @@ export class CollectionService {
                     src: `/api/collections/${file.CollectionId}/files/${file.id}`,
                     width: file.width,
                     height: file.height,
-                    thumbnailSrc: `/api/collections/${file.CollectionId}/files/${file.id}`,
+                    thumbnailSrc: `/api/collections/${file.CollectionId}/files/${file.id}/thumbnail`,
                     thumbnailWidth: file.thumbnailWidth,
                     thumbnailHeight: file.thumbnailHeight,
                     createdAt: file.createdAt.getTime(),
@@ -101,9 +102,17 @@ export class CollectionService {
         };
     }
 
-    async getFile(
+    async getFileThumbnail(
         collectionId: string,
         fileId: string
+    ): Promise<GetFileResult> {
+        return this.getFile(collectionId, fileId, true);
+    }
+
+    async getFile(
+        collectionId: string,
+        fileId: string,
+        thumbnail: boolean = false
     ): Promise<GetFileResult> {
         if (
             !collectionId ||
@@ -120,7 +129,7 @@ export class CollectionService {
                 CollectionId: collectionId,
                 id: fileId
             },
-            attributes: ["mimeType", "path"],
+            attributes: ["mimeType", "thumbnailPath", "path"],
             include: {
                 model: db.models.Collection,
                 required: true,
@@ -136,7 +145,12 @@ export class CollectionService {
         }
 
         const file = await readBytes(
-            path.join(this.getDataDir(), collectionFile.path)
+            path.join(
+                this.getDataDir(),
+                collectionFile.thumbnailPath && thumbnail
+                    ? collectionFile.thumbnailPath
+                    : collectionFile.path
+            )
         );
         if (!file) {
             return {
@@ -159,9 +173,11 @@ export class CollectionService {
             );
         }
 
+        const db = await Database.getInstance();
+        const transaction = await db.transaction();
         const workingDir = path.join(
             this.getUserCollectionDir(collectionId),
-            "upload"
+            `upload_${Date.now()}`
         );
         try {
             // move files to working directory
@@ -172,39 +188,60 @@ export class CollectionService {
             );
             const fileList = Object.keys(files).flatMap((file) => files[file]);
             const timestamp = new Date().toISOString();
-            const fileRows = fileList.map((file, i) => {
-                const fallbackName = `${timestamp}_${i}`;
-                const tempPath = path.join(
-                    workingDir,
-                    file.newFilename || fallbackName
-                );
-                const finalPath = path.join(
-                    this.userId.toString(),
-                    collectionId,
-                    file.newFilename || fallbackName
-                );
-                const isImage = file.mimetype?.includes("image") || false;
-                const { width, height } = isImage
-                    ? getImageDimensions(tempPath)
-                    : { width: -1, height: -1 };
-                return {
-                    name: file.originalFilename || fallbackName,
-                    mimeType: file.mimetype || "unknown",
-                    path: finalPath,
-                    width: width || -1,
-                    height: height || -1,
-                    thumbnailWidth: width || -1,
-                    thumbnailHeight: height || -1,
-                    CollectionId: collectionId
-                };
-            });
+            const fileRows = await Promise.all(
+                fileList.map(async (file, i) => {
+                    const isImage = file.mimetype?.includes("image") || false;
+                    const fallbackName = `${timestamp}_${i}`;
+                    const tempPath = path.join(
+                        workingDir,
+                        file.newFilename || fallbackName
+                    );
+                    const filepath = path.join(
+                        this.userId.toString(),
+                        collectionId,
+                        file.newFilename || fallbackName
+                    );
+                    const thumbnailPath = path.join(
+                        this.userId.toString(),
+                        collectionId,
+                        "tn",
+                        file.newFilename || fallbackName
+                    );
+                    const { width, height } = isImage
+                        ? getImageDimensions(tempPath)
+                        : { width: -1, height: -1 };
+                    const { width: thumbnailWidth, height: thumbnailHeight } =
+                        isImage
+                            ? await generateThumbnail(
+                                  tempPath,
+                                  path.join(
+                                      workingDir,
+                                      "tn",
+                                      file.newFilename || fallbackName
+                                  )
+                              )
+                            : { width: -1, height: -1 };
+
+                    return {
+                        name: file.originalFilename || fallbackName,
+                        mimeType: file.mimetype || "unknown",
+                        path: filepath,
+                        width: width || -1,
+                        height: height || -1,
+                        thumbnailPath: thumbnailPath,
+                        thumbnailWidth: thumbnailWidth || -1,
+                        thumbnailHeight: thumbnailHeight || -1,
+                        CollectionId: collectionId
+                    };
+                })
+            );
 
             // insert info into db
-            const insertedRows = await Database.withTransaction(
-                async (transaction, db) =>
-                    db.models.CollectionFile.bulkCreate(fileRows, {
-                        transaction
-                    })
+            const insertedRows = await db.models.CollectionFile.bulkCreate(
+                fileRows,
+                {
+                    transaction
+                }
             );
 
             // move files from working directory to user directory
@@ -213,6 +250,8 @@ export class CollectionService {
                 this.getUserCollectionDir(collectionId)
             );
 
+            transaction.commit();
+
             return {
                 files: insertedRows.map((row) => ({
                     id: row.id,
@@ -220,7 +259,7 @@ export class CollectionService {
                     name: row.name,
                     mimeType: row.mimeType,
                     src: `/api/collections/${row.CollectionId}/files/${row.id}`,
-                    thumbnailSrc: `/api/collections/${row.CollectionId}/files/${row.id}`,
+                    thumbnailSrc: `/api/collections/${row.CollectionId}/files/${row.id}/thumbnail`,
                     width: row.width,
                     height: row.height,
                     thumbnailWidth: row.thumbnailWidth,
@@ -230,7 +269,8 @@ export class CollectionService {
                 }))
             };
         } catch (error) {
-            throw new Error("Error uploading file(s)", { cause: error });
+            transaction.rollback();
+            throw error;
         } finally {
             await deleteDirectory(workingDir);
         }

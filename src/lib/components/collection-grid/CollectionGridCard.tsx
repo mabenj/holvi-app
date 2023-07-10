@@ -14,7 +14,6 @@ import {
     Button,
     Flex,
     IconButton,
-    Link,
     Menu,
     MenuButton,
     MenuItem,
@@ -94,6 +93,7 @@ export default function CollectionGridCard({
                 //TODO
                 throw new Error("Not implemented");
             }
+            setGridItems((prev) => prev.filter(({ id }) => id !== item.id));
             toast({
                 description: `${
                     isCollection ? "Collection" : isVideo ? "Video" : "Image"
@@ -117,7 +117,7 @@ export default function CollectionGridCard({
             <Flex direction="column" alignItems="center" gap={2}>
                 <Box
                     w="100%"
-                    h="14rem"
+                    h={["8rem", "8rem", "8rem", "14rem"]}
                     position="relative"
                     cursor="pointer"
                     onMouseEnter={() => setIsHovering(true)}
@@ -160,18 +160,24 @@ export default function CollectionGridCard({
                             </MenuList>
                         </Menu>
                     )}
+                    {(isHovering || isMenuOpen) && (
+                        <Box
+                            position="absolute"
+                            bottom={0}
+                            p={2}
+                            width="100%"
+                            whiteSpace="nowrap"
+                            overflow="hidden"
+                            textOverflow="ellipsis"
+                            cursor="text"
+                            title={item.name}>
+                            {item.name}
+                        </Box>
+                    )}
                     {isDeleting && (
                         <Spinner position="absolute" top="50%" left="50%" />
                     )}
                 </Box>
-                <Link
-                    href={isCollection ? `/collections/${item.id}` : undefined}
-                    onClick={isCollection ? undefined : handleClick}
-                    onMouseEnter={() => setIsHovering(true)}
-                    onMouseLeave={() => setIsHovering(false)}
-                    textColor="gray.600">
-                    {item.name}
-                </Link>
             </Flex>
             {isCollection && (
                 <CollectionModal

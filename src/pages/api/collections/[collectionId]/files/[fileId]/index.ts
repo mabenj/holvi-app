@@ -42,4 +42,10 @@ async function deleteFile(
     res.status(501).end();
 }
 
+export const config = {
+    api: {
+        responseLimit: false
+    }
+};
+
 export default ApiRoute.create({ get: getFile, delete: deleteFile });

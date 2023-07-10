@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import useSWR from "swr";
+import useSWRImmutable from "swr/immutable";
 import { collectionsToGridItems, filesToGridItems } from "../common/utilities";
 import { CollectionDto } from "../interfaces/collection-dto";
 import { CollectionFileDto } from "../interfaces/collection-file-dto";
@@ -36,7 +36,10 @@ export function CollectionGridProvider({
     children: React.ReactNode;
     rootCollectionId?: string;
 }) {
-    const { data, isLoading, error } = useSWR(rootCollectionId, fetcher);
+    const { data, isLoading, error } = useSWRImmutable(
+        rootCollectionId,
+        fetcher
+    );
     const [rootCollection, setRootCollection] = useState<CollectionDto | null>(
         null
     );

@@ -27,9 +27,9 @@ const Grid = () => {
     const { gridItems, isLoading } = useCollectionGrid();
 
     return (
-        <SimpleGrid minChildWidth="15rem" spacingX={4} spacingY={8}>
+        <SimpleGrid columns={[3, 3, 3, 4]} spacing={[1, 1, 1, 3, 4]}>
             {isLoading && (
-                <Flex alignItems="center" w="100%">
+                <Flex alignItems="center" w="100%" gap={3}>
                     <Spinner />
                     <span>Loading...</span>
                 </Flex>
