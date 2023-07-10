@@ -240,10 +240,10 @@ const SortBtn = ({
                     value={sortField}>
                     <MenuItemOption value="+name">Name (A-Z)</MenuItemOption>
                     <MenuItemOption value="-name">Name (Z-A)</MenuItemOption>
-                    <MenuItemOption value="+timestamp">
+                    <MenuItemOption value="-timestamp">
                         Newest first
                     </MenuItemOption>
-                    <MenuItemOption value="-timestamp">
+                    <MenuItemOption value="+timestamp">
                         Oldest first
                     </MenuItemOption>
                 </MenuOptionGroup>

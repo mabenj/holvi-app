@@ -22,12 +22,12 @@ import {
     useDisclosure,
     useToast
 } from "@chakra-ui/react";
-import { mdiDotsVertical } from "@mdi/js";
+import { mdiDotsVertical, mdiFolder } from "@mdi/js";
 import Icon from "@mdi/react";
 import Image from "next/image";
 import { useRouter } from "next/router";
 import { useRef, useState } from "react";
-import folderImage from "../../../../public/folder.png";
+import { PhotoView } from "react-photo-view";
 import CollectionModal from "../CollectionModal";
 
 export default function CollectionGridCard({
@@ -121,20 +121,28 @@ export default function CollectionGridCard({
                     position="relative"
                     cursor="pointer"
                     onMouseEnter={() => setIsHovering(true)}
-                    onMouseLeave={() => setIsHovering(false)}>
-                    <Image
-                        src={isCollection ? folderImage : item.thumbnailSrc!}
-                        alt={item.name}
-                        fill
-                        style={{
-                            objectFit: "cover",
-                            filter:
-                                !isCollection && (isHovering || isMenuOpen)
-                                    ? "brightness(60%)"
-                                    : ""
-                        }}
-                        onClick={handleClick}
-                    />
+                    onMouseLeave={() => setIsHovering(false)}
+                    onClick={handleClick}>
+                    {isCollection ? (
+                        <Icon path={mdiFolder} />
+                    ) : (
+                        <PhotoView src={item.src!}>
+                            <Image
+                                src={item.thumbnailSrc!}
+                                alt={item.name}
+                                fill
+                                style={{
+                                    objectFit: "cover",
+                                    filter:
+                                        !isCollection &&
+                                        (isHovering || isMenuOpen)
+                                            ? "brightness(60%)"
+                                            : ""
+                                }}
+                            />
+                        </PhotoView>
+                    )}
+
                     {(isHovering || isMenuOpen) && (
                         <Menu
                             onOpen={() => setIsMenuOpen(true)}

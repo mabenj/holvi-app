@@ -1,6 +1,9 @@
 import { CollectionDto } from "../interfaces/collection-dto";
 import { CollectionFileDto } from "../interfaces/collection-file-dto";
-import { CollectionGridItem, ItemType } from "../interfaces/collection-grid-item";
+import {
+    CollectionGridItem,
+    ItemType
+} from "../interfaces/collection-grid-item";
 
 const FORMATTER = new Intl.RelativeTimeFormat("en", {
     localeMatcher: "best fit",
@@ -110,7 +113,12 @@ export function caseInsensitiveSorter<T, K extends keyof T>(
     };
 }
 
-export function filesToGridItems(files: CollectionFileDto[]): CollectionGridItem[] {
+export function filesToGridItems(
+    files: CollectionFileDto[]
+): CollectionGridItem[] {
+    if (!files) {
+        return [];
+    }
     return files
         .map((file) => ({
             id: file.id,
