@@ -25,7 +25,7 @@ import {
 import { mdiDotsVertical, mdiFolder } from "@mdi/js";
 import Icon from "@mdi/react";
 import Image from "next/image";
-import { useRouter } from "next/router";
+import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { PhotoView } from "react-photo-view";
 import CollectionModal from "../CollectionModal";

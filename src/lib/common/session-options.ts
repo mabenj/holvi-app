@@ -3,7 +3,9 @@ export const sessionOptions = {
     cookieName: "holviapp",
     cookieOptions: {
         maxAge: undefined,
-        secure: process.env.NODE_ENV === "production",
+        secure:
+            process.env.USE_HTTPS?.toLowerCase() === "true" &&
+            process.env.NODE_ENV === "production",
         ttl: 2 * 60 * 60 // 2 hr
     }
 };

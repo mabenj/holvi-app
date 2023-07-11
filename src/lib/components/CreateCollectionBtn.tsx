@@ -11,7 +11,12 @@ export default function CreateCollectionBtn() {
                 Create Collection
             </Button>
 
-            <CollectionModal isOpen={isOpen} onClose={onClose} mode="create" />
+            <CollectionModal
+                isOpen={isOpen}
+                onClose={onClose}
+                onSave={() => null}
+                mode="create"
+            />
         </>
     );
 }

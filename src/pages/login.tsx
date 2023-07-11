@@ -22,7 +22,6 @@ import {
     useToast
 } from "@chakra-ui/react";
 import Head from "next/head";
-import { useRouter } from "next/router";
 import { FormEvent } from "react";
 
 export default function Login() {
@@ -52,13 +51,11 @@ const LoginCard = () => {
         isLoggingIn,
         login
     } = useLogin();
-    const { push } = useRouter();
     const toast = useToast();
 
     const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         login().then(() => {
-            push("/");
             toast({
                 description: "Successfully signed in",
                 status: "success"
