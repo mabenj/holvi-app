@@ -44,8 +44,57 @@ interface GetCollectionFilesResult {
     files?: CollectionFileDto[];
 }
 
+interface DeleteFileResult {
+    error?: string;
+}
+
 export class CollectionService {
     constructor(private readonly userId: string) {}
+
+    async deleteFile(
+        collectionId: string,
+        fileId: string
+    ): Promise<DeleteFileResult> {
+        if (!isUuidv4(collectionId) || !isUuidv4(fileId)) {
+            return {
+                error: "Invalid collection of file id"
+            };
+        }
+        const db = await Database.getInstance();
+        const transaction = await db.transaction();
+
+        try {
+            const collectionFile = await db.models.CollectionFile.findOne({
+                where: {
+                    id: fileId,
+                    CollectionId: collectionId
+                },
+                include: {
+                    model: db.models.Collection,
+                    required: true,
+                    where: {
+                        UserId: this.userId
+                    }
+                }
+            });
+            if (!collectionFile) {
+                return {};
+            }
+            collectionFile.destroy({ transaction });
+
+            const fileSystem = new UserFileSystem(this.userId);
+            await fileSystem.deleteFileAndThumbnail(
+                collectionId,
+                collectionFile.filename
+            );
+
+            transaction.commit();
+            return {};
+        } catch (error) {
+            transaction.rollback();
+            throw error;
+        }
+    }
 
     async getCollectionFiles(
         collectionId: string
@@ -149,7 +198,11 @@ export class CollectionService {
                 notFound: true
             };
         }
-        return { mimeType: collectionFile.mimeType, file, filename: collectionFile.label };
+        return {
+            mimeType: collectionFile.mimeType,
+            file,
+            filename: collectionFile.label
+        };
     }
 
     async uploadFiles(

@@ -27,7 +27,7 @@ export default function CollectionGrid({
 }
 
 const Grid = () => {
-    const { gridItems, isLoading } = useCollectionGrid();
+    const { gridItems, isLoading, rootCollectionId } = useCollectionGrid();
 
     return (
         <PhotoProvider
@@ -40,7 +40,11 @@ const Grid = () => {
                     </Flex>
                 )}
                 {gridItems.map((item) => (
-                    <CollectionGridCard key={item.id} item={item} />
+                    <CollectionGridCard
+                        key={item.id}
+                        item={item}
+                        collectionId={rootCollectionId}
+                    />
                 ))}
             </SimpleGrid>
         </PhotoProvider>

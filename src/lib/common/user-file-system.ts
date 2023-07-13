@@ -1,5 +1,14 @@
 import formidable from "formidable";
-import { mkdir, readFile, readdir, rename, rm, rmdir, stat } from "fs/promises";
+import {
+    mkdir,
+    readFile,
+    readdir,
+    rename,
+    rm,
+    rmdir,
+    stat,
+    unlink
+} from "fs/promises";
 import { IncomingMessage } from "http";
 import { nanoid } from "nanoid";
 import path from "path";
@@ -32,6 +41,11 @@ export class UserFileSystem {
             );
         }
         this.rootDir = path.join(process.env.DATA_DIR, this.userId);
+    }
+
+    async deleteFileAndThumbnail(collectionId: string, filename: string) {
+        await unlink(path.join(this.rootDir, collectionId, "tn", filename));
+        await unlink(path.join(this.rootDir, collectionId, filename));
     }
 
     async deleteCollectionDir(collectionId: string) {

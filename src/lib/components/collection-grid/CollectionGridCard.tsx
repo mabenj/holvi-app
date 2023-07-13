@@ -29,16 +29,22 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { PhotoView } from "react-photo-view";
 import CollectionModal from "../CollectionModal";
+import { useDeleteFile } from "@/lib/hooks/useDeleteFile";
 
 export default function CollectionGridCard({
-    item
+    item,
+    collectionId
 }: {
     item: CollectionGridItem;
+    collectionId: string;
 }) {
     const { setGridItems } = useCollectionGrid();
     const [isHovering, setIsHovering] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const { deleteCollection, isDeleting } = useDeleteCollection();
+    const { deleteCollection, isDeleting: isDeletingCollection } =
+        useDeleteCollection();
+    const { deleteFile, isDeleting: isDeletingFile } =
+        useDeleteFile(collectionId);
     const {
         isOpen: isModalOpen,
         onOpen: onModalOpen,
@@ -55,6 +61,7 @@ export default function CollectionGridCard({
 
     const isCollection = item.type === "collection";
     const isVideo = item.type === "video";
+    const isDeleting = isDeletingCollection || isDeletingFile;
 
     const handleClick = () => {
         switch (item.type) {
@@ -90,20 +97,17 @@ export default function CollectionGridCard({
             if (isCollection) {
                 await deleteCollection(item.id);
             } else {
-                //TODO
-                throw new Error("Not implemented");
+                await deleteFile(item.id);
             }
             setGridItems((prev) => prev.filter(({ id }) => id !== item.id));
             toast({
-                description: `${
-                    isCollection ? "Collection" : isVideo ? "Video" : "Image"
-                } deleted`,
+                description: `${isCollection ? "Collection" : "File"} deleted`,
                 status: "success"
             });
         } catch (error) {
             toast({
                 description: `Error deleting ${
-                    isCollection ? "collection" : isVideo ? "video" : "image"
+                    isCollection ? "collection" : "file"
                 }`,
                 status: "error"
             });
@@ -215,7 +219,7 @@ export default function CollectionGridCard({
                 <AlertDialogOverlay>
                     <AlertDialogContent>
                         <AlertDialogHeader fontSize="lg" fontWeight="bold">
-                            Delete collection
+                            Delete {isCollection ? "collection" : "file"}
                         </AlertDialogHeader>
 
                         <AlertDialogBody>
