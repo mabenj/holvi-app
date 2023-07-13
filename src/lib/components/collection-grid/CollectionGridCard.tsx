@@ -133,7 +133,7 @@ export default function CollectionGridCard({
                             justifyContent="center"
                             w="100%"
                             h="100%">
-                            <Box w="80%" h="80%" rounded="md" bg="blue.500" />
+                            <div className="collection-icon" />
                         </Flex>
                     ) : (
                         <PhotoView src={item.src!}>
