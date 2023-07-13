@@ -1,4 +1,5 @@
 import formidable from "formidable";
+import { createReadStream } from "fs";
 import {
     mkdir,
     readFile,
@@ -50,6 +51,28 @@ export class UserFileSystem {
 
     async deleteCollectionDir(collectionId: string) {
         await deleteDirectory(path.join(this.rootDir, collectionId));
+    }
+
+    async getFileStream(
+        collectionId: string,
+        filename: string,
+        chunkStart: number,
+        chunkSize: number
+    ) {
+        const filePath = path.join(this.rootDir, collectionId, filename);
+        const fileSize = await stat(filePath).then((stats) => stats.size);
+        const chunkEnd = Math.min(chunkStart + chunkSize, fileSize - 1);
+
+        const stream = createReadStream(filePath, {
+            start: chunkStart,
+            end: chunkEnd
+        });
+
+        return {
+            stream,
+            totalLengthBytes: fileSize,
+            chunkStartEnd: [chunkStart, chunkEnd] as [number, number]
+        };
     }
 
     async readFile(
@@ -302,21 +325,23 @@ async function generateThumbnail(
                 (metadata.format.duration || 1) *
                 (thumbnailTimePercentage / 100);
             ffmpeg(sourceFile)
-                .on("end", () =>
+                .on("end", async () => {
+                    // takeScreenshots() will add a .png extension
+                    await rename(targetPath + ".png", targetPath);
                     resolve({
                         width: videoWidth,
                         height: videoHeight,
                         thumbnailWidth,
                         thumbnailHeight
-                    })
-                )
+                    });
+                })
                 .on("error", (error) => reject(error))
                 .takeScreenshots({
                     count: 1,
                     fastSeek: true,
                     timestamps: [thumbnailTime],
                     size: `${thumbnailWidth}x${thumbnailHeight}`,
-                    filename: targetPath // TODO: rename thumbnail before resolving
+                    filename: targetPath
                 });
         })
     );

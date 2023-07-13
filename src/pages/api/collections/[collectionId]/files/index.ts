@@ -32,7 +32,7 @@ async function get(req: NextApiRequest, res: NextApiResponse) {
         return handleGetCollectionImage(req, res, collectionId, imageId);
     }
     if (videoId) {
-        // return handleGetCollectionVideo(req, res, collectionId, videoId); //TODO
+        return handleGetCollectionVideo(req, res, collectionId, videoId);
     }
     res.status(404).end();
 }
@@ -97,6 +97,48 @@ async function handleGetCollectionImage(
     res.setHeader("Cache-Control", "public, max-age=86400"); // 24h
     res.setHeader("Content-Disposition", `inline; filename=${filename}`);
     res.status(200).end(file);
+}
+
+async function handleGetCollectionVideo(
+    req: NextApiRequest,
+    res: NextApiResponse<ApiResponse<{}>>,
+    collectionId: string,
+    videoId: string
+) {
+    const range = req.headers.range;
+    if (!range) {
+        res.status(400).json({
+            status: "error",
+            error: "Missing range header"
+        });
+        return;
+    }
+    const chunkStart = Number(range.replace(/\D/g, ""));
+    const service = new CollectionService(req.session.user.id);
+    const {
+        stream,
+        chunkStartEnd,
+        totalLengthBytes,
+        mimeType,
+        notFound,
+        filename
+    } = await service.getVideoStream(collectionId, videoId, chunkStart);
+
+    if (notFound || !stream || !chunkStartEnd) {
+        res.status(404).json({ status: "error" });
+        return;
+    }
+
+    const contentLength = chunkStartEnd[1] - chunkStartEnd[0] + 1;
+    res.writeHead(206, {
+        "Content-Range": `bytes ${chunkStartEnd[0]}-${chunkStartEnd[1]}/${totalLengthBytes}`,
+        "Accept-Ranges": "bytes",
+        "Content-Length": contentLength,
+        "Content-Type": mimeType,
+        "Content-Disposition": `inline; filename=${filename}`
+    });
+
+    stream.pipe(res);
 }
 
 export const config = {

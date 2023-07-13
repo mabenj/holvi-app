@@ -1,6 +1,7 @@
 import { collectionsToGridItems } from "@/lib/common/utilities";
 import { useCollectionGrid } from "@/lib/context/CollectionGridContext";
 import { useDeleteCollection } from "@/lib/hooks/useDeleteCollection";
+import { useDeleteFile } from "@/lib/hooks/useDeleteFile";
 import { CollectionDto } from "@/lib/interfaces/collection-dto";
 import { CollectionGridItem } from "@/lib/interfaces/collection-grid-item";
 import {
@@ -29,7 +30,6 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { PhotoView } from "react-photo-view";
 import CollectionModal from "../CollectionModal";
-import { useDeleteFile } from "@/lib/hooks/useDeleteFile";
 
 export default function CollectionGridCard({
     item,
@@ -56,31 +56,12 @@ export default function CollectionGridCard({
         onClose: onAlertClose
     } = useDisclosure();
     const cancelDeleteRef = useRef(null);
-    const router = useRouter();
     const toast = useToast();
 
     const isCollection = item.type === "collection";
+    const isImage = item.type === "image";
     const isVideo = item.type === "video";
     const isDeleting = isDeletingCollection || isDeletingFile;
-
-    const handleClick = () => {
-        switch (item.type) {
-            case "collection":
-                router.push(`/collections/${item.id}`);
-                break;
-            case "image":
-                // TODO: open image (react-photo-view)
-                break;
-            case "video":
-                //TODO view video
-                break;
-            default:
-                toast({
-                    description: "Unsupported file type",
-                    status: "error"
-                });
-        }
-    };
 
     const handleCollectionSaved = (collection: CollectionDto) => {
         setGridItems((prev) =>
@@ -125,32 +106,19 @@ export default function CollectionGridCard({
                     position="relative"
                     cursor="pointer"
                     onMouseEnter={() => setIsHovering(true)}
-                    onMouseLeave={() => setIsHovering(false)}
-                    onClick={handleClick}>
-                    {isCollection ? (
-                        <Flex
-                            alignItems="center"
-                            justifyContent="center"
-                            w="100%"
-                            h="100%">
-                            <div className="collection-icon" />
-                        </Flex>
-                    ) : (
-                        <PhotoView src={item.src!}>
-                            <Image
-                                src={item.thumbnailSrc!}
-                                alt={item.name}
-                                fill
-                                style={{
-                                    objectFit: "cover",
-                                    filter:
-                                        !isCollection &&
-                                        (isHovering || isMenuOpen)
-                                            ? "brightness(60%)"
-                                            : ""
-                                }}
-                            />
-                        </PhotoView>
+                    onMouseLeave={() => setIsHovering(false)}>
+                    {isCollection && <CollectionThumbnail item={item} />}
+                    {isImage && (
+                        <ImageThumbnail
+                            item={item}
+                            isDim={isHovering || isMenuOpen}
+                        />
+                    )}
+                    {isVideo && (
+                        <VideoThumbnail
+                            item={item}
+                            isDim={isHovering || isMenuOpen}
+                        />
                     )}
 
                     {(isHovering || isMenuOpen) && (
@@ -197,6 +165,7 @@ export default function CollectionGridCard({
                     )}
                 </Box>
             </Flex>
+
             {isCollection && (
                 <CollectionModal
                     isOpen={isModalOpen}
@@ -245,3 +214,89 @@ export default function CollectionGridCard({
         </>
     );
 }
+
+const CollectionThumbnail = ({ item }: { item: CollectionGridItem }) => {
+    const router = useRouter();
+
+    return (
+        <Flex
+            alignItems="center"
+            justifyContent="center"
+            w="100%"
+            h="100%"
+            onClick={() => router.push(`/collections/${item.id}`)}>
+            <div className="collection-icon" />
+        </Flex>
+    );
+};
+
+const ImageThumbnail = ({
+    item,
+    isDim
+}: {
+    item: CollectionGridItem;
+    isDim: boolean;
+}) => {
+    return (
+        <PhotoView src={item.src!}>
+            <Image
+                src={item.thumbnailSrc!}
+                alt={item.name}
+                fill
+                style={{
+                    objectFit: "cover",
+                    filter: isDim ? "brightness(60%) blur(1px)" : ""
+                }}
+            />
+        </PhotoView>
+    );
+};
+
+const VideoThumbnail = ({
+    item,
+    isDim
+}: {
+    item: CollectionGridItem;
+    isDim: boolean;
+}) => {
+    const videoRef = useRef<HTMLVideoElement>(null);
+
+    return (
+        <PhotoView
+            render={({ attrs, scale }) => {
+                return (
+                    <div
+                        {...attrs}
+                        style={{
+                            transform: "translate(-50%, -50%)",
+                            width: "100%",
+                            height: "100%",
+                            display: "flex",
+                            justifyContent: "center",
+                            alignItems: "center"
+                        }}>
+                        <video
+                            ref={videoRef}
+                            src={item.src}
+                            poster={item.thumbnailSrc}
+                            style={{ objectFit: "cover" }}
+                            controls
+                        />
+                    </div>
+                );
+            }}>
+            <Image
+                src={item.thumbnailSrc!}
+                alt={item.name}
+                fill
+                style={{
+                    objectFit: "cover",
+                    filter: isDim ? "brightness(60%) blur(1px)" : ""
+                }}
+                onClick={() => {
+                    setTimeout(() => videoRef.current?.play(), 1000);
+                }}
+            />
+        </PhotoView>
+    );
+};

@@ -1,10 +1,13 @@
 import Database from "@/db/Database";
+import { ReadStream } from "fs";
 import { NextApiRequest } from "next";
 import { Op } from "sequelize";
 import { UserFileSystem } from "../common/user-file-system";
 import { EMPTY_UUIDV4, isUuidv4 } from "../common/utilities";
 import { CollectionDto } from "../interfaces/collection-dto";
 import { CollectionFileDto } from "../interfaces/collection-file-dto";
+
+const CHUNK_SIZE_BYTES = 1_000_000; // 1mb
 
 interface CreateResult {
     collection?: CollectionDto;
@@ -46,6 +49,15 @@ interface GetCollectionFilesResult {
 
 interface DeleteFileResult {
     error?: string;
+}
+
+interface GetStreamResult {
+    stream?: ReadStream;
+    chunkStartEnd?: [start: number, end: number];
+    totalLengthBytes?: number;
+    mimeType?: string;
+    notFound?: boolean;
+    filename?: string;
 }
 
 export class CollectionService {
@@ -145,6 +157,50 @@ export class CollectionService {
         };
     }
 
+    async getVideoStream(
+        collectionId: string,
+        videoId: string,
+        chunkStart: number
+    ): Promise<GetStreamResult> {
+        if (!isUuidv4(collectionId) || !isUuidv4(videoId)) {
+            return {
+                notFound: true
+            };
+        }
+
+        const fileInfo = await this.getCollectionFileInfo(
+            collectionId,
+            videoId
+        );
+        if (!fileInfo) {
+            return {
+                notFound: true
+            };
+        }
+
+        const fileSystem = new UserFileSystem(this.userId);
+        const { stream, totalLengthBytes, chunkStartEnd } =
+            await fileSystem.getFileStream(
+                collectionId,
+                fileInfo.filename,
+                chunkStart,
+                CHUNK_SIZE_BYTES
+            );
+        if (!stream) {
+            return {
+                notFound: true
+            };
+        }
+
+        return {
+            stream,
+            filename: fileInfo.label,
+            mimeType: fileInfo.mimeType,
+            chunkStartEnd,
+            totalLengthBytes
+        };
+    }
+
     async getFileThumbnail(
         collectionId: string,
         fileId: string
@@ -166,22 +222,8 @@ export class CollectionService {
             return { notFound: true };
         }
 
-        const db = await Database.getInstance();
-        const collectionFile = await db.models.CollectionFile.findOne({
-            where: {
-                CollectionId: collectionId,
-                id: fileId
-            },
-            attributes: ["mimeType", "filename", "label"],
-            include: {
-                model: db.models.Collection,
-                required: true,
-                where: {
-                    UserId: this.userId
-                }
-            }
-        });
-        if (!collectionFile) {
+        const fileInfo = await this.getCollectionFileInfo(collectionId, fileId);
+        if (!fileInfo) {
             return {
                 notFound: true
             };
@@ -190,7 +232,7 @@ export class CollectionService {
         const fileSystem = new UserFileSystem(this.userId);
         const file = await fileSystem.readFile(
             collectionId,
-            collectionFile.filename,
+            fileInfo.filename,
             thumbnail
         );
         if (!file) {
@@ -199,9 +241,9 @@ export class CollectionService {
             };
         }
         return {
-            mimeType: collectionFile.mimeType,
+            mimeType: fileInfo.mimeType,
             file,
-            filename: collectionFile.label
+            filename: fileInfo.label
         };
     }
 
@@ -428,6 +470,32 @@ export class CollectionService {
                 { cause: error }
             );
         }
+    }
+
+    private async getCollectionFileInfo(collectionId: string, fileId: string) {
+        const db = await Database.getInstance();
+        const collectionFile = await db.models.CollectionFile.findOne({
+            where: {
+                CollectionId: collectionId,
+                id: fileId
+            },
+            attributes: ["mimeType", "filename", "label"],
+            include: {
+                model: db.models.Collection,
+                required: true,
+                where: {
+                    UserId: this.userId
+                }
+            }
+        });
+        if (!collectionFile) {
+            return null;
+        }
+        return {
+            filename: collectionFile.filename,
+            label: collectionFile.label,
+            mimeType: collectionFile.mimeType
+        };
     }
 
     private async nameTaken(name: string, collectionId?: string) {
