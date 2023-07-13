@@ -129,7 +129,7 @@ export default function CollectionGridActionBar() {
 
     return (
         <>
-            <Flex alignItems="center" gap={2}>
+            <Flex alignItems="center" gap={2} px={2}>
                 <Box flexGrow={1}>
                     <SearchBar onSearch={handleSearch} />
                 </Box>

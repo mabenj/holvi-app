@@ -23,7 +23,7 @@ import {
     useDisclosure,
     useToast
 } from "@chakra-ui/react";
-import { mdiDotsVertical } from "@mdi/js";
+import { mdiDotsVertical, mdiPlayCircle } from "@mdi/js";
 import Icon from "@mdi/react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -262,41 +262,49 @@ const VideoThumbnail = ({
     const videoRef = useRef<HTMLVideoElement>(null);
 
     return (
-        <PhotoView
-            render={({ attrs, scale }) => {
-                return (
-                    <div
-                        {...attrs}
-                        style={{
-                            transform: "translate(-50%, -50%)",
-                            width: "100%",
-                            height: "100%",
-                            display: "flex",
-                            justifyContent: "center",
-                            alignItems: "center"
-                        }}>
-                        <video
-                            ref={videoRef}
-                            src={item.src}
-                            poster={item.thumbnailSrc}
-                            style={{ objectFit: "cover" }}
-                            controls
-                        />
-                    </div>
-                );
-            }}>
-            <Image
-                src={item.thumbnailSrc!}
-                alt={item.name}
-                fill
-                style={{
-                    objectFit: "cover",
-                    filter: isDim ? "brightness(60%) blur(1px)" : ""
-                }}
-                onClick={() => {
-                    setTimeout(() => videoRef.current?.play(), 1000);
-                }}
-            />
-        </PhotoView>
+        <>
+            <PhotoView
+                render={({ attrs, scale }) => {
+                    return (
+                        <div
+                            style={{
+                                transform: "translate(-50%, -50%)",
+                                width: "100%",
+                                height: "100%",
+                                display: "flex",
+                                justifyContent: "center",
+                                alignItems: "center"
+                            }}>
+                            <video
+                                {...attrs}
+                                ref={videoRef}
+                                src={item.src}
+                                poster={item.thumbnailSrc}
+                                style={{
+                                    width: "100%",
+                                    height: "90dvh"
+                                }}
+                                controls
+                            />
+                        </div>
+                    );
+                }}>
+                <Image
+                    src={item.thumbnailSrc!}
+                    alt={item.name}
+                    fill
+                    style={{
+                        objectFit: "cover",
+                        filter: isDim ? "brightness(60%) blur(1px)" : ""
+                    }}
+                    onClick={() => {
+                        setTimeout(() => videoRef.current?.play(), 1000);
+                    }}
+                />
+            </PhotoView>
+            <Box position="absolute" pointerEvents="none" p={1}>
+                <Icon path={mdiPlayCircle} size={1} />
+            </Box>
+        </>
     );
 };

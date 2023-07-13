@@ -12,9 +12,13 @@ import {
     Box,
     Breadcrumb,
     BreadcrumbItem,
-    BreadcrumbLink
+    BreadcrumbLink,
+    Flex,
+    Heading,
+    Tag
 } from "@chakra-ui/react";
 import Head from "next/head";
+import { useEffect, useState } from "react";
 
 export const getServerSideProps = withSessionSsr(
     async function getServerSideProps({ req, query }) {
@@ -67,6 +71,18 @@ const PageContent = ({
                             : rootCollection?.name || collectionId
                     }
                 />
+
+                {rootCollection && (
+                    <Flex direction="column" gap={3} px={4} pt={8}>
+                        <Heading>{rootCollection.name}</Heading>
+                        <Flex gap={2}>
+                            {rootCollection.tags.map((tag) => (
+                                <CollectionTag key={tag} tag={tag} />
+                            ))}
+                        </Flex>
+                    </Flex>
+                )}
+
                 <Box py={5} />
                 <CollectionGrid rootCollectionId={collectionId} />
             </Layout>
@@ -75,7 +91,7 @@ const PageContent = ({
 };
 
 const Breadcrumbs = ({ collectionName }: { collectionName: string }) => (
-    <Breadcrumb>
+    <Breadcrumb px={4}>
         <BreadcrumbItem>
             <BreadcrumbLink as={Link} href="/">
                 Home
@@ -93,3 +109,40 @@ const Breadcrumbs = ({ collectionName }: { collectionName: string }) => (
         </BreadcrumbItem>
     </Breadcrumb>
 );
+
+const CollectionTag = ({ tag }: { tag: string }) => {
+    const [color, setColor] = useState(COLOR_SCHEMES[0]);
+
+    useEffect(() => {
+        let random = 0;
+        for (let i = 0; i < tag.length; i++) {
+            random += tag.charCodeAt(i);
+        }
+        setColor(COLOR_SCHEMES[random % COLOR_SCHEMES.length]);
+    }, [tag]);
+
+    return (
+        <Tag borderRadius="full" colorScheme={color}>
+            {tag}
+        </Tag>
+    );
+};
+
+const COLOR_SCHEMES = [
+    "gray",
+    "red",
+    "orange",
+    "yellow",
+    "green",
+    "teal",
+    "blue",
+    "cyan",
+    "purple",
+    "pink",
+    "linkedin",
+    "facebook",
+    "messenger",
+    "whatsapp",
+    "twitter",
+    "telegram"
+];

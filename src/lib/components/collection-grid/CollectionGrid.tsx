@@ -32,13 +32,17 @@ const Grid = () => {
     return (
         <PhotoProvider
             toolbarRender={({ index }) => <span>{gridItems[index].name}</span>}>
-            <SimpleGrid columns={[3, 3, 3, 4]} spacing={[1, 1, 1, 3, 4]}>
-                {isLoading && (
-                    <Flex alignItems="center" w="100%" gap={3}>
-                        <Spinner />
-                        <span>Loading...</span>
-                    </Flex>
-                )}
+            {isLoading && (
+                <Flex
+                    alignItems="center"
+                    justifyContent="center"
+                    w="100%"
+                    gap={3}>
+                    <Spinner size="sm" />
+                    <span>Loading...</span>
+                </Flex>
+            )}
+            <SimpleGrid columns={[3, 3, 3, 4]} spacing={[1, 1, 1, 2]}>
                 {gridItems.map((item) => (
                     <CollectionGridCard
                         key={item.id}
