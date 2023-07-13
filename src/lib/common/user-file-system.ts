@@ -13,6 +13,7 @@ import {
 import { IncomingMessage } from "http";
 import { nanoid } from "nanoid";
 import path from "path";
+import { promisify } from "util";
 import Log from "./log";
 
 const MAX_FILE_SIZE_KB =
@@ -99,11 +100,10 @@ export class UserFileSystem {
     async uploadFilesToTempDir(req: IncomingMessage): Promise<UploadedFile[]> {
         const timestamp = Date.now().toString();
 
-        const { files } = await parseForm(req, this.getTempDir());
-        const fileList = Object.keys(files).flatMap((file) => files[file]);
+        const files = await parseForm(req, this.getTempDir());
         const result: UploadedFile[] = [];
-        for (let i = 0; i < fileList.length; i++) {
-            const file = fileList[i];
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
             const isImage = file.mimetype?.includes("image") || false;
             const isVideo = file.mimetype?.includes("video") || false;
             if (!isImage && !isVideo) {
@@ -198,46 +198,35 @@ async function parseForm(
     req: IncomingMessage,
     uploadDir: string,
     onProgress?: (percent: number) => void
-): Promise<{ fields: formidable.Fields; files: formidable.Files }> {
-    return new Promise(async (resolve, reject) => {
-        try {
-            await createDirIfNotExists(uploadDir);
-        } catch (e) {
-            reject(e);
-        }
+): Promise<formidable.File[]> {
+    await createDirIfNotExists(uploadDir);
 
-        const form = formidable({
-            maxFileSize: MAX_FILE_SIZE_KB,
-            maxTotalFileSize: TOTAL_MAX_FILE_SIZE_KB,
-            uploadDir: uploadDir,
-            filename: () => nanoid(),
-            filter: (part) =>
-                !!part.mimetype?.includes("image") ||
-                !!part.mimetype?.includes("video")
-        });
-
-        if (typeof onProgress === "function") {
-            let progress = 0;
-            form.on("progress", (receivedBytes, expectedBytes) => {
-                const newProgress = Math.floor(
-                    (expectedBytes / receivedBytes) * 100
-                );
-                if (newProgress <= progress) {
-                    return;
-                }
-                progress = newProgress;
-                onProgress(progress);
-            });
-        }
-
-        form.parse(req, (error, fields, files) => {
-            if (error) {
-                reject(error);
-            } else {
-                resolve({ fields, files });
-            }
-        });
+    const form = formidable({
+        maxFileSize: MAX_FILE_SIZE_KB,
+        maxTotalFileSize: TOTAL_MAX_FILE_SIZE_KB,
+        uploadDir: uploadDir,
+        filename: () => nanoid(),
+        filter: (part) =>
+            !!part.mimetype?.includes("image") ||
+            !!part.mimetype?.includes("video")
     });
+
+    if (typeof onProgress === "function") {
+        let progress = 0;
+        form.on("progress", (receivedBytes, expectedBytes) => {
+            const newProgress = Math.floor(
+                (expectedBytes / receivedBytes) * 100
+            );
+            if (newProgress <= progress) {
+                return;
+            }
+            progress = newProgress;
+            onProgress(progress);
+        });
+    }
+
+    const [fields, files] = await form.parse(req);
+    return Object.keys(files).flatMap((file) => files[file]);
 }
 
 async function generateThumbnail(
@@ -260,19 +249,12 @@ async function generateThumbnail(
             import("image-size"),
             import("sharp")
         ]);
-        const { width, height } = await new Promise<{
-            width: number;
-            height: number;
-        }>((resolve, reject) =>
-            imageSize(sourceFile, (err, result) =>
-                err || !result
-                    ? reject(err)
-                    : resolve({
-                          width: result.width || 0,
-                          height: result.height || 0
-                      })
-            )
-        );
+        const sizeOf = promisify(imageSize);
+        const { width, height } = await sizeOf(sourceFile).then((result) => ({
+            width: result?.width || 0,
+            height: result?.height || 0
+        }));
+        sharp.cache(false);
         const { width: thumbnailWidth, height: thumbnailHeight } = await sharp(
             sourceFile
         )
