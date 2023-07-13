@@ -1,3 +1,4 @@
+import appConfig from "@/lib/common/app-config";
 import Log from "@/lib/common/log";
 import { sleep } from "@/lib/common/utilities";
 import { Sequelize, Transaction } from "sequelize";
@@ -21,12 +22,7 @@ export default class Database {
     }
 
     private constructor() {
-        if (!process.env.DB_CONNECTION_STRING) {
-            throw new Error(
-                "Database connection string is not defined (use environment variable 'DB_CONNECTION_STRING')"
-            );
-        }
-        this.sequelize = new Sequelize(process.env.DB_CONNECTION_STRING, {
+        this.sequelize = new Sequelize(appConfig.connectionString, {
             benchmark: true,
             logging: false
         });

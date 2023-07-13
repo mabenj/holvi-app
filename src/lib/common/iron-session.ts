@@ -1,15 +1,14 @@
 import { UserDto } from "@/lib/interfaces/user-dto";
-import { IronSessionOptions } from "iron-session";
 import { withIronSessionApiRoute, withIronSessionSsr } from "iron-session/next";
 import {
     GetServerSidePropsContext,
     GetServerSidePropsResult,
     NextApiHandler
 } from "next";
-import { sessionOptions } from "./session-options";
+import appConfig from "./app-config";
 
 export function withSessionRoute(handler: NextApiHandler) {
-    return withIronSessionApiRoute(handler, sessionOptions);
+    return withIronSessionApiRoute(handler, appConfig.sessionOptions);
 }
 
 // Theses types are compatible with InferGetStaticPropsType https://nextjs.org/docs/basic-features/data-fetching#typescript-use-getstaticprops
@@ -20,7 +19,7 @@ export function withSessionSsr<
         context: GetServerSidePropsContext
     ) => GetServerSidePropsResult<P> | Promise<GetServerSidePropsResult<P>>
 ) {
-    return withIronSessionSsr(handler, sessionOptions);
+    return withIronSessionSsr(handler, appConfig.sessionOptions);
 }
 
 declare module "iron-session" {

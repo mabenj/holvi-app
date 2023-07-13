@@ -18,6 +18,7 @@ async function post(
     if (!user || usernameError || passwordError) {
         res.status(400).json({
             status: "error",
+            error: "Error signing up",
             usernameError,
             passwordError
         });

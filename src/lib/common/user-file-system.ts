@@ -14,13 +14,8 @@ import { IncomingMessage } from "http";
 import { nanoid } from "nanoid";
 import path from "path";
 import { promisify } from "util";
+import appConfig from "./app-config";
 import Log from "./log";
-
-const MAX_FILE_SIZE_KB =
-    parseInt(process.env.MAX_FILE_SIZE_KB || "0") || 1024 * 1024 * 1024 * 4; // 4gb
-const TOTAL_MAX_FILE_SIZE_KB =
-    parseInt(process.env.DEFAULT_TOTAL_MAX_FILE_SIZE_KB || "0") ||
-    1024 * 1024 * 1024 * 16; // 16gb
 
 interface UploadedFile {
     mimeType: string;
@@ -37,12 +32,7 @@ export class UserFileSystem {
     private tempDir: string | null = null;
 
     constructor(private readonly userId: string) {
-        if (!process.env.DATA_DIR) {
-            throw new Error(
-                "Data directory not defined, use environment variable 'DATA_DIR'"
-            );
-        }
-        this.rootDir = path.join(process.env.DATA_DIR, this.userId);
+        this.rootDir = path.join(appConfig.dataDir, this.userId);
     }
 
     async deleteFileAndThumbnail(collectionId: string, filename: string) {
@@ -202,8 +192,8 @@ async function parseForm(
     await createDirIfNotExists(uploadDir);
 
     const form = formidable({
-        maxFileSize: MAX_FILE_SIZE_KB,
-        maxTotalFileSize: TOTAL_MAX_FILE_SIZE_KB,
+        maxFileSize: appConfig.maxFileUploadSize,
+        maxTotalFileSize: appConfig.maxTotalFileUploadSize,
         uploadDir: uploadDir,
         filename: () => nanoid(),
         filter: (part) =>

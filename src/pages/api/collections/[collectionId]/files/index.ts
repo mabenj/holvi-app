@@ -47,7 +47,7 @@ async function handleGetCollectionFiles(
         collectionId?.toString() || ""
     );
     if (notFound || !collection) {
-        res.status(404).json({ status: "error" });
+        res.status(404).json({ status: "error", error: "Not found" });
         return;
     }
     res.status(200).json({ status: "ok", collection, files });
@@ -55,7 +55,7 @@ async function handleGetCollectionFiles(
 
 async function handleGetThumbnail(
     req: NextApiRequest,
-    res: NextApiResponse<ApiResponse<{}>>,
+    res: NextApiResponse<ApiResponse>,
     collectionId: string,
     fileId: string
 ) {
@@ -66,7 +66,7 @@ async function handleGetThumbnail(
         true
     );
     if (!file || notFound) {
-        res.status(404).json({ status: "error" });
+        res.status(404).json({ status: "error", error: "Not found" });
         return;
     }
     res.setHeader("Content-Type", "image/png");
@@ -80,7 +80,7 @@ async function handleGetThumbnail(
 
 async function handleGetCollectionImage(
     req: NextApiRequest,
-    res: NextApiResponse<ApiResponse<{}>>,
+    res: NextApiResponse<ApiResponse>,
     collectionId: string,
     imageId: string
 ) {
@@ -90,7 +90,7 @@ async function handleGetCollectionImage(
         imageId
     );
     if (!file || !mimeType || notFound) {
-        res.status(404).json({ status: "error" });
+        res.status(404).json({ status: "error", error: "Not found" });
         return;
     }
     res.setHeader("Content-Type", mimeType);
@@ -101,7 +101,7 @@ async function handleGetCollectionImage(
 
 async function handleGetCollectionVideo(
     req: NextApiRequest,
-    res: NextApiResponse<ApiResponse<{}>>,
+    res: NextApiResponse<ApiResponse>,
     collectionId: string,
     videoId: string
 ) {
@@ -125,7 +125,7 @@ async function handleGetCollectionVideo(
     } = await service.getVideoStream(collectionId, videoId, chunkStart);
 
     if (notFound || !stream || !chunkStartEnd) {
-        res.status(404).json({ status: "error" });
+        res.status(404).json({ status: "error", error: "Not found" });
         return;
     }
 

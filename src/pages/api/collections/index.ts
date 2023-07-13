@@ -49,7 +49,10 @@ async function createCollection(
     const collectionService = new CollectionService(req.session.user.id);
     const { collection, error } = await collectionService.create(name, tags);
     if (!collection || error) {
-        res.status(400).json({ status: "error", error });
+        res.status(400).json({
+            status: "error",
+            error: error || "Error creating collection"
+        });
         return;
     }
 
