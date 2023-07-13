@@ -16,12 +16,11 @@ export class CollectionFile extends Model<
     InferCreationAttributes<CollectionFile>
 > {
     declare id: CreationOptional<string>;
-    declare name: string;
+    declare label: string;
     declare mimeType: string;
-    declare path: string;
+    declare filename: string;
     declare width?: number;
     declare height?: number;
-    declare thumbnailPath?: string;
     declare thumbnailWidth?: number;
     declare thumbnailHeight?: number;
 
@@ -40,15 +39,15 @@ export class CollectionFile extends Model<
                     primaryKey: true,
                     defaultValue: DataTypes.UUIDV4
                 },
-                name: {
-                    type: DataTypes.STRING,
+                label: {
+                    type: DataTypes.CITEXT,
                     allowNull: false
                 },
                 mimeType: {
                     type: DataTypes.STRING,
                     allowNull: false
                 },
-                path: {
+                filename: {
                     type: DataTypes.CITEXT,
                     unique: true,
                     allowNull: false
@@ -58,10 +57,6 @@ export class CollectionFile extends Model<
                 },
                 height: {
                     type: DataTypes.INTEGER
-                },
-                thumbnailPath: {
-                    type: DataTypes.CITEXT,
-                    unique: true
                 },
                 thumbnailWidth: {
                     type: DataTypes.INTEGER

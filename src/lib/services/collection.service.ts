@@ -1,16 +1,7 @@
 import Database from "@/db/Database";
 import { NextApiRequest } from "next";
-import path from "path";
 import { Op } from "sequelize";
-import {
-    deleteDirectory,
-    generateThumbnail,
-    getImageDimensions,
-    moveDirectoryContents,
-    readBytes
-} from "../common/file-system-helpers";
-import Log from "../common/log";
-import parseForm from "../common/parse-form";
+import { UserFileSystem } from "../common/user-file-system";
 import { EMPTY_UUIDV4, isUuidv4 } from "../common/utilities";
 import { CollectionDto } from "../interfaces/collection-dto";
 import { CollectionFileDto } from "../interfaces/collection-file-dto";
@@ -42,6 +33,7 @@ interface UploadResult {
 
 interface GetFileResult {
     file?: Buffer;
+    filename?: string;
     mimeType?: string;
     notFound?: boolean;
 }
@@ -88,12 +80,14 @@ export class CollectionService {
                 collection.CollectionFiles?.map((file) => ({
                     id: file.id,
                     collectionId: file.CollectionId,
-                    name: file.name,
+                    name: file.label,
                     mimeType: file.mimeType,
-                    src: `/api/collections/${file.CollectionId}/files/${file.id}`,
+                    src: `/api/collections/${file.CollectionId}/files?${
+                        file.mimeType.includes("image") ? "image" : "video"
+                    }=${file.id}`,
+                    thumbnailSrc: `/api/collections/${file.CollectionId}/files?thumbnail=${file.id}`,
                     width: file.width,
                     height: file.height,
-                    thumbnailSrc: `/api/collections/${file.CollectionId}/files/${file.id}/thumbnail`,
                     thumbnailWidth: file.thumbnailWidth,
                     thumbnailHeight: file.thumbnailHeight,
                     createdAt: file.createdAt.getTime(),
@@ -129,7 +123,7 @@ export class CollectionService {
                 CollectionId: collectionId,
                 id: fileId
             },
-            attributes: ["mimeType", "thumbnailPath", "path"],
+            attributes: ["mimeType", "filename", "label"],
             include: {
                 model: db.models.Collection,
                 required: true,
@@ -144,20 +138,18 @@ export class CollectionService {
             };
         }
 
-        const file = await readBytes(
-            path.join(
-                this.getDataDir(),
-                collectionFile.thumbnailPath && thumbnail
-                    ? collectionFile.thumbnailPath
-                    : collectionFile.path
-            )
+        const fileSystem = new UserFileSystem(this.userId);
+        const file = await fileSystem.readFile(
+            collectionId,
+            collectionFile.filename,
+            thumbnail
         );
         if (!file) {
             return {
                 notFound: true
             };
         }
-        return { mimeType: collectionFile.mimeType, file };
+        return { mimeType: collectionFile.mimeType, file, filename: collectionFile.label };
     }
 
     async uploadFiles(
@@ -167,112 +159,55 @@ export class CollectionService {
         if (!collectionId || !isUuidv4(collectionId)) {
             return { error: `Invalid collection id '${collectionId}'` };
         }
-        if (!process.env.DATA_DIR) {
-            throw new Error(
-                "Data directory not defined, use environment variable 'DATA_DIR'"
-            );
-        }
 
         const db = await Database.getInstance();
         const transaction = await db.transaction();
-        const workingDir = path.join(
-            this.getUserCollectionDir(collectionId),
-            `upload_${Date.now()}`
-        );
+        const fileSystem = new UserFileSystem(this.userId);
         try {
-            // move files to working directory
-            const { fields, files } = await parseForm(
-                req,
-                workingDir,
-                (percent) => Log.info(`Upload progress ${percent}%`)
-            );
-            const fileList = Object.keys(files).flatMap((file) => files[file]);
-            const timestamp = new Date().toISOString();
-            const fileRows = await Promise.all(
-                fileList.map(async (file, i) => {
-                    const isImage = file.mimetype?.includes("image") || false;
-                    const fallbackName = `${timestamp}_${i}`;
-                    const tempPath = path.join(
-                        workingDir,
-                        file.newFilename || fallbackName
-                    );
-                    const filepath = path.join(
-                        this.userId.toString(),
-                        collectionId,
-                        file.newFilename || fallbackName
-                    );
-                    const thumbnailPath = path.join(
-                        this.userId.toString(),
-                        collectionId,
-                        "tn",
-                        file.newFilename || fallbackName
-                    );
-                    const { width, height } = isImage
-                        ? getImageDimensions(tempPath)
-                        : { width: -1, height: -1 };
-                    const { width: thumbnailWidth, height: thumbnailHeight } =
-                        isImage
-                            ? await generateThumbnail(
-                                  tempPath,
-                                  path.join(
-                                      workingDir,
-                                      "tn",
-                                      file.newFilename || fallbackName
-                                  )
-                              )
-                            : { width: -1, height: -1 };
-
-                    return {
-                        name: file.originalFilename || fallbackName,
-                        mimeType: file.mimetype || "unknown",
-                        path: filepath,
-                        width: width || -1,
-                        height: height || -1,
-                        thumbnailPath: thumbnailPath,
-                        thumbnailWidth: thumbnailWidth || -1,
-                        thumbnailHeight: thumbnailHeight || -1,
-                        CollectionId: collectionId
-                    };
-                })
-            );
-
-            // insert info into db
+            const files = await fileSystem.uploadFilesToTempDir(req);
             const insertedRows = await db.models.CollectionFile.bulkCreate(
-                fileRows,
+                files.map((file) => ({
+                    label: file.originalFilename,
+                    mimeType: file.mimeType,
+                    filename: file.filename,
+                    width: file.width,
+                    height: file.height,
+                    thumbnailWidth: file.thumbnailWidth,
+                    thumbnailHeight: file.thumbnailHeight,
+                    CollectionId: collectionId
+                })),
                 {
                     transaction
                 }
             );
-
-            // move files from working directory to user directory
-            await moveDirectoryContents(
-                workingDir,
-                this.getUserCollectionDir(collectionId)
-            );
-
-            transaction.commit();
-
+            await fileSystem.mergeTempDirToCollectionDir(collectionId);
+            await transaction.commit();
             return {
-                files: insertedRows.map((row) => ({
-                    id: row.id,
-                    collectionId: row.CollectionId,
-                    name: row.name,
-                    mimeType: row.mimeType,
-                    src: `/api/collections/${row.CollectionId}/files/${row.id}`,
-                    thumbnailSrc: `/api/collections/${row.CollectionId}/files/${row.id}/thumbnail`,
-                    width: row.width,
-                    height: row.height,
-                    thumbnailWidth: row.thumbnailWidth,
-                    thumbnailHeight: row.thumbnailHeight,
-                    createdAt: row.createdAt.getTime(),
-                    updatedAt: row.updatedAt.getTime()
-                }))
+                files: insertedRows.map((row) => {
+                    const isImage = row.mimeType.includes("image");
+                    return {
+                        id: row.id,
+                        collectionId: row.CollectionId,
+                        name: row.label,
+                        mimeType: row.mimeType,
+                        src: `/api/collections/${row.CollectionId}/files?${
+                            isImage ? "image" : "video"
+                        }=${row.id}`,
+                        thumbnailSrc: `/api/collections/${row.CollectionId}/files?thumbnail=${row.id}`,
+                        width: row.width,
+                        height: row.height,
+                        thumbnailWidth: row.thumbnailWidth,
+                        thumbnailHeight: row.thumbnailHeight,
+                        createdAt: row.createdAt.getTime(),
+                        updatedAt: row.updatedAt.getTime()
+                    };
+                })
             };
         } catch (error) {
             transaction.rollback();
             throw error;
         } finally {
-            await deleteDirectory(workingDir);
+            await fileSystem.clearTempDir();
         }
     }
 
@@ -332,7 +267,6 @@ export class CollectionService {
         if (!isUuidv4(collectionId)) {
             return { error: `Invalid collection id '${collectionId}'` };
         }
-        const collectionDir = this.getUserCollectionDir(collectionId);
 
         return Database.withTransaction(async (transaction, db) => {
             await db.models.Collection.destroy({
@@ -342,7 +276,8 @@ export class CollectionService {
                 },
                 transaction
             });
-            await deleteDirectory(collectionDir);
+            const fileSystem = new UserFileSystem(this.userId);
+            await fileSystem.deleteCollectionDir(collectionId);
             return {};
         }).catch((error) => {
             throw new Error(`Error deleting collection '${collectionId}'`, {
@@ -454,22 +389,5 @@ export class CollectionService {
             }
         });
         return existing.length > 0;
-    }
-
-    private getUserCollectionDir(collectionId: string) {
-        return path.join(
-            this.getDataDir(),
-            this.userId.toString(),
-            collectionId
-        );
-    }
-
-    private getDataDir() {
-        if (!process.env.DATA_DIR) {
-            throw new Error(
-                "Data directory not defined, use environment variable 'DATA_DIR'"
-            );
-        }
-        return process.env.DATA_DIR;
     }
 }

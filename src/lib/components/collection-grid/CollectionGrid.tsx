@@ -7,6 +7,8 @@ import { PhotoProvider } from "react-photo-view";
 import CollectionGridActionBar from "./CollectionGridActionBar";
 import CollectionGridCard from "./CollectionGridCard";
 
+// TODO: look into jotai for state management
+
 interface CollectionGridProps {
     rootCollectionId?: string;
 }

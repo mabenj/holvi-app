@@ -22,7 +22,7 @@ import {
     useDisclosure,
     useToast
 } from "@chakra-ui/react";
-import { mdiDotsVertical, mdiFolder } from "@mdi/js";
+import { mdiDotsVertical } from "@mdi/js";
 import Icon from "@mdi/react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -124,7 +124,13 @@ export default function CollectionGridCard({
                     onMouseLeave={() => setIsHovering(false)}
                     onClick={handleClick}>
                     {isCollection ? (
-                        <Icon path={mdiFolder} />
+                        <Flex
+                            alignItems="center"
+                            justifyContent="center"
+                            w="100%"
+                            h="100%">
+                            <Box w="80%" h="80%" rounded="md" bg="blue.500" />
+                        </Flex>
                     ) : (
                         <PhotoView src={item.src!}>
                             <Image
