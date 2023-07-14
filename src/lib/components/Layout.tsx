@@ -1,5 +1,14 @@
+import { MoonIcon, SunIcon } from "@chakra-ui/icons";
 import { Link } from "@chakra-ui/next-js";
-import { Box, Button, Container, Flex, useToast } from "@chakra-ui/react";
+import {
+    Box,
+    Button,
+    Container,
+    Flex,
+    IconButton,
+    useColorMode,
+    useToast
+} from "@chakra-ui/react";
 import Head from "next/head";
 import { useLogin } from "../hooks/useLogin";
 import { UserDto } from "../interfaces/user-dto";
@@ -31,6 +40,7 @@ export default function Layout({ user, children }: LayoutProps) {
 }
 
 const Navbar = ({ username }: { username?: string }) => {
+    const { colorMode, toggleColorMode } = useColorMode();
     const { logout, isSigningOut } = useLogin();
     const toast = useToast();
 
@@ -71,6 +81,18 @@ const Navbar = ({ username }: { username?: string }) => {
                         isLoading={isSigningOut}>
                         Log out
                     </Button>
+                    <IconButton
+                        size="sm"
+                        variant="ghost"
+                        icon={colorMode === "dark" ? <SunIcon /> : <MoonIcon />}
+                        aria-label={
+                            colorMode === "dark" ? "Light mode" : "Dark mode"
+                        }
+                        title={
+                            colorMode === "dark" ? "Light mode" : "Dark mode"
+                        }
+                        onClick={() => toggleColorMode()}
+                    />
                 </Flex>
             </Flex>
         </nav>

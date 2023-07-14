@@ -19,6 +19,7 @@ import {
     Tag,
     TagCloseButton,
     TagLabel,
+    useColorModeValue,
     useToast
 } from "@chakra-ui/react";
 import { FormEvent, KeyboardEvent, useState } from "react";
@@ -137,6 +138,7 @@ const TagInput = ({
     onChange: (value: string[]) => void;
 }) => {
     const [inputValue, setInputValue] = useState("");
+    const borderColor = useColorModeValue("gray.200", "gray.600");
 
     const addTag = (tag: string) => {
         setInputValue("");
@@ -173,7 +175,12 @@ const TagInput = ({
     };
 
     return (
-        <Flex flexWrap="wrap" p={2} rounded="md" border="1px solid gray">
+        <Flex
+            flexWrap="wrap"
+            p={2}
+            rounded="md"
+            border="1px solid"
+            borderColor={borderColor}>
             {value.map((value, i) => (
                 <Tag key={value} borderRadius="full" m={1}>
                     <TagLabel>{value}</TagLabel>

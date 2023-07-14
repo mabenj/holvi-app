@@ -34,7 +34,8 @@ import CollectionModal from "../CollectionModal";
 
 interface GridFilters {
     collections: boolean;
-    files: boolean;
+    videos: boolean;
+    images: boolean;
 }
 
 export default function CollectionGridActionBar() {
@@ -174,14 +175,19 @@ const FilterBtn = ({
 }: {
     onFilter: (filters: GridFilters) => void;
 }) => {
-    const [filters, setFilters] = useState<string[]>(["collections", "files"]);
+    const [filters, setFilters] = useState<string[]>([
+        "collections",
+        "videos",
+        "images"
+    ]);
 
     const handleFilter = (e: string | string[]) => {
         const filters = Array.isArray(e) ? e : [e];
         setFilters(filters);
         onFilter({
             collections: filters.includes("collections"),
-            files: filters.includes("files")
+            videos: filters.includes("videos"),
+            images: filters.includes("images")
         });
     };
 
@@ -201,7 +207,8 @@ const FilterBtn = ({
                     <MenuItemOption value="collections">
                         Collections
                     </MenuItemOption>
-                    <MenuItemOption value="files">Files</MenuItemOption>
+                    <MenuItemOption value="videos">Videos</MenuItemOption>
+                    <MenuItemOption value="images">Images</MenuItemOption>
                 </MenuOptionGroup>
             </MenuList>
         </Menu>

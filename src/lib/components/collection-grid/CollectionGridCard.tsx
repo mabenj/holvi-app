@@ -156,12 +156,18 @@ export default function CollectionGridCard({
                             overflow="hidden"
                             textOverflow="ellipsis"
                             cursor="text"
-                            title={item.name}>
+                            title={item.name}
+                            color="whiteAlpha.800">
                             {item.name}
                         </Box>
                     )}
                     {isDeleting && (
-                        <Spinner position="absolute" top="50%" left="50%" />
+                        <Spinner
+                            position="absolute"
+                            top="50%"
+                            left="50%"
+                            color="whiteAlpha.800"
+                        />
                     )}
                 </Box>
             </Flex>
@@ -308,7 +314,11 @@ const VideoThumbnail = ({
                     }}
                 />
             </PhotoView>
-            <Box position="absolute" pointerEvents="none" p={1}>
+            <Box
+                position="absolute"
+                pointerEvents="none"
+                p={1}
+                color="whiteAlpha.800">
                 <Icon path={mdiPlayCircle} size={1} />
             </Box>
         </>
