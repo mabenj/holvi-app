@@ -1,6 +1,6 @@
 import Database from "@/db/Database";
 import { ReadStream } from "fs";
-import { NextApiRequest } from "next";
+import { IncomingMessage } from "http";
 import { Op } from "sequelize";
 import { UserFileSystem } from "../common/user-file-system";
 import { EMPTY_UUIDV4, isUuidv4 } from "../common/utilities";
@@ -247,9 +247,31 @@ export class CollectionService {
         };
     }
 
+    async uploadCollection(
+        collectionName: string,
+        req: IncomingMessage
+    ): Promise<CreateResult> {
+        const { collection, error } = await this.create(collectionName, []);
+        if (!collection || error) {
+            return { error };
+        }
+        try {
+            const { files, error } = await this.uploadFiles(collection.id, req);
+            if (!files || error) {
+                throw error;
+            }
+            return {
+                collection
+            };
+        } catch (error) {
+            await this.delete(collection.id);
+            throw error;
+        }
+    }
+
     async uploadFiles(
         collectionId: string,
-        req: NextApiRequest
+        req: IncomingMessage
     ): Promise<UploadResult> {
         if (!collectionId || !isUuidv4(collectionId)) {
             return { error: `Invalid collection id '${collectionId}'` };
@@ -278,25 +300,25 @@ export class CollectionService {
             await fileSystem.mergeTempDirToCollectionDir(collectionId);
             await transaction.commit();
             return {
-                files: insertedRows.map((row) => {
-                    const isImage = row.mimeType.includes("image");
-                    return {
-                        id: row.id,
-                        collectionId: row.CollectionId,
-                        name: row.label,
-                        mimeType: row.mimeType,
-                        src: `/api/collections/${row.CollectionId}/files?${
-                            isImage ? "image" : "video"
-                        }=${row.id}`,
-                        thumbnailSrc: `/api/collections/${row.CollectionId}/files?thumbnail=${row.id}`,
-                        width: row.width,
-                        height: row.height,
-                        thumbnailWidth: row.thumbnailWidth,
-                        thumbnailHeight: row.thumbnailHeight,
-                        createdAt: row.createdAt.getTime(),
-                        updatedAt: row.updatedAt.getTime()
-                    };
-                })
+                files: insertedRows.map((row) => ({
+                    id: row.id,
+                    collectionId: row.CollectionId,
+                    name: row.label,
+                    mimeType: row.mimeType,
+                    src: this.getSrc(row.CollectionId, row.id, row.mimeType),
+                    thumbnailSrc: this.getSrc(
+                        row.CollectionId,
+                        row.id,
+                        row.mimeType,
+                        true
+                    ),
+                    width: row.width,
+                    height: row.height,
+                    thumbnailWidth: row.thumbnailWidth,
+                    thumbnailHeight: row.thumbnailHeight,
+                    createdAt: row.createdAt.getTime(),
+                    updatedAt: row.updatedAt.getTime()
+                }))
             };
         } catch (error) {
             transaction.rollback();
@@ -405,7 +427,7 @@ export class CollectionService {
         });
     }
 
-    async create(name: string, tags: string): Promise<CreateResult> {
+    async create(name: string, tags: string[]): Promise<CreateResult> {
         if (!name) {
             return { error: "Invalid collection name" };
         }
@@ -513,5 +535,17 @@ export class CollectionService {
             }
         });
         return existing.length > 0;
+    }
+
+    private getSrc(
+        collectionId: string,
+        fileId: string,
+        mimeType: string,
+        thumbnail: boolean = false
+    ) {
+        const isImage = mimeType.includes("image");
+        return `/api/collections/${collectionId}/files?${
+            thumbnail ? "thumbnail" : isImage ? "image" : "video"
+        }=${fileId}`;
     }
 }

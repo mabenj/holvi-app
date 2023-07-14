@@ -103,7 +103,10 @@ export class UserFileSystem {
 
             const fallbackName = `${timestamp}_${i}`;
             const filename = file.newFilename || fallbackName;
-            const originalFilename = file.originalFilename || fallbackName;
+            const originalFilename =
+                file.originalFilename?.split("/").at(-1) ||
+                file.originalFilename ||
+                fallbackName;
 
             const { width, height, thumbnailWidth, thumbnailHeight } =
                 await generateThumbnail(

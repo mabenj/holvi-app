@@ -40,10 +40,7 @@ interface GridFilters {
 
 export default function CollectionGridActionBar() {
     const { rootCollectionId, setGridItems, isLoading } = useCollectionGrid();
-    const { upload, isUploading, progress } = useUpload(
-        "POST",
-        `/api/collections/${rootCollectionId}/files/upload`
-    );
+    const { upload, isUploading, progress } = useUpload();
 
     const toast = useToast();
 
@@ -94,9 +91,16 @@ export default function CollectionGridActionBar() {
     };
 
     const handleUploadFiles = async (files: File[]) => {
+        if (files.length === 0) {
+            return;
+        }
         const formData = new FormData();
         files.forEach((file) => formData.append("file", file));
-        const response = await upload(formData);
+        const response = await upload(
+            formData,
+            `/api/collections/${rootCollectionId}/files/upload`,
+            "POST"
+        );
         if (response.status === "error" || response.error) {
             toast({
                 description: `Error uploading files: ${getErrorMessage(
@@ -116,9 +120,34 @@ export default function CollectionGridActionBar() {
         });
     };
 
-    const handleUploadCollection = (name: string, files: File[]) => {
-        alert(`UPLOAD COLLECTION: ${name}`);
-        //TODO
+    const handleUploadCollection = async (
+        collectionName: string,
+        files: File[]
+    ) => {
+        if (files.length === 0) {
+            return;
+        }
+        const formData = new FormData();
+        files.forEach((file) => formData.append("file", file));
+        const response = await upload(
+            formData,
+            `/api/collections/upload?name=${collectionName}`,
+            "POST"
+        );
+        if (response.status === "error" || response.error) {
+            toast({
+                description: `Error uploading files: ${getErrorMessage(
+                    response.error
+                )}`,
+                status: "error"
+            });
+            return;
+        }
+        onCollectionCreated(response.collection);
+        toast({
+            description: `Successfully uploaded collection ${response.collection.name}`,
+            status: "success"
+        });
     };
 
     const onCollectionCreated = (collection: CollectionDto) => {
@@ -262,7 +291,7 @@ const SortBtn = ({
 const UploadCollectionBtn = ({
     onUpload
 }: {
-    onUpload: (name: string, files: File[]) => void;
+    onUpload: (folderName: string, files: File[]) => void;
 }) => {
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 

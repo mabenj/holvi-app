@@ -1,10 +1,10 @@
 import { useState } from "react";
 
-export function useUpload(method: "POST" | "PUT", url: string) {
+export function useUpload() {
     const [progress, setProgress] = useState(0);
     const [isUploading, setIsUploading] = useState(false);
 
-    const upload = (formData: FormData) =>
+    const upload = (formData: FormData, url: string, method: "POST" | "PUT") =>
         new Promise<any>((resolve, reject) => {
             const xhr = new XMLHttpRequest();
 
