@@ -146,7 +146,7 @@ export default function CollectionGridCard({
                             </MenuList>
                         </Menu>
                     )}
-                    {(isHovering || isMenuOpen) && (
+                    {!isCollection && (isHovering || isMenuOpen) && (
                         <Box
                             position="absolute"
                             bottom={0}
@@ -220,12 +220,14 @@ const CollectionThumbnail = ({ item }: { item: CollectionGridItem }) => {
 
     return (
         <Flex
+            direction="column"
             alignItems="center"
             justifyContent="center"
             w="100%"
             h="100%"
             onClick={() => router.push(`/collections/${item.id}`)}>
             <div className="collection-icon" />
+            <span>{item.name}</span>
         </Flex>
     );
 };
