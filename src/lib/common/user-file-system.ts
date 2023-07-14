@@ -29,10 +29,15 @@ interface UploadedFile {
 
 export class UserFileSystem {
     private readonly rootDir: string;
-    private tempDir: string | null = null;
+    private tempDir: string;
 
     constructor(private readonly userId: string) {
         this.rootDir = path.join(appConfig.dataDir, this.userId);
+        this.tempDir = path.join(
+            this.rootDir,
+            "temp",
+            Date.now().toString()
+        )
     }
 
     async deleteFileAndThumbnail(collectionId: string, filename: string) {
@@ -82,7 +87,7 @@ export class UserFileSystem {
 
     async mergeTempDirToCollectionDir(collectionId: string) {
         await moveDirectoryContents(
-            this.getTempDir(),
+            this.tempDir,
             path.join(this.rootDir, collectionId)
         );
     }
@@ -90,7 +95,7 @@ export class UserFileSystem {
     async uploadFilesToTempDir(req: IncomingMessage): Promise<UploadedFile[]> {
         const timestamp = Date.now().toString();
 
-        const files = await parseForm(req, this.getTempDir());
+        const files = await parseForm(req, this.tempDir);
         const result: UploadedFile[] = [];
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
@@ -107,8 +112,8 @@ export class UserFileSystem {
             const { width, height, thumbnailWidth, thumbnailHeight } =
                 await generateThumbnail(
                     isImage ? "image" : "video",
-                    path.join(this.getTempDir(), filename),
-                    path.join(this.getTempDir(), "tn", filename)
+                    path.join(this.tempDir, filename),
+                    path.join(this.tempDir, "tn", filename)
                 );
             result.push({
                 filename,
@@ -128,17 +133,6 @@ export class UserFileSystem {
             return;
         }
         await deleteDirectory(this.tempDir);
-    }
-
-    private getTempDir() {
-        if (!this.tempDir) {
-            this.tempDir = path.join(
-                this.rootDir,
-                "temp",
-                Date.now().toString()
-            );
-        }
-        return this.tempDir;
     }
 }
 

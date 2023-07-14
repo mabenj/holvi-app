@@ -326,28 +326,52 @@ export class CollectionService {
             if (!collectionInDb) {
                 return { notFound: true };
             }
+            // update collection
             collectionInDb.name = collection.name;
             await collectionInDb.save({ transaction });
 
-            await db.models.Tag.destroy({
+            // create new tags
+            await db.models.Tag.bulkCreate(
+                collection.tags.map((tag) => ({ name: tag })),
+                {
+                    ignoreDuplicates: true,
+                    returning: false,
+                    transaction
+                }
+            );
+            // update junction table
+            await db.models.CollectionTag.destroy({
+                where: {
+                    CollectionId: collectionInDb.id,
+                    TagName: {
+                        [Op.notIn]: collection.tags
+                    }
+                }
+            })
+            await db.models.CollectionTag.bulkCreate(
+                collection.tags.map((tag) => ({
+                    TagName: tag,
+                    CollectionId: collectionInDb.id
+                })),
+                {
+                    ignoreDuplicates: true,
+                    returning: false,
+                    transaction
+                }
+            );
+            // fetch tags from junction table
+            const collectionTags = await db.models.CollectionTag.findAll({
                 where: {
                     CollectionId: collectionInDb.id
                 }
             });
-            const insertedTags = await db.models.Tag.bulkCreate(
-                collection.tags.map((tag) => ({
-                    name: tag,
-                    CollectionId: collection.id
-                })),
-                { transaction }
-            );
             return {
                 collection: {
                     id: collectionInDb.id,
                     name: collectionInDb.name,
                     createdAt: collectionInDb.createdAt.getTime(),
                     updatedAt: collectionInDb.updatedAt.getTime(),
-                    tags: insertedTags.map((tag) => tag.name)
+                    tags: collectionTags.map((tag) => tag.TagName)
                 }
             };
         }).catch((error) => {
@@ -399,53 +423,32 @@ export class CollectionService {
                 },
                 { transaction }
             );
-            const insertedTags = await db.models.Tag.bulkCreate(
+            await db.models.Tag.bulkCreate(
+                tags.map((tag) => ({ name: tag })),
+                {
+                    ignoreDuplicates: true,
+                    returning: false,
+                    transaction
+                }
+            );
+            const collectionTags = await db.models.CollectionTag.bulkCreate(
                 tags.map((tag) => ({
-                    name: tag,
+                    TagName: tag,
                     CollectionId: collection.id
                 })),
                 { transaction }
             );
+
             return {
                 collection: {
                     id: collection.id,
                     name: collection.name,
                     createdAt: collection.createdAt.getTime(),
                     updatedAt: collection.updatedAt.getTime(),
-                    tags: insertedTags.map((tag) => tag.name)
+                    tags: collectionTags.map((tag) => tag.TagName)
                 }
             };
-        }).catch((error) => {
-            throw new Error("Error creating collection", { cause: error });
         });
-    }
-
-    async get(collectionId: string): Promise<GetResult> {
-        if (!isUuidv4(collectionId)) {
-            return {
-                notFound: true
-            };
-        }
-        const db = await Database.getInstance();
-        const collection = await db.models.Collection.findOne({
-            where: {
-                UserId: this.userId,
-                id: collectionId
-            },
-            include: db.models.Tag
-        });
-        if (!collection) {
-            return { notFound: true };
-        }
-        return {
-            collection: {
-                id: collection.id,
-                name: collection.name,
-                tags: collection.Tags?.map((tag) => tag.name) || [],
-                createdAt: collection.createdAt.getTime(),
-                updatedAt: collection.updatedAt.getTime()
-            }
-        };
     }
 
     async getAll(): Promise<CollectionDto[]> {

@@ -261,6 +261,10 @@ const VideoThumbnail = ({
 }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
 
+    // TODO check these:
+    // https://github.com/CookPete/react-player
+    // https://github.com/sampotts/plyr
+
     return (
         <>
             <PhotoView

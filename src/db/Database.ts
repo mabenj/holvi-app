@@ -4,6 +4,8 @@ import { sleep } from "@/lib/common/utilities";
 import { Sequelize, Transaction } from "sequelize";
 import { Collection } from "./models/Collection";
 import { CollectionFile } from "./models/CollectionFile";
+import { CollectionFileTag } from "./models/CollectionFileTag";
+import { CollectionTag } from "./models/CollectionTag";
 import { Tag } from "./models/Tag";
 import { User } from "./models/User";
 
@@ -17,7 +19,9 @@ export default class Database {
             User: User,
             Collection: Collection,
             CollectionFile: CollectionFile,
-            Tag: Tag
+            Tag: Tag,
+            CollectionTag: CollectionTag,
+            CollectionFileTag: CollectionFileTag
         };
     }
 
@@ -74,6 +78,8 @@ export default class Database {
             Collection.initModel(Database.instance.sequelize);
             CollectionFile.initModel(Database.instance.sequelize);
             Tag.initModel(Database.instance.sequelize);
+            CollectionTag.initModel(Database.instance.sequelize);
+            CollectionFileTag.initModel(Database.instance.sequelize);
 
             User.hasMany(Collection);
             Collection.belongsTo(User, {
@@ -81,16 +87,31 @@ export default class Database {
                     allowNull: false
                 }
             });
+
             Collection.hasMany(CollectionFile, { onDelete: "CASCADE" });
-            Collection.hasMany(Tag, { onDelete: "CASCADE" });
             CollectionFile.belongsTo(Collection, {
                 foreignKey: {
                     allowNull: false
                 }
             });
-            CollectionFile.hasMany(Tag, { onDelete: "CASCADE" });
-            Tag.belongsTo(Collection);
-            Tag.belongsTo(CollectionFile);
+
+            Collection.belongsToMany(Tag, {
+                through: CollectionTag,
+                uniqueKey: "CollectionId"
+            });
+            Tag.belongsToMany(Collection, {
+                through: CollectionTag,
+                uniqueKey: "TagName"
+            });
+
+            CollectionFile.belongsToMany(Tag, {
+                through: CollectionFileTag,
+                uniqueKey: "CollectionFileId"
+            });
+            Tag.belongsToMany(CollectionFile, {
+                through: CollectionFileTag,
+                uniqueKey: "TagName"
+            });
 
             Log.info("Initializing models");
             await Database.instance.sequelize.sync({ alter: true });
