@@ -33,11 +33,7 @@ export class UserFileSystem {
 
     constructor(private readonly userId: string) {
         this.rootDir = path.join(appConfig.dataDir, this.userId);
-        this.tempDir = path.join(
-            this.rootDir,
-            "temp",
-            Date.now().toString()
-        )
+        this.tempDir = path.join(this.rootDir, "temp", Date.now().toString());
     }
 
     async deleteFileAndThumbnail(collectionId: string, filename: string) {
@@ -302,13 +298,16 @@ async function generateThumbnail(
                     });
                 })
                 .on("error", (error) => reject(error))
-                .takeScreenshots({
-                    count: 1,
-                    fastSeek: true,
-                    timestamps: [thumbnailTime],
-                    size: `${thumbnailWidth}x${thumbnailHeight}`,
-                    filename: targetPath
-                });
+                .takeScreenshots(
+                    {
+                        count: 1,
+                        fastSeek: true,
+                        timestamps: [thumbnailTime],
+                        size: `${thumbnailWidth}x${thumbnailHeight}`,
+                        filename: path.basename(targetPath)
+                    },
+                    dirname
+                );
         })
     );
 }

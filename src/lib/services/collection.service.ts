@@ -7,7 +7,7 @@ import { EMPTY_UUIDV4, isUuidv4 } from "../common/utilities";
 import { CollectionDto } from "../interfaces/collection-dto";
 import { CollectionFileDto } from "../interfaces/collection-file-dto";
 
-const CHUNK_SIZE_BYTES = 1_000_000; // 1mb
+const CHUNK_SIZE_BYTES = 3_000_000; // 3mb
 
 interface CreateResult {
     collection?: CollectionDto;
@@ -347,7 +347,7 @@ export class CollectionService {
                         [Op.notIn]: collection.tags
                     }
                 }
-            })
+            });
             await db.models.CollectionTag.bulkCreate(
                 collection.tags.map((tag) => ({
                     TagName: tag,
