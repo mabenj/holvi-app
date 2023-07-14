@@ -19,7 +19,6 @@ export function withUserSsr<
             return {
                 redirect: {
                     destination: "/login",
-                    statusCode: 401,
                     permanent: false
                 }
             };

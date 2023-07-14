@@ -1,0 +1,40 @@
+version: "3.8"
+services:
+    database:
+        build:
+            context: ./src/db
+        environment:
+            - POSTGRES_USER=admin
+            - POSTGRES_PASSWORD=securepassword
+            - POSTGRES_DB=holvi
+        volumes:
+            - db-data:/var/lib/postgresql/data
+        ports:
+            - 5432:5432
+        networks:
+            - holvi-net
+
+    web:
+        build:
+            context: .
+        environment:
+            - DB_CONNECTION_STRING=postgres://admin:securepassword@database:5432/holvi
+            - SESSION_PASSWORD=generate-a-32-characters-long-password-at-https://1password.com/password-generator
+            - DATA_DIR=/app/data
+            - USE_HTTPS=false
+            - SESSION_TTL_SECONDS=7200
+            - MAX_FILE_SIZE_KB=4294967296
+            - MAX_TOTAL_FILE_SIZE_KB=17179869184
+        volumes:
+            - app-data:/app/data
+        ports:
+            - 7000:3000
+        networks:
+            - holvi-net
+
+volumes:
+    db-data:
+    app-data:
+
+networks:
+    holvi-net:
