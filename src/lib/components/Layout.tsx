@@ -1,3 +1,4 @@
+import { currentUser } from "@/pages/_app";
 import { MoonIcon, SunIcon } from "@chakra-ui/icons";
 import { Link } from "@chakra-ui/next-js";
 import {
@@ -9,16 +10,17 @@ import {
     useColorMode,
     useToast
 } from "@chakra-ui/react";
+import { useAtom } from "jotai";
 import Head from "next/head";
 import { useLogin } from "../hooks/useLogin";
-import { UserDto } from "../interfaces/user-dto";
 
 interface LayoutProps {
-    user?: UserDto;
     children: React.ReactNode;
 }
 
-export default function Layout({ user, children }: LayoutProps) {
+export default function Layout({ children }: LayoutProps) {
+    const [user] = useAtom(currentUser);
+
     return (
         <>
             <Head>

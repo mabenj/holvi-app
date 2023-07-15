@@ -1,14 +1,7 @@
-import {
-    caseInsensitiveSorter,
-    collectionsToGridItems,
-    filesToGridItems,
-    getErrorMessage
-} from "@/lib/common/utilities";
-import { useCollectionGrid } from "@/lib/context/CollectionGridContext";
+import { getErrorMessage } from "@/lib/common/utilities";
 import useDebounce from "@/lib/hooks/useDebounce";
 import { useUpload } from "@/lib/hooks/useUpload";
 import { CollectionDto } from "@/lib/interfaces/collection-dto";
-import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
 import { AddIcon, SearchIcon } from "@chakra-ui/icons";
 import {
     Box,
@@ -29,151 +22,161 @@ import {
 } from "@chakra-ui/react";
 import { mdiFilterVariant, mdiFolderUpload, mdiSort, mdiUpload } from "@mdi/js";
 import Icon from "@mdi/react";
-import { ChangeEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, Dispatch, useEffect, useRef, useState } from "react";
 import CollectionModal from "../CollectionModal";
+import { CollectionGridAction } from "./CollectionGrid";
 
-interface GridFilters {
-    collections: boolean;
-    videos: boolean;
-    images: boolean;
+interface CollectionGridActionBarProps {
+    isLoading: boolean;
+    actionDispatcher: Dispatch<CollectionGridAction>;
+    collectionId?: string;
 }
 
-export default function CollectionGridActionBar() {
-    const { rootCollectionId, setGridItems, isLoading } = useCollectionGrid();
+export default function CollectionGridActionBar({
+    isLoading,
+    actionDispatcher,
+    collectionId
+}: CollectionGridActionBarProps) {
+    const [currentFilters, setCurrentFilters] = useState<string[]>([
+        "collections",
+        "videos",
+        "images"
+    ]);
+    const [currentSort, setCurrentSort] = useState<{
+        field: string;
+        asc: boolean;
+    } | null>(null);
     const { upload, isUploading, progress } = useUpload();
 
     const toast = useToast();
 
-    const canFilter = rootCollectionId === "root";
-    const canListFiles = rootCollectionId === "root";
-    const canUploadFiles = rootCollectionId !== "root";
-    const canUploadCollection = rootCollectionId === "root";
-    const canCreateCollection = rootCollectionId === "root";
+    const canFilter = collectionId === "root";
+    const canListFiles = collectionId === "root";
+    const canUploadFiles = collectionId && collectionId !== "root";
+    const canUploadCollection = collectionId === "root";
+    const canCreateCollection = collectionId === "root";
 
     const handleSearch = async (query: string) => {
-        alert(`SEARCH: ${query}`);
-        if (!rootCollectionId) {
-            //TODO: make request to server
+        if (!collectionId) {
             return;
         }
-        // TODO: necessary data already at client, filter grid items based on query
-    };
-
-    const handleFilter = (filters: GridFilters) => {
-        alert(`FILTER: ${JSON.stringify(filters)}`);
-        //TODO
-    };
-
-    const handleSort = (field: "name" | "timestamp", asc: boolean) => {
-        switch (field) {
-            case "name": {
-                setGridItems((prev) => [
-                    ...prev.sort(caseInsensitiveSorter("name", asc))
-                ]);
-                break;
-            }
-            case "timestamp": {
-                setGridItems((prev) => [
-                    ...prev.sort(caseInsensitiveSorter("timestamp", asc))
-                ]);
-                break;
-            }
-            default:
-                toast({
-                    description: `Cannot sort by '${field}'`,
-                    status: "error"
-                });
+        if (collectionId === "root") {
+            actionDispatcher({ type: "SEARCH_START" });
+            //TODO: make request to server
+            actionDispatcher({
+                type: "SEARCH_SUCCESS",
+                collections: [],
+                files: []
+            });
+            return;
         }
+        // necessary data already at client, filter grid items based on query
+        actionDispatcher({ type: "FILTER", filters: currentFilters, query });
     };
 
     const handleListFiles = () => {
-        alert("LIST ALL FILES");
-    };
-
-    const handleUploadFiles = async (files: File[]) => {
-        if (files.length === 0) {
-            return;
-        }
-        const formData = new FormData();
-        files.forEach((file) => formData.append("file", file));
-        const response = await upload(
-            formData,
-            `/api/collections/${rootCollectionId}/files/upload`,
-            "POST"
-        );
-        if (response.status === "error" || response.error) {
-            toast({
-                description: `Error uploading files: ${getErrorMessage(
-                    response.error
-                )}`,
-                status: "error"
-            });
-            return;
-        }
-        setGridItems((prev) => [
-            ...prev,
-            ...filesToGridItems(response.files as CollectionFileDto[])
-        ]);
-        toast({
-            description: `Successfully uploaded ${response.files.length} files`,
-            status: "success"
+        actionDispatcher({ type: "SEARCH_START" });
+        //TODO: make request to server
+        actionDispatcher({
+            type: "SEARCH_SUCCESS",
+            collections: [],
+            files: []
         });
     };
 
-    const handleUploadCollection = async (
-        collectionName: string,
-        files: File[]
+    const handleUploadFiles = async (
+        files: File[],
+        collectionName?: string
     ) => {
         if (files.length === 0) {
-            return;
-        }
-        const formData = new FormData();
-        files.forEach((file) => formData.append("file", file));
-        const response = await upload(
-            formData,
-            `/api/collections/upload?name=${collectionName}`,
-            "POST"
-        );
-        if (response.status === "error" || response.error) {
             toast({
-                description: `Error uploading files: ${getErrorMessage(
-                    response.error
-                )}`,
+                description: "No files selected",
                 status: "error"
             });
             return;
         }
-        onCollectionCreated(response.collection);
+        const isCreatingNew = !!collectionName;
+        const formData = new FormData();
+        files.forEach((file) => formData.append("file", file));
+        const url = isCreatingNew
+            ? `/api/collections/upload?name=${collectionName}`
+            : `/api/collections/${collectionId}/files/upload`;
+        const response = await upload(formData, url, "POST");
+        if (response.status === "error" || response.error) {
+            toast({
+                description: `Error uploading ${
+                    isCreatingNew ? "collection" : "files"
+                }: ${getErrorMessage(response.error)}`,
+                status: "error"
+            });
+            return;
+        }
+        const newItems = isCreatingNew ? [response.collection] : response.files;
+        actionDispatcher({ type: "ADD", items: newItems });
         toast({
-            description: `Successfully uploaded collection ${response.collection.name}`,
+            description: `Successfully uploaded ${
+                isCreatingNew
+                    ? `collection ${response.collection.name}`
+                    : `${response.files.length} files`
+            }`,
             status: "success"
         });
     };
 
-    const onCollectionCreated = (collection: CollectionDto) => {
-        setGridItems((prev) => [
-            ...prev,
-            ...collectionsToGridItems([collection])
-        ]);
+    const handleFilter = (filters: string[]) => {
+        setCurrentFilters(filters);
+        actionDispatcher({ type: "FILTER", filters });
+    };
+
+    const handleSort = (field: string, asc: boolean) => {
+        setCurrentSort({ field, asc });
+        actionDispatcher({ type: "SORT", field, asc });
+    };
+
+    const handleCreated = (collection: CollectionDto) => {
+        actionDispatcher({
+            type: "ADD",
+            items: [{ ...collection, type: "collection" }]
+        });
     };
 
     return (
         <>
             <Flex alignItems="center" gap={2} px={2}>
                 <Box flexGrow={1}>
-                    <SearchBar onSearch={handleSearch} />
+                    <SearchBar onSearch={handleSearch} disabled={isLoading} />
                 </Box>
-                {canFilter && <FilterBtn onFilter={handleFilter} />}
-                <SortBtn onSort={handleSort} />
-                {canListFiles && <ListAllFilesBtn onClick={handleListFiles} />}
+                {canFilter && (
+                    <FilterBtn
+                        filters={currentFilters}
+                        onFilter={handleFilter}
+                        disabled={isLoading}
+                    />
+                )}
+                <SortBtn onSort={handleSort} disabled={isLoading} />
+                {canListFiles && (
+                    <ListAllFilesBtn
+                        onClick={handleListFiles}
+                        disabled={isLoading}
+                    />
+                )}
                 {canUploadFiles && (
-                    <UploadFilesBtn onUpload={handleUploadFiles} />
+                    <UploadFilesBtn
+                        onUpload={handleUploadFiles}
+                        disabled={isLoading}
+                    />
                 )}
                 {canUploadCollection && (
-                    <UploadCollectionBtn onUpload={handleUploadCollection} />
+                    <UploadCollectionBtn
+                        onUpload={handleUploadFiles}
+                        disabled={isLoading}
+                    />
                 )}
                 {canCreateCollection && (
-                    <CreateCollectionBtn onCreated={onCollectionCreated} />
+                    <CreateCollectionBtn
+                        onCreated={handleCreated}
+                        disabled={isLoading}
+                    />
                 )}
             </Flex>
             {isUploading && (
@@ -191,33 +194,36 @@ export default function CollectionGridActionBar() {
     );
 }
 
-const ListAllFilesBtn = ({ onClick }: { onClick: () => void }) => {
+const ListAllFilesBtn = ({
+    onClick,
+    disabled
+}: {
+    onClick: () => void;
+    disabled: boolean;
+}) => {
     return (
-        <Button variant="ghost" onClick={onClick} title="List all files">
+        <Button
+            variant="ghost"
+            onClick={onClick}
+            title="List all files"
+            disabled={disabled}>
             All files
         </Button>
     );
 };
 
 const FilterBtn = ({
-    onFilter
+    filters,
+    onFilter,
+    disabled
 }: {
-    onFilter: (filters: GridFilters) => void;
+    filters: string[];
+    onFilter: (filters: string[]) => void;
+    disabled: boolean;
 }) => {
-    const [filters, setFilters] = useState<string[]>([
-        "collections",
-        "videos",
-        "images"
-    ]);
-
     const handleFilter = (e: string | string[]) => {
         const filters = Array.isArray(e) ? e : [e];
-        setFilters(filters);
-        onFilter({
-            collections: filters.includes("collections"),
-            videos: filters.includes("videos"),
-            images: filters.includes("images")
-        });
+        onFilter(filters);
     };
 
     return (
@@ -227,6 +233,7 @@ const FilterBtn = ({
                 icon={<Icon path={mdiFilterVariant} size={1} />}
                 variant="ghost"
                 title="Filter"
+                disabled={disabled}
             />
             <MenuList>
                 <MenuOptionGroup
@@ -245,9 +252,11 @@ const FilterBtn = ({
 };
 
 const SortBtn = ({
-    onSort
+    onSort,
+    disabled
 }: {
     onSort: (field: "name" | "timestamp", asc: boolean) => void;
+    disabled: boolean;
 }) => {
     const [sortField, setSortField] = useState("");
 
@@ -268,6 +277,7 @@ const SortBtn = ({
                 icon={<Icon path={mdiSort} size={1} />}
                 variant="ghost"
                 title="Sort"
+                disabled={disabled}
             />
             <MenuList>
                 <MenuOptionGroup
@@ -289,9 +299,11 @@ const SortBtn = ({
 };
 
 const UploadCollectionBtn = ({
-    onUpload
+    onUpload,
+    disabled
 }: {
-    onUpload: (folderName: string, files: File[]) => void;
+    onUpload: (files: File[], folderName: string) => void;
+    disabled: boolean;
 }) => {
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -299,7 +311,7 @@ const UploadCollectionBtn = ({
         const files = Array.from(e.target.files || []);
         const name =
             files[0].webkitRelativePath.split("/")[0] || "New collection";
-        onUpload(name, files);
+        onUpload(files, name);
         if (fileInputRef.current) {
             fileInputRef.current.files = null;
         }
@@ -324,15 +336,18 @@ const UploadCollectionBtn = ({
                 variant="ghost"
                 onClick={() => fileInputRef?.current?.click()}
                 icon={<Icon path={mdiFolderUpload} size={1} />}
+                disabled={disabled}
             />
         </div>
     );
 };
 
 const UploadFilesBtn = ({
-    onUpload
+    onUpload,
+    disabled
 }: {
     onUpload: (files: File[]) => void;
+    disabled: boolean;
 }) => {
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -360,15 +375,18 @@ const UploadFilesBtn = ({
                 variant="ghost"
                 onClick={() => fileInputRef?.current?.click()}
                 icon={<Icon path={mdiUpload} size={1} />}
+                disabled={disabled}
             />
         </div>
     );
 };
 
 const CreateCollectionBtn = ({
-    onCreated
+    onCreated,
+    disabled
 }: {
     onCreated: (collection: CollectionDto) => void;
+    disabled: boolean;
 }) => {
     const { isOpen, onOpen, onClose } = useDisclosure();
 
@@ -377,7 +395,8 @@ const CreateCollectionBtn = ({
             <Button
                 onClick={onOpen}
                 leftIcon={<AddIcon />}
-                title="Create a new collection">
+                title="Create a new collection"
+                disabled={disabled}>
                 Create
             </Button>
             <CollectionModal
@@ -390,7 +409,13 @@ const CreateCollectionBtn = ({
     );
 };
 
-const SearchBar = ({ onSearch }: { onSearch: (query: string) => void }) => {
+const SearchBar = ({
+    onSearch,
+    disabled
+}: {
+    onSearch: (query: string) => void;
+    disabled: boolean;
+}) => {
     const DEBOUNCE_MS = 500;
     const [query, setQuery] = useState<string | null>(null);
     const debouncedQuery = useDebounce(query, DEBOUNCE_MS);
@@ -413,6 +438,7 @@ const SearchBar = ({ onSearch }: { onSearch: (query: string) => void }) => {
                 placeholder="Search..."
                 value={query || ""}
                 onChange={(e) => setQuery(e.target.value)}
+                disabled={disabled}
             />
         </InputGroup>
     );

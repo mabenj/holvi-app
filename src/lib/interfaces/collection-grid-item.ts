@@ -1,16 +1,6 @@
-export type ItemType = "collection" | "image" | "video";
+import { CollectionDto } from "./collection-dto";
+import { CollectionFileDto } from "./collection-file-dto";
 
-export interface CollectionGridItem {
-    id: string;
-    name: string;
-    type: ItemType;
-    tags: string[];
-    timestamp: Date;
-    src?: string;
-    width?: number;
-    height?: number;
-    thumbnailSrc?: string;
-    thumbnailWidth?: number;
-    thumbnailHeight?: number;
-    thumbnails?: string[]
-}
+export type CollectionGridItem = (CollectionDto | CollectionFileDto) & {
+    type: string;
+};

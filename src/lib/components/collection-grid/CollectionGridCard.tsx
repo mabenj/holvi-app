@@ -1,8 +1,7 @@
-import { collectionsToGridItems } from "@/lib/common/utilities";
-import { useCollectionGrid } from "@/lib/context/CollectionGridContext";
 import { useDeleteCollection } from "@/lib/hooks/useDeleteCollection";
 import { useDeleteFile } from "@/lib/hooks/useDeleteFile";
 import { CollectionDto } from "@/lib/interfaces/collection-dto";
+import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
 import { CollectionGridItem } from "@/lib/interfaces/collection-grid-item";
 import {
     AlertDialog,
@@ -31,25 +30,27 @@ import {
 } from "@mdi/js";
 import Icon from "@mdi/react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter } from "next/router";
 import { useRef, useState } from "react";
 import { PhotoView } from "react-photo-view";
 import CollectionModal from "../CollectionModal";
 
+interface CollectionGridCardProps {
+    item: CollectionGridItem;
+    onDeleted: (id: string) => void;
+    onUpdated: (item: CollectionGridItem) => void;
+}
+
 export default function CollectionGridCard({
     item,
-    collectionId
-}: {
-    item: CollectionGridItem;
-    collectionId: string;
-}) {
-    const { setGridItems } = useCollectionGrid();
+    onDeleted,
+    onUpdated
+}: CollectionGridCardProps) {
     const [isHovering, setIsHovering] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const { deleteCollection, isDeleting: isDeletingCollection } =
         useDeleteCollection();
-    const { deleteFile, isDeleting: isDeletingFile } =
-        useDeleteFile(collectionId);
+    const { deleteFile, isDeleting: isDeletingFile } = useDeleteFile();
     const {
         isOpen: isModalOpen,
         onOpen: onModalOpen,
@@ -69,23 +70,17 @@ export default function CollectionGridCard({
     const isDeleting = isDeletingCollection || isDeletingFile;
 
     const handleCollectionSaved = (collection: CollectionDto) => {
-        setGridItems((prev) =>
-            prev.map((c) =>
-                c.id === collection.id
-                    ? collectionsToGridItems([collection])[0]
-                    : c
-            )
-        );
+        onUpdated({ ...collection, type: "collection" });
     };
 
     const handleDelete = async () => {
         try {
-            if (isCollection) {
+            if (item.type === "collection") {
                 await deleteCollection(item.id);
-            } else {
-                await deleteFile(item.id);
+            } else if ("collectionId" in item) {
+                await deleteFile(item.collectionId, item.id);
             }
-            setGridItems((prev) => prev.filter(({ id }) => id !== item.id));
+            onDeleted(item.id);
             toast({
                 description: `${isCollection ? "Collection" : "File"} deleted`,
                 status: "success"
@@ -104,7 +99,11 @@ export default function CollectionGridCard({
 
     return (
         <>
-            <Flex direction="column" alignItems="center" gap={2}>
+            <Flex
+                direction="column"
+                alignItems="center"
+                gap={2}
+                title={item.name}>
                 <Box
                     w="100%"
                     h={["8rem", "8rem", "8rem", "14rem"]}
@@ -112,9 +111,18 @@ export default function CollectionGridCard({
                     cursor="pointer"
                     onMouseEnter={() => setIsHovering(true)}
                     onMouseLeave={() => setIsHovering(false)}>
-                    {isCollection && <CollectionThumbnail item={item} />}
-                    {isImage && <ImageThumbnail item={item} />}
-                    {isVideo && <VideoThumbnail item={item} />}
+                    {isCollection && (
+                        <CollectionThumbnail
+                            item={item as CollectionDto}
+                            isHovering={isHovering}
+                        />
+                    )}
+                    {isImage && (
+                        <ImageThumbnail item={item as CollectionFileDto} />
+                    )}
+                    {isVideo && (
+                        <VideoThumbnail item={item as CollectionFileDto} />
+                    )}
 
                     {(isHovering || isMenuOpen) && (
                         <Menu
@@ -143,24 +151,6 @@ export default function CollectionGridCard({
                                 </MenuItem>
                             </MenuList>
                         </Menu>
-                    )}
-                    {!isCollection && (isHovering || isMenuOpen) && (
-                        <Box
-                            position="absolute"
-                            bottom={0}
-                            p={2}
-                            width="100%"
-                            whiteSpace="nowrap"
-                            overflow="hidden"
-                            textOverflow="ellipsis"
-                            cursor="text"
-                            title={item.name}
-                            color="whiteAlpha.800"
-                            style={{
-                                filter: "drop-shadow(0 0 2px black)"
-                            }}>
-                            {item.name}
-                        </Box>
                     )}
                     {isDeleting && (
                         <Spinner
@@ -222,7 +212,13 @@ export default function CollectionGridCard({
     );
 }
 
-const CollectionThumbnail = ({ item }: { item: CollectionGridItem }) => {
+const CollectionThumbnail = ({
+    item,
+    isHovering
+}: {
+    item: CollectionDto;
+    isHovering: boolean;
+}) => {
     const router = useRouter();
 
     const thumbnails = item.thumbnails || [];
@@ -235,76 +231,95 @@ const CollectionThumbnail = ({ item }: { item: CollectionGridItem }) => {
     return (
         <>
             <Flex
-                direction="column"
-                alignItems="center"
                 justifyContent="center"
+                alignItems="center"
                 w="100%"
                 h="100%"
                 onClick={() => router.push(`/collections/${item.id}`)}>
-                <Flex
-                    justifyContent="center"
-                    alignItems="center"
-                    w="100%"
-                    h="100%">
-                    {thumbnails.length > 1 && (
-                        <figure
-                            onClick={() =>
-                                router.push(`/collections/${item.id}`)
-                            }
-                            className="stack-sidegrid">
-                            {thumbnails.map((src, i) => (
-                                <Image
-                                    key={i}
-                                    src={src}
-                                    alt={item.name}
-                                    fill
-                                    style={{
-                                        objectFit: "cover"
-                                    }}
-                                />
-                            ))}
-                        </figure>
-                    )}
-                    {thumbnails.length === 1 && (
-                        <Box w="100%" h="100%" position="relative">
+                {thumbnails.length > 1 && (
+                    <figure
+                        className="stack-sidegrid">
+                        {thumbnails.map((src, i) => (
                             <Image
-                                src={thumbnails[0]}
+                                key={i}
+                                src={src}
                                 alt={item.name}
                                 fill
                                 style={{
-                                    position: "absolute",
                                     objectFit: "cover"
                                 }}
                             />
-                        </Box>
-                    )}
-                    {thumbnails.length === 0 && (
-                        <Icon path={mdiImageOutline} size={4} />
-                    )}
-                    <Box
-                        position="absolute"
-                        pointerEvents="none"
-                        p={1}
-                        top={0}
-                        left={0}
-                        color="whiteAlpha.800">
-                        <Icon
-                            path={mdiImageMultiple}
-                            size={1}
+                        ))}
+                    </figure>
+                )}
+                {thumbnails.length === 1 && (
+                    <Box w="100%" h="100%" position="relative">
+                        <Image
+                            src={thumbnails[0]}
+                            alt={item.name}
+                            fill
                             style={{
-                                filter: "drop-shadow(0 0 2px black)"
+                                position: "absolute",
+                                objectFit: "cover"
                             }}
                         />
                     </Box>
-                </Flex>
-
-                <span>{item.name}</span>
+                )}
+                {thumbnails.length === 0 && (
+                    <Icon path={mdiImageOutline} size={4} />
+                )}
+                <Box
+                    position="absolute"
+                    pointerEvents="none"
+                    p={1}
+                    top={0}
+                    left={0}
+                    color="whiteAlpha.800">
+                    <Icon
+                        path={mdiImageMultiple}
+                        size={1}
+                        style={{
+                            filter: "drop-shadow(0 0 2px black)"
+                        }}
+                    />
+                </Box>
+            </Flex>
+            <Flex
+                justifyContent="center"
+                alignItems="flex-end"
+                position="absolute"
+                bottom={0}
+                width="100%"
+                height="100%"
+                p={2}
+                whiteSpace="nowrap"
+                overflow="hidden"
+                textOverflow="ellipsis"
+                cursor="text"
+                title={item.name}
+                color="whiteAlpha.800"
+                backgroundImage={`linear-gradient(
+                    rgba(0, 0, 0, 0.0) 50%,
+                    rgba(0, 0, 0, 0.9) 100%
+                )`}
+                pointerEvents="none"
+                transition="all 0.3s"
+                opacity={isHovering ? 0 : 1}>
+                <span
+                    style={{
+                        textShadow: `-1px -1px 0 rgba(0, 0, 0, 0.4), 
+                                        1px -1px 0 rgba(0, 0, 0, 0.4), 
+                                        -1px 1px 0 rgba(0, 0, 0, 0.4), 
+                                        1px 1px 0 rgba(0, 0, 0, 0.4)`
+                    }}>
+                    {item.name}
+                </span>
             </Flex>
         </>
     );
 };
 
-const ImageThumbnail = ({ item }: { item: CollectionGridItem }) => {
+const ImageThumbnail = ({ item }: { item: CollectionFileDto }) => {
     return (
         <PhotoView src={item.src!}>
             <Box maxW="100%" maxH="100%" overflow="hidden">
@@ -321,7 +336,7 @@ const ImageThumbnail = ({ item }: { item: CollectionGridItem }) => {
     );
 };
 
-const VideoThumbnail = ({ item }: { item: CollectionGridItem }) => {
+const VideoThumbnail = ({ item }: { item: CollectionFileDto }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
 
     // TODO check these:

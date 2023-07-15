@@ -63,6 +63,37 @@ interface GetStreamResult {
 export class CollectionService {
     constructor(private readonly userId: string) {}
 
+    async get(collectionId: string): Promise<GetResult> {
+        if (!isUuidv4(collectionId)) {
+            return {
+                notFound: true
+            };
+        }
+        const db = await Database.getInstance();
+        const collection = await db.models.Collection.findOne({
+            where: {
+                id: collectionId,
+                UserId: this.userId
+            },
+            include: db.models.Tag
+        });
+        if (!collection) {
+            return {
+                notFound: true
+            };
+        }
+        return {
+            collection: {
+                id: collection.id,
+                name: collection.name,
+                tags: collection.Tags?.map((tag) => tag.name) || [],
+                thumbnails: [],
+                createdAt: collection.createdAt.getTime(),
+                updatedAt: collection.updatedAt.getTime()
+            }
+        };
+    }
+
     async deleteFile(
         collectionId: string,
         fileId: string

@@ -1,9 +1,9 @@
 import { useState } from "react";
 
-export function useDeleteFile(collectionId: string) {
+export function useDeleteFile() {
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const deleteFile = async (id: string) => {
+    const deleteFile = async (collectionId: string, id: string) => {
         setIsDeleting(true);
         const response = await fetch(
             `/api/collections/${collectionId}/files/${id}`,

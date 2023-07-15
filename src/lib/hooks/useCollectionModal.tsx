@@ -45,10 +45,11 @@ export function useCollectionModal(initialCollection?: Partial<CollectionDto>) {
             id: data.collection.id,
             name: data.collection.name,
             tags: data.collection.tags,
-            createdAt: data.createdAt,
-            updatedAt: data.updatedAt
+            createdAt: data.collection.createdAt,
+            updatedAt: data.collection.updatedAt,
+            thumbnails: data.collection.thumbnails
         };
-        
+
         return Promise.resolve(collection);
     };
 

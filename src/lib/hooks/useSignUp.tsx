@@ -1,4 +1,4 @@
-import { useRouter } from "next/navigation";
+import { useRouter } from "next/router";
 import { useState } from "react";
 import { isValidPassword, isValidUsername } from "../common/utilities";
 
@@ -12,7 +12,7 @@ export function useSignUp() {
 
     const [isLoading, setIsLoading] = useState(false);
 
-    const { push } = useRouter();
+    const router = useRouter();
 
     const signUp = async () => {
         const passwordValid = isValidPassword(password);
@@ -50,7 +50,7 @@ export function useSignUp() {
             return Promise.reject(data.serverError);
         }
 
-        await push("/");
+        await router.push("/");
         return Promise.resolve();
     };
 

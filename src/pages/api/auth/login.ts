@@ -12,7 +12,7 @@ async function post(req: NextApiRequest, res: NextApiResponse<ApiResponse>) {
     if (!user) {
         res.status(401).json({
             status: "error",
-            error: "Username doesn't exist or the password is wrong"
+            error: "Username doesn't exist or the password is incorrect"
         });
         return;
     }
