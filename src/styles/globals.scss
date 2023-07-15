@@ -110,24 +110,55 @@ a {
     }
 }
 
-.collection-icon{
-    width: 80%;
-    height: 55%;
-    margin: 0 auto;
-    margin-top: 50px;
+// https://tympanus.net/Development/StackEffects/
+.stack-sidegrid {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    max-height: 100%;
+    padding: 0;
+    margin: 0;
+    display: block;
     position: relative;
-    background-color: #708090;
-    border-radius: 0 6px 6px 6px;
-    box-shadow: 4px 4px 7px rgba(0, 0, 0, 0.59);
-}
 
-.collection-icon:before {
-    content: '';
-    width: 50%;
-    height: 12px;
-    border-radius: 0 20px 0 0;
-    background-color: #708090;
-    position: absolute;
-    top: -12px;
-    left: 0px;
+    img {
+        max-width: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+        transition: all 0.3s;
+        outline: 1px solid transparent;
+    }
+
+    img:last-child {
+        position: relative;
+    }
+
+    img:first-child,
+    img:nth-child(2),
+    img:nth-child(3) {
+        transform: scale(0);
+    }
+
+    img:nth-child(4) {
+        transform-origin: 0 0;
+    }
+
+    img:nth-child(3) {
+        transform-origin: 100% 0;
+    }
+
+    img:nth-child(2) {
+        transform-origin: 0 100%;
+    }
+
+    img:first-child {
+        transform-origin: 100% 100%;
+    }
+
+    &:hover {
+        img {
+            transform: scale(0.48);
+        }
+    }
 }

@@ -147,6 +147,7 @@ export function collectionsToGridItems(
             name: collection.name,
             type: "collection" as ItemType,
             tags: collection.tags,
+            thumbnails: collection.thumbnails,
             timestamp: new Date(collection.createdAt)
         }))
         .sort(caseInsensitiveSorter("name"));

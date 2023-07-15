@@ -46,6 +46,7 @@
         "@types/bcrypt": "^5.0.0",
         "@types/ffprobe-static": "^2.0.1",
         "@types/fluent-ffmpeg": "^2.1.21",
-        "@types/formidable": "^3.4.0"
+        "@types/formidable": "^3.4.0",
+        "sass": "^1.63.6"
     }
 }

@@ -129,31 +129,36 @@ export class CollectionService {
                 notFound: true
             };
         }
+        const files =
+            collection.CollectionFiles?.map((file) => ({
+                id: file.id,
+                collectionId: file.CollectionId,
+                name: file.label,
+                mimeType: file.mimeType,
+                src: this.getSrc(file.CollectionId, file.id, file.mimeType),
+                thumbnailSrc: this.getSrc(
+                    file.CollectionId,
+                    file.id,
+                    file.mimeType,
+                    true
+                ),
+                width: file.width,
+                height: file.height,
+                thumbnailWidth: file.thumbnailWidth,
+                thumbnailHeight: file.thumbnailHeight,
+                createdAt: file.createdAt.getTime(),
+                updatedAt: file.updatedAt.getTime()
+            })) || [];
         return {
             collection: {
                 id: collection.id,
                 name: collection.name,
                 createdAt: collection.createdAt.getTime(),
                 updatedAt: collection.updatedAt.getTime(),
-                tags: collection.Tags?.map((tag) => tag.name) || []
+                tags: collection.Tags?.map((tag) => tag.name) || [],
+                thumbnails: files.slice(0, 4).map((file) => file.thumbnailSrc)
             },
-            files:
-                collection.CollectionFiles?.map((file) => ({
-                    id: file.id,
-                    collectionId: file.CollectionId,
-                    name: file.label,
-                    mimeType: file.mimeType,
-                    src: `/api/collections/${file.CollectionId}/files?${
-                        file.mimeType.includes("image") ? "image" : "video"
-                    }=${file.id}`,
-                    thumbnailSrc: `/api/collections/${file.CollectionId}/files?thumbnail=${file.id}`,
-                    width: file.width,
-                    height: file.height,
-                    thumbnailWidth: file.thumbnailWidth,
-                    thumbnailHeight: file.thumbnailHeight,
-                    createdAt: file.createdAt.getTime(),
-                    updatedAt: file.updatedAt.getTime()
-                })) || []
+            files
         };
     }
 
@@ -260,6 +265,9 @@ export class CollectionService {
             if (!files || error) {
                 throw error;
             }
+            collection.thumbnails = files
+                .map((file) => file.thumbnailSrc)
+                .slice(0, 4);
             return {
                 collection
             };
@@ -343,6 +351,10 @@ export class CollectionService {
                 where: {
                     UserId: this.userId,
                     id: collection.id
+                },
+                include: {
+                    model: db.models.CollectionFile,
+                    limit: 4
                 }
             });
             if (!collectionInDb) {
@@ -393,7 +405,16 @@ export class CollectionService {
                     name: collectionInDb.name,
                     createdAt: collectionInDb.createdAt.getTime(),
                     updatedAt: collectionInDb.updatedAt.getTime(),
-                    tags: collectionTags.map((tag) => tag.TagName)
+                    tags: collectionTags.map((tag) => tag.TagName),
+                    thumbnails:
+                        collectionInDb.CollectionFiles?.map((file) =>
+                            this.getSrc(
+                                collectionInDb.id,
+                                file.id,
+                                file.mimeType,
+                                true
+                            )
+                        ) || []
                 }
             };
         }).catch((error) => {
@@ -467,7 +488,8 @@ export class CollectionService {
                     name: collection.name,
                     createdAt: collection.createdAt.getTime(),
                     updatedAt: collection.updatedAt.getTime(),
-                    tags: collectionTags.map((tag) => tag.TagName)
+                    tags: collectionTags.map((tag) => tag.TagName),
+                    thumbnails: []
                 }
             };
         });
@@ -480,12 +502,24 @@ export class CollectionService {
                 where: {
                     UserId: this.userId
                 },
-                include: db.models.Tag
+                include: [
+                    {
+                        model: db.models.Tag
+                    },
+                    {
+                        model: db.models.CollectionFile,
+                        limit: 4
+                    }
+                ]
             });
             return result.map((collection) => ({
                 id: collection.id,
                 name: collection.name,
                 tags: collection.Tags?.map((tag) => tag.name) || [],
+                thumbnails:
+                    collection.CollectionFiles?.map((file) =>
+                        this.getSrc(collection.id, file.id, file.mimeType, true)
+                    ) || [],
                 createdAt: collection.createdAt.getTime(),
                 updatedAt: collection.updatedAt.getTime()
             }));

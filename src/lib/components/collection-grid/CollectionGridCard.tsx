@@ -23,7 +23,12 @@ import {
     useDisclosure,
     useToast
 } from "@chakra-ui/react";
-import { mdiDotsVertical, mdiPlayCircle } from "@mdi/js";
+import {
+    mdiDotsVertical,
+    mdiImageMultiple,
+    mdiImageOutline,
+    mdiPlayCircle
+} from "@mdi/js";
 import Icon from "@mdi/react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -108,18 +113,8 @@ export default function CollectionGridCard({
                     onMouseEnter={() => setIsHovering(true)}
                     onMouseLeave={() => setIsHovering(false)}>
                     {isCollection && <CollectionThumbnail item={item} />}
-                    {isImage && (
-                        <ImageThumbnail
-                            item={item}
-                            isDim={isHovering || isMenuOpen}
-                        />
-                    )}
-                    {isVideo && (
-                        <VideoThumbnail
-                            item={item}
-                            isDim={isHovering || isMenuOpen}
-                        />
-                    )}
+                    {isImage && <ImageThumbnail item={item} />}
+                    {isVideo && <VideoThumbnail item={item} />}
 
                     {(isHovering || isMenuOpen) && (
                         <Menu
@@ -133,6 +128,9 @@ export default function CollectionGridCard({
                                 position="absolute"
                                 right="0.5rem"
                                 top="0.5rem"
+                                style={{
+                                    filter: "drop-shadow(0 0 2px black)"
+                                }}
                             />
 
                             <MenuList>
@@ -157,7 +155,10 @@ export default function CollectionGridCard({
                             textOverflow="ellipsis"
                             cursor="text"
                             title={item.name}
-                            color="whiteAlpha.800">
+                            color="whiteAlpha.800"
+                            style={{
+                                filter: "drop-shadow(0 0 2px black)"
+                            }}>
                             {item.name}
                         </Box>
                     )}
@@ -224,49 +225,103 @@ export default function CollectionGridCard({
 const CollectionThumbnail = ({ item }: { item: CollectionGridItem }) => {
     const router = useRouter();
 
+    const thumbnails = item.thumbnails || [];
+    if (thumbnails.length > 1 && thumbnails.length < 4) {
+        for (let i = thumbnails.length; i < 4; i++) {
+            thumbnails.push(thumbnails[(i * 20) % thumbnails.length]);
+        }
+    }
+
     return (
-        <Flex
-            direction="column"
-            alignItems="center"
-            justifyContent="center"
-            w="100%"
-            h="100%"
-            onClick={() => router.push(`/collections/${item.id}`)}>
-            <div className="collection-icon" />
-            <span>{item.name}</span>
-        </Flex>
+        <>
+            <Flex
+                direction="column"
+                alignItems="center"
+                justifyContent="center"
+                w="100%"
+                h="100%"
+                onClick={() => router.push(`/collections/${item.id}`)}>
+                <Flex
+                    justifyContent="center"
+                    alignItems="center"
+                    w="100%"
+                    h="100%">
+                    {thumbnails.length > 1 && (
+                        <figure
+                            onClick={() =>
+                                router.push(`/collections/${item.id}`)
+                            }
+                            className="stack-sidegrid">
+                            {thumbnails.map((src, i) => (
+                                <Image
+                                    key={i}
+                                    src={src}
+                                    alt={item.name}
+                                    fill
+                                    style={{
+                                        objectFit: "cover"
+                                    }}
+                                />
+                            ))}
+                        </figure>
+                    )}
+                    {thumbnails.length === 1 && (
+                        <Box w="100%" h="100%" position="relative">
+                            <Image
+                                src={thumbnails[0]}
+                                alt={item.name}
+                                fill
+                                style={{
+                                    position: "absolute",
+                                    objectFit: "cover"
+                                }}
+                            />
+                        </Box>
+                    )}
+                    {thumbnails.length === 0 && (
+                        <Icon path={mdiImageOutline} size={4} />
+                    )}
+                    <Box
+                        position="absolute"
+                        pointerEvents="none"
+                        p={1}
+                        top={0}
+                        left={0}
+                        color="whiteAlpha.800">
+                        <Icon
+                            path={mdiImageMultiple}
+                            size={1}
+                            style={{
+                                filter: "drop-shadow(0 0 2px black)"
+                            }}
+                        />
+                    </Box>
+                </Flex>
+
+                <span>{item.name}</span>
+            </Flex>
+        </>
     );
 };
 
-const ImageThumbnail = ({
-    item,
-    isDim
-}: {
-    item: CollectionGridItem;
-    isDim: boolean;
-}) => {
+const ImageThumbnail = ({ item }: { item: CollectionGridItem }) => {
     return (
         <PhotoView src={item.src!}>
-            <Image
-                src={item.thumbnailSrc!}
-                alt={item.name}
-                fill
-                style={{
-                    objectFit: "cover",
-                    filter: isDim ? "brightness(60%) blur(1px)" : ""
-                }}
-            />
+            <Box maxW="100%" maxH="100%" overflow="hidden">
+                <Image
+                    src={item.thumbnailSrc!}
+                    alt={item.name}
+                    fill
+                    style={{
+                        objectFit: "cover"
+                    }}
+                />
+            </Box>
         </PhotoView>
     );
 };
 
-const VideoThumbnail = ({
-    item,
-    isDim
-}: {
-    item: CollectionGridItem;
-    isDim: boolean;
-}) => {
+const VideoThumbnail = ({ item }: { item: CollectionGridItem }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
 
     // TODO check these:
@@ -306,8 +361,7 @@ const VideoThumbnail = ({
                     alt={item.name}
                     fill
                     style={{
-                        objectFit: "cover",
-                        filter: isDim ? "brightness(60%) blur(1px)" : ""
+                        objectFit: "cover"
                     }}
                     onClick={() => {
                         setTimeout(() => videoRef.current?.play(), 1000);
@@ -319,7 +373,13 @@ const VideoThumbnail = ({
                 pointerEvents="none"
                 p={1}
                 color="whiteAlpha.800">
-                <Icon path={mdiPlayCircle} size={1} />
+                <Icon
+                    path={mdiPlayCircle}
+                    size={1}
+                    style={{
+                        filter: "drop-shadow(0 0 2px black)"
+                    }}
+                />
             </Box>
         </>
     );

@@ -12,6 +12,5 @@ export interface CollectionGridItem {
     thumbnailSrc?: string;
     thumbnailWidth?: number;
     thumbnailHeight?: number;
-    isDeleting?: boolean
-    isSaving?: boolean;
+    thumbnails?: string[]
 }
