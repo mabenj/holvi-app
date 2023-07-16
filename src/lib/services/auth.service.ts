@@ -3,7 +3,6 @@ import { IronSession } from "iron-session";
 import Cryptography from "../common/cryptography";
 import Log from "../common/log";
 import { UserDto } from "../interfaces/user-dto";
-import { SignUpFormData, SignUpValidator } from "../validators/sign-up";
 
 interface RegisterUserResult {
     usernameError?: string;
@@ -13,17 +12,9 @@ interface RegisterUserResult {
 
 export default class AuthService {
     static async registerUser(
-        data: SignUpFormData
+        username: string,
+        password: string
     ): Promise<RegisterUserResult> {
-        const parsed = SignUpValidator.safeParse(data);
-        if (!parsed.success) {
-            const { fieldErrors: errors } = parsed.error.flatten();
-            const usernameError = errors.username?.join(", ");
-            const passwordError = errors.password?.join(", ");
-            return { usernameError, passwordError };
-        }
-        const { username, password } = parsed.data;
-
         const db = await Database.getInstance();
         const existing = await db.models.User.findOne({
             where: { username: username },

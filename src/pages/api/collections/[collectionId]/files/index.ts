@@ -1,16 +1,9 @@
-import { ApiRoute } from "@/lib/common/api-route";
-import { ApiResponse } from "@/lib/interfaces/api-response";
-import { CollectionDto } from "@/lib/interfaces/collection-dto";
+import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
 import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
+import { GetCollectionFilesResponse } from "@/lib/interfaces/get-collection-files-response";
 import { CollectionService } from "@/lib/services/collection.service";
-import type { NextApiRequest, NextApiResponse } from "next";
 
-interface GetFilesResult {
-    collection?: CollectionDto;
-    files?: CollectionFileDto[];
-}
-
-async function get(req: NextApiRequest, res: NextApiResponse) {
+async function get(req: ApiRequest, res: ApiResponse) {
     const {
         collectionId,
         video: videoId,
@@ -34,28 +27,26 @@ async function get(req: NextApiRequest, res: NextApiResponse) {
     if (videoId) {
         return handleGetCollectionVideo(req, res, collectionId, videoId);
     }
-    res.status(404).end();
+    res.status(404).json({ status: "error", error: "Not found" });
 }
 
 async function handleGetCollectionFiles(
-    req: NextApiRequest,
-    res: NextApiResponse<ApiResponse<GetFilesResult>>,
+    req: ApiRequest,
+    res: ApiResponse<GetCollectionFilesResponse>,
     collectionId: string
 ) {
     const service = new CollectionService(req.session.user.id);
-    const { notFound, collection, files } = await service.getCollectionFiles(
-        collectionId?.toString() || ""
-    );
-    if (notFound || !collection) {
+    const { notFound, files } = await service.getCollectionFiles(collectionId);
+    if (notFound) {
         res.status(404).json({ status: "error", error: "Not found" });
         return;
     }
-    res.status(200).json({ status: "ok", collection, files });
+    res.status(200).json({ status: "ok", files });
 }
 
 async function handleGetThumbnail(
-    req: NextApiRequest,
-    res: NextApiResponse<ApiResponse>,
+    req: ApiRequest,
+    res: ApiResponse,
     collectionId: string,
     fileId: string
 ) {
@@ -79,8 +70,8 @@ async function handleGetThumbnail(
 }
 
 async function handleGetCollectionImage(
-    req: NextApiRequest,
-    res: NextApiResponse<ApiResponse>,
+    req: ApiRequest,
+    res: ApiResponse,
     collectionId: string,
     imageId: string
 ) {
@@ -100,8 +91,8 @@ async function handleGetCollectionImage(
 }
 
 async function handleGetCollectionVideo(
-    req: NextApiRequest,
-    res: NextApiResponse<ApiResponse>,
+    req: ApiRequest,
+    res: ApiResponse,
     collectionId: string,
     videoId: string
 ) {
@@ -147,4 +138,8 @@ export const config = {
     }
 };
 
-export default ApiRoute.create({ get: get });
+export default ApiRoute.create({
+    get: {
+        handler: get
+    }
+});

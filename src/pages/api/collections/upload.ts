@@ -1,16 +1,14 @@
-import { ApiRoute } from "@/lib/common/api-route";
-import { ApiResponse } from "@/lib/interfaces/api-response";
+import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
 import { CollectionDto } from "@/lib/interfaces/collection-dto";
 import { CollectionService } from "@/lib/services/collection.service";
-import { NextApiRequest, NextApiResponse } from "next";
 
-interface UploadResult {
+interface UploadCollectionResponse {
     collection?: CollectionDto;
 }
 
 async function uploadCollection(
-    req: NextApiRequest,
-    res: NextApiResponse<ApiResponse<UploadResult>>
+    req: ApiRequest,
+    res: ApiResponse<UploadCollectionResponse>
 ) {
     const { name } = req.query as { name: string };
     if (!name) {
@@ -42,5 +40,7 @@ export const config = {
 };
 
 export default ApiRoute.create({
-    post: uploadCollection
+    post: {
+        handler: uploadCollection
+    }
 });

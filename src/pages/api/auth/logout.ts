@@ -1,10 +1,12 @@
-import { ApiRoute } from "@/lib/common/api-route";
-import { ApiResponse } from "@/lib/interfaces/api-response";
-import type { NextApiRequest, NextApiResponse } from "next";
+import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
 
-function post(req: NextApiRequest, res: NextApiResponse<ApiResponse>) {
+function post(req: ApiRequest, res: ApiResponse) {
     req.session.destroy();
     res.status(200).json({ status: "ok" });
 }
 
-export default ApiRoute.create({ post });
+export default ApiRoute.create({
+    post: {
+        handler: post
+    }
+});

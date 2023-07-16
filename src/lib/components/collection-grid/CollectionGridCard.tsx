@@ -24,7 +24,7 @@ import {
 } from "@chakra-ui/react";
 import {
     mdiDotsVertical,
-    mdiImageMultiple,
+    mdiFolderMultipleImage,
     mdiImageOutline,
     mdiPlayCircle
 } from "@mdi/js";
@@ -237,8 +237,7 @@ const CollectionThumbnail = ({
                 h="100%"
                 onClick={() => router.push(`/collections/${item.id}`)}>
                 {thumbnails.length > 1 && (
-                    <figure
-                        className="stack-sidegrid">
+                    <figure className="stack-sidegrid">
                         {thumbnails.map((src, i) => (
                             <Image
                                 key={i}
@@ -276,7 +275,7 @@ const CollectionThumbnail = ({
                     left={0}
                     color="whiteAlpha.800">
                     <Icon
-                        path={mdiImageMultiple}
+                        path={mdiFolderMultipleImage}
                         size={1}
                         style={{
                             filter: "drop-shadow(0 0 2px black)"

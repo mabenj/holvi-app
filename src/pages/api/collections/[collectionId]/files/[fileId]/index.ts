@@ -1,15 +1,13 @@
-import { ApiRoute } from "@/lib/common/api-route";
-import { ApiResponse } from "@/lib/interfaces/api-response";
+import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
 import { CollectionService } from "@/lib/services/collection.service";
-import type { NextApiRequest, NextApiResponse } from "next";
 
-async function deleteFile(
-    req: NextApiRequest,
-    res: NextApiResponse<ApiResponse>
-) {
-    const { collectionId, fileId } = req.query as {collectionId: string, fileId: string};
+async function deleteFile(req: ApiRequest, res: ApiResponse) {
+    const { collectionId, fileId } = req.query as {
+        collectionId: string;
+        fileId: string;
+    };
     const collectionService = new CollectionService(req.session.user.id);
-    const { error } = await collectionService.deleteFile(collectionId, fileId)
+    const { error } = await collectionService.deleteFile(collectionId, fileId);
     if (error) {
         res.status(400).json({ status: "error", error });
         return;
@@ -17,4 +15,8 @@ async function deleteFile(
     res.status(200).json({ status: "ok" });
 }
 
-export default ApiRoute.create({ delete: deleteFile });
+export default ApiRoute.create({
+    delete: {
+        handler: deleteFile
+    }
+});

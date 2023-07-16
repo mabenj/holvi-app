@@ -1,21 +1,15 @@
-import { ApiRoute } from "@/lib/common/api-route";
-import { ApiResponse } from "@/lib/interfaces/api-response";
-import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
+import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
+import { UploadFilesResponse } from "@/lib/interfaces/upload-files-response";
 import { CollectionService } from "@/lib/services/collection.service";
-import type { NextApiRequest, NextApiResponse } from "next";
-
-interface Result {
-    files?: CollectionFileDto[];
-}
 
 async function uploadFiles(
-    req: NextApiRequest,
-    res: NextApiResponse<ApiResponse<Result>>
+    req: ApiRequest,
+    res: ApiResponse<UploadFilesResponse>
 ) {
-    const { collectionId } = req.query;
+    const { collectionId } = req.query as { collectionId: string };
     const collectionService = new CollectionService(req.session.user.id);
     const { error, files } = await collectionService.uploadFiles(
-        collectionId?.toString() || "",
+        collectionId,
         req
     );
     if (error) {
@@ -31,4 +25,8 @@ export const config = {
     }
 };
 
-export default ApiRoute.create({ post: uploadFiles });
+export default ApiRoute.create({
+    post: {
+        handler: uploadFiles
+    }
+});

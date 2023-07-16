@@ -1,7 +1,13 @@
 import { ApiResponse } from "@/lib/interfaces/api-response";
 import { SignUpResponse } from "@/lib/interfaces/sign-up-response";
-import { LoginFormData, LoginValidator } from "@/lib/validators/login";
-import { SignUpFormData, SignUpValidator } from "@/lib/validators/sign-up";
+import {
+    LoginFormData,
+    LoginValidator
+} from "@/lib/validators/login-validator";
+import {
+    SignUpFormData,
+    SignUpValidator
+} from "@/lib/validators/sign-up-validator";
 import {
     Box,
     Button,
@@ -72,11 +78,11 @@ const LoginCard = () => {
             setError("password", { message: data.error }); // show the message only below pwd field
             return;
         }
-        await router.push("/")
+        await router.push("/");
         toast({
             description: "Successfully logged in",
             status: "success"
-        })
+        });
     };
 
     return (

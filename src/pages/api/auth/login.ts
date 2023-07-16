@@ -1,14 +1,13 @@
-import { ApiRoute } from "@/lib/common/api-route";
-import { ApiResponse } from "@/lib/interfaces/api-response";
+import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
 import AuthService from "@/lib/services/auth.service";
-import type { NextApiRequest, NextApiResponse } from "next";
+import {
+    LoginFormData,
+    LoginValidator
+} from "@/lib/validators/login-validator";
 
-async function post(req: NextApiRequest, res: NextApiResponse<ApiResponse>) {
-    const { username, password } = JSON.parse(req.body);
-    const user =
-        username && password
-            ? await AuthService.loginUser(username, password)
-            : null;
+async function post(req: ApiRequest<LoginFormData>, res: ApiResponse) {
+    const { username, password } = req.body;
+    const user = await AuthService.loginUser(username, password);
     if (!user) {
         res.status(401).json({
             status: "error",
@@ -22,4 +21,10 @@ async function post(req: NextApiRequest, res: NextApiResponse<ApiResponse>) {
     res.status(200).json({ status: "ok" });
 }
 
-export default ApiRoute.create({ authenticate: false, post });
+export default ApiRoute.create({
+    post: {
+        handler: post,
+        authenticate: false,
+        validator: LoginValidator
+    }
+});

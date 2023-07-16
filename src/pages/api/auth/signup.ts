@@ -1,16 +1,17 @@
-import { ApiRoute } from "@/lib/common/api-route";
-import { ApiResponse } from "@/lib/interfaces/api-response";
+import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
 import { SignUpResponse } from "@/lib/interfaces/sign-up-response";
 import AuthService from "@/lib/services/auth.service";
-import type { NextApiRequest, NextApiResponse } from "next";
+import {
+    SignUpFormData,
+    SignUpValidator
+} from "@/lib/validators/sign-up-validator";
 
 async function post(
-    req: NextApiRequest,
-    res: NextApiResponse<ApiResponse<SignUpResponse>>
+    req: ApiRequest<SignUpFormData>,
+    res: ApiResponse<SignUpResponse>
 ) {
-    const data = JSON.parse(req.body);
     const { usernameError, passwordError, user } =
-        await AuthService.registerUser(data);
+        await AuthService.registerUser(req.body.username, req.body.password);
     if (!user || usernameError || passwordError) {
         res.status(400).json({
             status: "error",
@@ -26,4 +27,10 @@ async function post(
     res.status(201).json({ status: "ok" });
 }
 
-export default ApiRoute.create({ authenticate: false, post });
+export default ApiRoute.create({
+    post: {
+        handler: post,
+        authenticate: false,
+        validator: SignUpValidator
+    }
+});

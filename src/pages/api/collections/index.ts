@@ -1,24 +1,20 @@
-import { ApiRoute } from "@/lib/common/api-route";
-import { ApiResponse } from "@/lib/interfaces/api-response";
-import { CollectionDto } from "@/lib/interfaces/collection-dto";
+import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
+import { CreateCollectionResponse } from "@/lib/interfaces/create-collection-response";
+import { GetCollectionsResponse } from "@/lib/interfaces/get-collections-results";
+import { UpdateCollectionResponse } from "@/lib/interfaces/update-collection-result";
 import { CollectionService } from "@/lib/services/collection.service";
-import type { NextApiRequest, NextApiResponse } from "next";
-
-interface GetAllResult {
-    collections?: CollectionDto[];
-}
-
-interface UpdateResult {
-    collection?: CollectionDto;
-}
-
-interface CreateResult {
-    collection?: CollectionDto;
-}
+import {
+    CreateCollectionFormData,
+    CreateCollectionValidator
+} from "@/lib/validators/create-collection-validator";
+import {
+    UpdateCollectionData,
+    UpdateCollectionValidator
+} from "@/lib/validators/update-collection-validator";
 
 async function getCollections(
-    req: NextApiRequest,
-    res: NextApiResponse<ApiResponse<GetAllResult>>
+    req: ApiRequest,
+    res: ApiResponse<GetCollectionsResponse>
 ) {
     const collectionService = new CollectionService(req.session.user.id);
     const collections = await collectionService.getAll();
@@ -26,13 +22,12 @@ async function getCollections(
 }
 
 async function updateCollection(
-    req: NextApiRequest,
-    res: NextApiResponse<ApiResponse<UpdateResult>>
+    req: ApiRequest<UpdateCollectionData>,
+    res: ApiResponse<UpdateCollectionResponse>
 ) {
-    const collection = JSON.parse(req.body) as CollectionDto;
     const collectionService = new CollectionService(req.session.user.id);
     const { collection: updated, error } = await collectionService.update(
-        collection
+        req.body
     );
     if (error) {
         res.status(400).json({ status: "error", error });
@@ -42,10 +37,10 @@ async function updateCollection(
 }
 
 async function createCollection(
-    req: NextApiRequest,
-    res: NextApiResponse<ApiResponse<CreateResult>>
+    req: ApiRequest<CreateCollectionFormData>,
+    res: ApiResponse<CreateCollectionResponse>
 ) {
-    const { name, tags } = JSON.parse(req.body);
+    const { name, tags } = req.body;
     const collectionService = new CollectionService(req.session.user.id);
     const { collection, error } = await collectionService.create(name, tags);
     if (!collection || error) {
@@ -60,7 +55,15 @@ async function createCollection(
 }
 
 export default ApiRoute.create({
-    get: getCollections,
-    post: createCollection,
-    put: updateCollection
+    get: {
+        handler: getCollections
+    },
+    post: {
+        handler: createCollection,
+        validator: CreateCollectionValidator
+    },
+    put: {
+        handler: updateCollection,
+        validator: UpdateCollectionValidator
+    }
 });

@@ -1,4 +1,5 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { z } from "zod";
 import Log from "./log";
 import { withUser, withoutUser } from "./route-helpers";
 
@@ -9,56 +10,106 @@ enum HttpMethod {
     PUT = "PUT"
 }
 
-interface ApiRouteOptions {
+type ApiHandler = (
+    req: ApiRequest,
+    res: ApiResponse
+) => unknown | Promise<unknown>;
+
+export type ApiRequest<T = any> = Omit<NextApiRequest, "body"> & { body: T };
+
+export type ApiResponse<T = {}> = NextApiResponse<
+    SuccessResponse<T> | ErrorResponse<T>
+>;
+
+type SuccessResponse<T> = {
+    status: "ok";
+} & T;
+
+type ErrorResponse<T> = {
+    status: "error";
+    error: string;
+} & T;
+
+interface ApiHandlerOptions {
+    handler: ApiHandler;
+    validator?: z.ZodType;
+    /**
+     * Default: true
+     */
     authenticate?: boolean;
-    get?: NextApiHandler;
-    post?: NextApiHandler;
-    delete?: NextApiHandler;
-    put?: NextApiHandler;
+}
+
+interface ApiRouteOptions {
+    get?: ApiHandlerOptions;
+    post?: ApiHandlerOptions;
+    delete?: ApiHandlerOptions;
+    put?: ApiHandlerOptions;
 }
 
 export class ApiRoute {
-    static create(options: ApiRouteOptions) {
+    static create(options: ApiRouteOptions): NextApiHandler {
         const {
-            authenticate = true,
-            get: getHandler,
-            post: postHandler,
-            delete: deleteHandler,
-            put: putHandler
+            get: getOptions,
+            post: postOptions,
+            delete: deleteOptions,
+            put: putOptions
         } = options;
 
-        const handle = (req: NextApiRequest, res: NextApiResponse) => {
+        const handle: NextApiHandler = async (req, res) => {
             Log.info(`${req.method}: ${req.url}`);
-            try {
-                switch (req.method) {
-                    case HttpMethod.GET: {
-                        if (typeof getHandler !== "function") {
-                            break;
-                        }
-                        return getHandler(req, res);
-                    }
-                    case HttpMethod.POST: {
-                        if (typeof postHandler !== "function") {
-                            break;
-                        }
-                        return postHandler(req, res);
-                    }
-                    case HttpMethod.DELETE: {
-                        if (typeof deleteHandler !== "function") {
-                            break;
-                        }
-                        return deleteHandler(req, res);
-                    }
-                    case HttpMethod.PUT: {
-                        if (typeof putHandler !== "function") {
-                            break;
-                        }
-                        return putHandler(req, res);
-                    }
-                    default:
-                    // nothing
-                }
+
+            let authenticate = true;
+            let handler: ApiHandler | undefined;
+            let validator: z.ZodType | undefined;
+
+            switch (req.method) {
+                case HttpMethod.GET:
+                    authenticate = getOptions?.authenticate ?? true;
+                    handler = getOptions?.handler;
+                    validator = getOptions?.validator;
+                    break;
+                case HttpMethod.POST:
+                    authenticate = postOptions?.authenticate ?? true;
+                    handler = postOptions?.handler;
+                    validator = postOptions?.validator;
+                    break;
+                case HttpMethod.DELETE:
+                    authenticate = deleteOptions?.authenticate ?? true;
+                    handler = deleteOptions?.handler;
+                    validator = deleteOptions?.validator;
+                    break;
+                case HttpMethod.PUT:
+                    authenticate = putOptions?.authenticate ?? true;
+                    handler = putOptions?.handler;
+                    validator = putOptions?.validator;
+                    break;
+                default:
+                // nothing
+            }
+
+            if (typeof handler !== "function") {
                 res.status(405).end();
+                return;
+            }
+
+            handler = authenticate ? withUser(handler) : withoutUser(handler);
+
+            if (validator) {
+                const parsed = validator.safeParse(JSON.parse(req.body));
+                if (!parsed.success) {
+                    const errors = parsed.error.flatten();
+                    res.status(400).json({
+                        status: "error",
+                        error: "Malformed request body",
+                        errors
+                    });
+                    return;
+                }
+                req.body = parsed.data;
+            }
+
+            try {
+                await handler(req, res);
             } catch (error) {
                 Log.error(
                     `Error handling ${req.method} method to ${req.url}`,
@@ -71,9 +122,6 @@ export class ApiRoute {
             }
         };
 
-        if (authenticate) {
-            return withUser(handle);
-        }
-        return withoutUser(handle);
+        return handle;
     }
 }

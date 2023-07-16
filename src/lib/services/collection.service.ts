@@ -6,6 +6,7 @@ import { UserFileSystem } from "../common/user-file-system";
 import { EMPTY_UUIDV4, isUuidv4 } from "../common/utilities";
 import { CollectionDto } from "../interfaces/collection-dto";
 import { CollectionFileDto } from "../interfaces/collection-file-dto";
+import { UpdateCollectionData } from "../validators/update-collection-validator";
 
 const CHUNK_SIZE_BYTES = 3_000_000; // 3mb
 
@@ -43,7 +44,6 @@ interface GetFileResult {
 
 interface GetCollectionFilesResult {
     notFound?: boolean;
-    collection?: CollectionDto;
     files?: CollectionFileDto[];
 }
 
@@ -181,14 +181,6 @@ export class CollectionService {
                 updatedAt: file.updatedAt.getTime()
             })) || [];
         return {
-            collection: {
-                id: collection.id,
-                name: collection.name,
-                createdAt: collection.createdAt.getTime(),
-                updatedAt: collection.updatedAt.getTime(),
-                tags: collection.Tags?.map((tag) => tag.name) || [],
-                thumbnails: files.slice(0, 4).map((file) => file.thumbnailSrc)
-            },
             files
         };
     }
@@ -367,7 +359,7 @@ export class CollectionService {
         }
     }
 
-    async update(collection: CollectionDto): Promise<UpdateResult> {
+    async update(collection: UpdateCollectionData): Promise<UpdateResult> {
         if (!collection.id) {
             return { notFound: true };
         }
