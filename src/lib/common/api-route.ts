@@ -47,6 +47,8 @@ interface ApiRouteOptions {
 }
 
 export class ApiRoute {
+    private static readonly logger = new Log("API");
+
     static create(options: ApiRouteOptions): NextApiHandler {
         const {
             get: getParams,
@@ -72,7 +74,7 @@ export class ApiRoute {
                 : putParams;
 
         const handle: NextApiHandler = async (req, res) => {
-            Log.info(`${req.method}: ${req.url}`);
+            ApiRoute.logger.info(`${req.method}: ${req.url}`);
 
             let authenticate = true;
             let handler: ApiHandler | undefined;
@@ -127,8 +129,11 @@ export class ApiRoute {
             try {
                 await handler(req, res);
             } catch (error) {
-                Log.error(
-                    `Error handling ${req.method} method to ${req.url}`,
+                const userId = req.session?.user.id || null;
+                ApiRoute.logger.error(
+                    `Error handling ${req.method} method to ${req.url} ${
+                        userId && `(user: '${userId}')`
+                    }`,
                     error
                 );
                 res.status(500).json({

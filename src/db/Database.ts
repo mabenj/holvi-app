@@ -11,7 +11,9 @@ import { User } from "./models/User";
 
 export default class Database {
     private static instance: Database;
+
     private readonly sequelize;
+    private readonly logger: Log;
     private initializing = false;
 
     public get models() {
@@ -30,6 +32,7 @@ export default class Database {
             benchmark: true,
             logging: false
         });
+        this.logger = new Log("DB");
     }
 
     public transaction() {
@@ -66,9 +69,12 @@ export default class Database {
         Database.instance.initializing = true;
         try {
             await Database.instance.sequelize.authenticate();
-            Log.info("Database connection established");
+            Database.instance.logger.info("Database connection established");
         } catch (error) {
-            Log.error("Unable to connect to the database", error);
+            Database.instance.logger.error(
+                "Unable to connect to the database",
+                error
+            );
             Database.instance.initializing = false;
             return;
         }
@@ -113,12 +119,12 @@ export default class Database {
                 uniqueKey: "TagName"
             });
 
-            Log.info("Initializing models");
+            Database.instance.logger.info("Initializing models");
             await Database.instance.sequelize.sync({ alter: true });
 
-            Log.info("Database initialized");
+            Database.instance.logger.info("Database initialized");
         } catch (error) {
-            Log.error("Error initializing models", error);
+            Database.instance.logger.error("Error initializing models", error);
             return;
         } finally {
             Database.instance.initializing = false;

@@ -25,11 +25,11 @@ export function useUpload() {
                 }
                 setIsUploading(false);
                 setProgress(0);
-                try{
-                    const data = JSON.parse(xhr.response)
-                    resolve(data)
-                }catch(error){
-                    reject(error)
+                try {
+                    const data = JSON.parse(xhr.response);
+                    resolve(data);
+                } catch (error) {
+                    reject(error);
                 }
             };
 

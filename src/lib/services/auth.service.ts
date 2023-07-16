@@ -11,13 +11,15 @@ interface RegisterUserResult {
 }
 
 export default class AuthService {
+    private static readonly logger = new Log("AuthService");
+
     static async registerUser(
         username: string,
         password: string
     ): Promise<RegisterUserResult> {
         const db = await Database.getInstance();
         const existing = await db.models.User.findOne({
-            where: { username: username },
+            where: { username },
             raw: true
         });
         if (existing) {
@@ -26,9 +28,9 @@ export default class AuthService {
             };
         }
 
-        const { salt, hash } = await Cryptography.getSaltAndHash(password);
         const transaction = await db.transaction();
         try {
+            const { salt, hash } = await Cryptography.getSaltAndHash(password);
             const user = await db.models.User.create(
                 {
                     username,
@@ -45,7 +47,7 @@ export default class AuthService {
                 }
             };
         } catch (error) {
-            Log.error("Error registering user", error);
+            this.logger.error("Error registering user", error);
             transaction.rollback();
             throw error;
         }

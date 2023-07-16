@@ -1,5 +1,9 @@
+import chalk from "chalk";
+
 export default class Log {
-    private static get timestamp() {
+    constructor(private readonly name: string) {}
+
+    private get timestamp() {
         const now = new Date();
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -11,19 +15,36 @@ export default class Log {
         return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
     }
 
-    static debug(message: string) {
-        console.debug(`${this.timestamp} [DEBUG]: ${message}`);
+    debug(message: string) {
+        console.debug(
+            `${this.timestamp} ${chalk.blue("[DEBUG]")} [${
+                this.name
+            }]: ${message}`
+        );
     }
 
-    static info(message: string) {
-        console.log(`${this.timestamp} [INFO]: ${message}`);
+    info(message: string) {
+        console.log(
+            `${this.timestamp} ${chalk.green("[INFO]")} [${
+                this.name
+            }]: ${message}`
+        );
     }
 
-    static warn(message: string) {
-        console.warn(`${this.timestamp} [WARN]: ${message}`);
+    warn(message: string) {
+        console.warn(
+            `${this.timestamp} ${chalk.yellow("[WARN]")} [${
+                this.name
+            }]: ${message}`
+        );
     }
 
-    static error(message: string, error?: Error | unknown) {
-        console.error(`${this.timestamp} [ERROR]: ${message}`, error);
+    error(message: string, error?: Error | unknown) {
+        console.error(
+            `${this.timestamp} ${chalk.red("[ERROR]")} [${
+                this.name
+            }]: ${message}`,
+            error
+        );
     }
 }
