@@ -1,9 +1,9 @@
 import Database from "@/db/Database";
-import { isValidPassword, isValidUsername } from "@/lib/common/utilities";
 import { IronSession } from "iron-session";
 import Cryptography from "../common/cryptography";
 import Log from "../common/log";
 import { UserDto } from "../interfaces/user-dto";
+import { SignUpFormData, SignUpValidator } from "../validators/sign-up";
 
 interface RegisterUserResult {
     usernameError?: string;
@@ -13,17 +13,16 @@ interface RegisterUserResult {
 
 export default class AuthService {
     static async registerUser(
-        username: string,
-        password: string
+        data: SignUpFormData
     ): Promise<RegisterUserResult> {
-        const usernameValid = isValidUsername(username);
-        const passwordValid = isValidPassword(password);
-        if (!usernameValid || !passwordValid) {
-            return {
-                usernameError: usernameValid ? undefined : "Invalid username",
-                passwordError: passwordValid ? undefined : "Invalid password"
-            };
+        const parsed = SignUpValidator.safeParse(data);
+        if (!parsed.success) {
+            const { fieldErrors: errors } = parsed.error.flatten();
+            const usernameError = errors.username?.join(", ");
+            const passwordError = errors.password?.join(", ");
+            return { usernameError, passwordError };
         }
+        const { username, password } = parsed.data;
 
         const db = await Database.getInstance();
         const existing = await db.models.User.findOne({
@@ -93,7 +92,7 @@ export default class AuthService {
             return null;
         }
         if (!session.user) {
-            await session.destroy();
+            session.destroy();
             return null;
         }
 
@@ -103,7 +102,7 @@ export default class AuthService {
             raw: true
         });
         if (!user) {
-            await session.destroy();
+            session.destroy();
             return null;
         }
 

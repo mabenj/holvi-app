@@ -576,7 +576,8 @@ export class CollectionService {
                 where: {
                     UserId: this.userId
                 }
-            }
+            },
+            raw: true
         });
         if (!collectionFile) {
             return null;

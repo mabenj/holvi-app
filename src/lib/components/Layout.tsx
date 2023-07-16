@@ -12,7 +12,9 @@ import {
 } from "@chakra-ui/react";
 import { useAtom } from "jotai";
 import Head from "next/head";
-import { useLogin } from "../hooks/useLogin";
+import { useRouter } from "next/router";
+import { useState } from "react";
+import { ApiResponse } from "../interfaces/api-response";
 
 interface LayoutProps {
     children: React.ReactNode;
@@ -42,24 +44,28 @@ export default function Layout({ children }: LayoutProps) {
 }
 
 const Navbar = ({ username }: { username?: string }) => {
+    const [isSigningOut, setIsSigningOut] = useState(false);
     const { colorMode, toggleColorMode } = useColorMode();
-    const { logout, isSigningOut } = useLogin();
+    const router = useRouter();
     const toast = useToast();
 
-    const handleLogout = () => {
-        logout()
-            .then(() =>
-                toast({
-                    description: "You have been signed out",
-                    status: "info"
-                })
-            )
-            .catch((error) =>
-                toast({
-                    description: error,
-                    status: "error"
-                })
-            );
+    const handleLogout = async () => {
+        setIsSigningOut(true);
+        const res: ApiResponse = await fetch("/api/auth/logout", {
+            method: "POST"
+        }).then((res) => res.json());
+        if (res.status !== "ok") {
+            toast({
+                description: res.error,
+                status: "error"
+            });
+        } else {
+            await router.push("/login");
+            toast({
+                description: "You have been signed out",
+                status: "info"
+            });
+        }
     };
 
     return (

@@ -1,20 +1,16 @@
 import { ApiRoute } from "@/lib/common/api-route";
 import { ApiResponse } from "@/lib/interfaces/api-response";
+import { SignUpResponse } from "@/lib/interfaces/sign-up-response";
 import AuthService from "@/lib/services/auth.service";
 import type { NextApiRequest, NextApiResponse } from "next";
 
-interface Result {
-    usernameError?: string;
-    passwordError?: string;
-}
-
 async function post(
     req: NextApiRequest,
-    res: NextApiResponse<ApiResponse<Result>>
+    res: NextApiResponse<ApiResponse<SignUpResponse>>
 ) {
-    const { username, password } = JSON.parse(req.body);
+    const data = JSON.parse(req.body);
     const { usernameError, passwordError, user } =
-        await AuthService.registerUser(username, password);
+        await AuthService.registerUser(data);
     if (!user || usernameError || passwordError) {
         res.status(400).json({
             status: "error",

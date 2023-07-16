@@ -1,10 +1,3 @@
-import { CollectionDto } from "../interfaces/collection-dto";
-import { CollectionFileDto } from "../interfaces/collection-file-dto";
-import {
-    CollectionGridItem,
-    ItemType
-} from "../interfaces/collection-grid-item";
-
 const FORMATTER = new Intl.RelativeTimeFormat("en", {
     localeMatcher: "best fit",
     numeric: "auto",
@@ -67,37 +60,6 @@ export function prettyNumber(number: number | undefined) {
     return NUMBER_FORMATTER.format(number);
 }
 
-/**
- * Must be at least 8 characters long, contains an uppercase character, an lowercase character, and a number.
- */
-export function isValidPassword(password: string) {
-    const minLength = 8;
-    const hasUppercase = /[A-Z]/.test(password);
-    const hasLowercase = /[a-z]/.test(password);
-    const hasNumber = /\d/.test(password);
-
-    return (
-        password.length >= minLength &&
-        hasUppercase &&
-        hasLowercase &&
-        hasNumber
-    );
-}
-
-/**
- * Must be between 3 and 20 characters long and contain alphanumeric symbols.
- */
-export function isValidUsername(username: string) {
-    const minLength = 3;
-    const maxLength = 20;
-    const charactersAllowed = /^[a-zA-Z0-9_]+$/.test(username);
-    return (
-        username.length >= minLength &&
-        username.length <= maxLength &&
-        charactersAllowed
-    );
-}
-
 export function caseInsensitiveSorter<T, K extends keyof T>(
     key: K,
     asc: boolean = true
@@ -111,44 +73,4 @@ export function caseInsensitiveSorter<T, K extends keyof T>(
         });
         return asc ? result : -result;
     };
-}
-
-export function filesToGridItems(
-    files: CollectionFileDto[]
-): CollectionGridItem[] {
-    if (!files) {
-        return [];
-    }
-    return files
-        .map((file) => ({
-            id: file.id,
-            name: file.name,
-            type: file.mimeType.includes("video")
-                ? "video"
-                : ("image" as ItemType),
-            tags: [], // TODO
-            timestamp: new Date(file.createdAt),
-            src: file.src,
-            width: file.width,
-            height: file.height,
-            thumbnailSrc: file.thumbnailSrc,
-            thumbnailWidth: file.thumbnailWidth,
-            thumbnailHeight: file.thumbnailHeight
-        }))
-        .sort(caseInsensitiveSorter("name"));
-}
-
-export function collectionsToGridItems(
-    collections: CollectionDto[]
-): CollectionGridItem[] {
-    return collections
-        .map((collection) => ({
-            id: collection.id,
-            name: collection.name,
-            type: "collection" as ItemType,
-            tags: collection.tags,
-            thumbnails: collection.thumbnails,
-            timestamp: new Date(collection.createdAt)
-        }))
-        .sort(caseInsensitiveSorter("name"));
 }

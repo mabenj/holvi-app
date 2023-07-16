@@ -1,5 +1,7 @@
-import { useLogin } from "@/lib/hooks/useLogin";
-import { useSignUp } from "@/lib/hooks/useSignUp";
+import { ApiResponse } from "@/lib/interfaces/api-response";
+import { SignUpResponse } from "@/lib/interfaces/sign-up-response";
+import { LoginFormData, LoginValidator } from "@/lib/validators/login";
+import { SignUpFormData, SignUpValidator } from "@/lib/validators/sign-up";
 import {
     Box,
     Button,
@@ -21,8 +23,11 @@ import {
     useDisclosure,
     useToast
 } from "@chakra-ui/react";
+import { zodResolver } from "@hookform/resolvers/zod";
 import Head from "next/head";
-import { FormEvent } from "react";
+import { useRouter } from "next/router";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
 
 export default function Login() {
     return (
@@ -42,62 +47,72 @@ export default function Login() {
 }
 
 const LoginCard = () => {
+    const [isLoading, setIsLoading] = useState(false);
     const {
-        username,
-        setUsername,
-        password,
-        setPassword,
-        error,
-        isLoggingIn,
-        login
-    } = useLogin();
+        register,
+        handleSubmit,
+        formState: { errors },
+        setError
+    } = useForm<LoginFormData>({
+        resolver: zodResolver(LoginValidator)
+    });
     const toast = useToast();
+    const router = useRouter();
 
-    const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        login().then(() => {
-            toast({
-                description: "Successfully signed in",
-                status: "success"
-            });
-        });
+    const onSubmit = async (formData: LoginFormData) => {
+        setIsLoading(true);
+        const data: ApiResponse<{}> = await fetch("/api/auth/login", {
+            method: "POST",
+            body: JSON.stringify(formData)
+        })
+            .then((res) => res.json())
+            .finally(() => setIsLoading(false));
+        if (data.status === "error") {
+            setError("username", { message: "" });
+            setError("password", { message: data.error }); // show the message only below pwd field
+            return;
+        }
+        await router.push("/")
+        toast({
+            description: "Successfully logged in",
+            status: "success"
+        })
     };
 
     return (
         <Card variant="outline">
             <CardBody>
                 <Flex direction="column" gap={5}>
-                    <form id="login-form" onSubmit={handleSubmit}>
+                    <form id="login-form" onSubmit={handleSubmit(onSubmit)}>
                         <Flex direction="column" gap={5}>
-                            <FormControl isInvalid={!!error}>
+                            <FormControl isInvalid={!!errors.username}>
                                 <Input
                                     isRequired
                                     type="text"
                                     placeholder="Username"
                                     variant="filled"
-                                    value={username}
-                                    onChange={(e) =>
-                                        setUsername(e.target.value)
-                                    }
+                                    {...register("username")}
                                 />
+                                <FormErrorMessage>
+                                    {errors.username?.message}
+                                </FormErrorMessage>
                             </FormControl>
-                            <FormControl isInvalid={!!error}>
+                            <FormControl isInvalid={!!errors.password}>
                                 <Input
                                     isRequired
                                     type="password"
                                     placeholder="Password"
                                     variant="filled"
-                                    value={password}
-                                    onChange={(e) =>
-                                        setPassword(e.target.value)
-                                    }
+                                    {...register("password")}
                                 />
-                                <FormErrorMessage>{error}</FormErrorMessage>
+                                <FormErrorMessage>
+                                    {errors.password?.message}
+                                </FormErrorMessage>
                             </FormControl>
 
                             <Button
                                 type="submit"
-                                isLoading={isLoggingIn}
+                                isLoading={isLoading}
                                 form="login-form">
                                 Login
                             </Button>
@@ -112,37 +127,42 @@ const LoginCard = () => {
 };
 
 const SignUpModal = () => {
-    const {
-        username,
-        setUsername,
-        password,
-        setPassword,
-        password2,
-        setPassword2,
-        usernameError,
-        passwordError,
-        isLoading,
-        signUp
-    } = useSignUp();
-    const toast = useToast();
+    const [isLoading, setIsLoading] = useState(false);
     const { isOpen, onOpen, onClose } = useDisclosure();
+    const {
+        register,
+        handleSubmit,
+        formState: { errors },
+        setError
+    } = useForm<SignUpFormData>({
+        resolver: zodResolver(SignUpValidator)
+    });
+    const toast = useToast();
+    const router = useRouter();
 
-    const handleSignUp = (e: FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        signUp()
-            .then(() => {
-                onClose();
+    const onSubmit = async (formData: SignUpFormData) => {
+        setIsLoading(true);
+        const data: ApiResponse<SignUpResponse> = await fetch(
+            "/api/auth/signup",
+            {
+                method: "POST",
+                body: JSON.stringify(formData)
+            }
+        )
+            .then((res) => res.json())
+            .finally(() => setIsLoading(false));
+        if (data.status === "ok") {
+            return router.push("/").then(() =>
                 toast({
-                    description: "Successfully signed up",
+                    description: "Successfully singed up",
                     status: "success"
-                });
-            })
-            .catch((error) =>
-                toast({
-                    description: error,
-                    status: "error"
                 })
             );
+        }
+        data.usernameError &&
+            setError("username", { message: data.usernameError });
+        data.passwordError &&
+            setError("password", { message: data.passwordError });
     };
 
     return (
@@ -156,52 +176,55 @@ const SignUpModal = () => {
                 <ModalContent>
                     <ModalHeader>Sign up</ModalHeader>
                     <ModalBody>
-                        <form id="sign-up-form" onSubmit={handleSignUp}>
+                        <form
+                            id="sign-up-form"
+                            onSubmit={handleSubmit(onSubmit)}>
                             <Flex direction="column" gap={5}>
-                                <FormControl isInvalid={!!usernameError}>
-                                    <FormLabel>Username</FormLabel>
+                                <FormControl isInvalid={!!errors.username}>
+                                    <FormLabel htmlFor="username">
+                                        Username
+                                    </FormLabel>
                                     <Input
                                         isRequired
                                         type="text"
                                         placeholder="Username"
                                         variant="filled"
-                                        value={username}
-                                        onChange={(e) =>
-                                            setUsername(e.target.value)
-                                        }
+                                        {...register("username")}
                                     />
                                     <FormErrorMessage>
-                                        {usernameError}
+                                        {errors.username?.message}
                                     </FormErrorMessage>
                                 </FormControl>
-                                <FormControl isInvalid={!!passwordError}>
-                                    <FormLabel>Password</FormLabel>
+                                <FormControl isInvalid={!!errors.password}>
+                                    <FormLabel htmlFor="password">
+                                        Password
+                                    </FormLabel>
                                     <Input
                                         isRequired
                                         type="password"
                                         placeholder="Password"
                                         variant="filled"
-                                        value={password}
-                                        onChange={(e) =>
-                                            setPassword(e.target.value)
-                                        }
+                                        {...register("password")}
                                     />
                                     <FormErrorMessage>
-                                        {passwordError}
+                                        {errors.password?.message}
                                     </FormErrorMessage>
                                 </FormControl>
-                                <FormControl isInvalid={!!passwordError}>
-                                    <FormLabel>Confirm password</FormLabel>
+                                <FormControl
+                                    isInvalid={!!errors.confirmPassword}>
+                                    <FormLabel htmlFor="confirmPassword">
+                                        Confirm password
+                                    </FormLabel>
                                     <Input
                                         isRequired
                                         type="password"
                                         placeholder="Password"
                                         variant="filled"
-                                        value={password2}
-                                        onChange={(e) =>
-                                            setPassword2(e.target.value)
-                                        }
+                                        {...register("confirmPassword")}
                                     />
+                                    <FormErrorMessage>
+                                        {errors.confirmPassword?.message}
+                                    </FormErrorMessage>
                                 </FormControl>
                             </Flex>
                         </form>
