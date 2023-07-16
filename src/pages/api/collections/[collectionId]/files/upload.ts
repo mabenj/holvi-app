@@ -25,8 +25,4 @@ export const config = {
     }
 };
 
-export default ApiRoute.create({
-    post: {
-        handler: uploadFiles
-    }
-});
+export default ApiRoute.create({ post: uploadFiles });

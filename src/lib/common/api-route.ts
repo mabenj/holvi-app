@@ -40,20 +40,36 @@ interface ApiHandlerOptions {
 }
 
 interface ApiRouteOptions {
-    get?: ApiHandlerOptions;
-    post?: ApiHandlerOptions;
-    delete?: ApiHandlerOptions;
-    put?: ApiHandlerOptions;
+    get?: ApiHandlerOptions | ApiHandler;
+    post?: ApiHandlerOptions | ApiHandler;
+    delete?: ApiHandlerOptions | ApiHandler;
+    put?: ApiHandlerOptions | ApiHandler;
 }
 
 export class ApiRoute {
     static create(options: ApiRouteOptions): NextApiHandler {
         const {
-            get: getOptions,
-            post: postOptions,
-            delete: deleteOptions,
-            put: putOptions
+            get: getParams,
+            post: postParams,
+            delete: deleteParams,
+            put: putParams
         } = options;
+        const getOptions =
+            typeof getParams === "function"
+                ? { handler: getParams }
+                : getParams;
+        const postOptions =
+            typeof postParams === "function"
+                ? { handler: postParams }
+                : postParams;
+        const deleteOptions =
+            typeof deleteParams === "function"
+                ? { handler: deleteParams }
+                : deleteParams;
+        const putOptions =
+            typeof putParams === "function"
+                ? { handler: putParams }
+                : putParams;
 
         const handle: NextApiHandler = async (req, res) => {
             Log.info(`${req.method}: ${req.url}`);

@@ -30,10 +30,6 @@ async function deleteCollection(req: ApiRequest, res: ApiResponse) {
 }
 
 export default ApiRoute.create({
-    get: {
-        handler: getCollection
-    },
-    delete: {
-        handler: deleteCollection
-    }
+    get: getCollection,
+    delete: deleteCollection
 });

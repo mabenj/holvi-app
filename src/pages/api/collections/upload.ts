@@ -40,7 +40,5 @@ export const config = {
 };
 
 export default ApiRoute.create({
-    post: {
-        handler: uploadCollection
-    }
+    post: uploadCollection
 });

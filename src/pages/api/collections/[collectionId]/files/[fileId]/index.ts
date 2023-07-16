@@ -15,8 +15,4 @@ async function deleteFile(req: ApiRequest, res: ApiResponse) {
     res.status(200).json({ status: "ok" });
 }
 
-export default ApiRoute.create({
-    delete: {
-        handler: deleteFile
-    }
-});
+export default ApiRoute.create({ delete: deleteFile });

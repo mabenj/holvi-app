@@ -55,9 +55,7 @@ async function createCollection(
 }
 
 export default ApiRoute.create({
-    get: {
-        handler: getCollections
-    },
+    get: getCollections,
     post: {
         handler: createCollection,
         validator: CreateCollectionValidator

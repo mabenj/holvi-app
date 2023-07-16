@@ -1,5 +1,4 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
-import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
 import { GetCollectionFilesResponse } from "@/lib/interfaces/get-collection-files-response";
 import { CollectionService } from "@/lib/services/collection.service";
 
@@ -138,8 +137,4 @@ export const config = {
     }
 };
 
-export default ApiRoute.create({
-    get: {
-        handler: get
-    }
-});
+export default ApiRoute.create({ get });
