@@ -13,6 +13,7 @@ const CHUNK_SIZE_BYTES = 3_000_000; // 3mb
 interface CreateResult {
     collection?: CollectionDto;
     error?: string;
+    nameError?: string;
 }
 
 interface GetResult {
@@ -473,13 +474,13 @@ export class CollectionService {
 
     async create(name: string, tags: string[]): Promise<CreateResult> {
         if (!name) {
-            return { error: "Invalid collection name" };
+            return { nameError: "Invalid collection name" };
         }
         if (!Array.isArray(tags)) {
             return { error: "Invalid collection tags" };
         }
         if (await this.nameTaken(name)) {
-            return { error: "Collection name already exists" };
+            return { nameError: "Collection name already exists" };
         }
         return Database.withTransaction(async (transaction, db) => {
             const collection = await db.models.Collection.create(

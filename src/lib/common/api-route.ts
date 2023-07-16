@@ -17,15 +17,15 @@ type ApiHandler = (
 
 export type ApiRequest<T = any> = Omit<NextApiRequest, "body"> & { body: T };
 
-export type ApiResponse<T = {}> = NextApiResponse<
-    SuccessResponse<T> | ErrorResponse<T>
->;
+export type ApiResponse<T = {}> = NextApiResponse<ApiData<T>>;
 
-type SuccessResponse<T> = {
+export type ApiData<T = {}> = SuccessData<T> | ErrorData<T>;
+
+type SuccessData<T> = {
     status: "ok";
 } & T;
 
-type ErrorResponse<T> = {
+type ErrorData<T> = {
     status: "error";
     error: string;
 } & T;

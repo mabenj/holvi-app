@@ -42,11 +42,12 @@ async function createCollection(
 ) {
     const { name, tags } = req.body;
     const collectionService = new CollectionService(req.session.user.id);
-    const { collection, error } = await collectionService.create(name, tags);
-    if (!collection || error) {
+    const { collection, error, nameError } = await collectionService.create(name, tags);
+    if (!collection || error || nameError) {
         res.status(400).json({
             status: "error",
-            error: error || "Error creating collection"
+            error: error || "Error creating collection",
+            nameError: nameError
         });
         return;
     }

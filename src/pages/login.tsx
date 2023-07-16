@@ -1,4 +1,4 @@
-import { ApiResponse } from "@/lib/interfaces/api-response";
+import { ApiData } from "@/lib/common/api-route";
 import { SignUpResponse } from "@/lib/interfaces/sign-up-response";
 import {
     LoginFormData,
@@ -67,7 +67,7 @@ const LoginCard = () => {
 
     const onSubmit = async (formData: LoginFormData) => {
         setIsLoading(true);
-        const data: ApiResponse<{}> = await fetch("/api/auth/login", {
+        const data: ApiData = await fetch("/api/auth/login", {
             method: "POST",
             body: JSON.stringify(formData)
         })
@@ -148,13 +148,10 @@ const SignUpModal = () => {
 
     const onSubmit = async (formData: SignUpFormData) => {
         setIsLoading(true);
-        const data: ApiResponse<SignUpResponse> = await fetch(
-            "/api/auth/signup",
-            {
-                method: "POST",
-                body: JSON.stringify(formData)
-            }
-        )
+        const data: ApiData<SignUpResponse> = await fetch("/api/auth/signup", {
+            method: "POST",
+            body: JSON.stringify(formData)
+        })
             .then((res) => res.json())
             .finally(() => setIsLoading(false));
         if (data.status === "ok") {

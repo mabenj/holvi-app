@@ -1,7 +1,5 @@
-import { useCollectionModal } from "@/lib/hooks/useCollectionModal";
 import { CollectionDto } from "@/lib/interfaces/collection-dto";
 import {
-    Box,
     Button,
     Flex,
     FormControl,
@@ -16,14 +14,17 @@ import {
     ModalFooter,
     ModalHeader,
     ModalOverlay,
-    Tag,
-    TagCloseButton,
-    TagLabel,
-    useColorModeValue,
     useToast
 } from "@chakra-ui/react";
-import { FormEvent, KeyboardEvent, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { getErrorMessage } from "../common/utilities";
+import {
+    CreateCollectionFormData,
+    CreateCollectionValidator
+} from "../validators/create-collection-validator";
+import TagInput from "./TagInput";
 
 interface CollectionModalProps {
     isOpen: boolean;
@@ -40,44 +41,64 @@ export default function CollectionModal({
     mode,
     initialCollection
 }: CollectionModalProps) {
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const {
-        name,
-        setName,
-        setTags,
-        nameError,
-        tags,
-        isLoading,
-        saveCollection
-    } = useCollectionModal(initialCollection);
+        register,
+        handleSubmit,
+        formState: { errors },
+        setError,
+        setValue,
+        control
+    } = useForm<CreateCollectionFormData>({
+        defaultValues: {
+            name: initialCollection?.name,
+            tags: initialCollection?.tags || []
+        },
+        resolver: zodResolver(CreateCollectionValidator)
+    });
     const toast = useToast();
 
-    const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        try {
-            const collection = await saveCollection();
-            onSave(collection);
-            onClose();
-            toast({
-                description: `Collection ${
-                    mode === "edit" ? "modified" : "created"
-                }`,
-                status: "success"
-            });
-        } catch (error) {
-            error &&
-                toast({
-                    description: `Could not ${
-                        mode === "edit" ? "edit" : "create"
-                    } collection: ${getErrorMessage(error)}`,
-                    status: "error"
-                });
+    const onSubmit = async (formData: CreateCollectionFormData) => {
+        const method = mode === "create" ? "POST" : "PUT";
+        const body = JSON.stringify(
+            mode === "create"
+                ? formData
+                : { id: initialCollection?.id!, ...formData }
+        );
+        setIsSubmitting(true);
+        const data = await fetch("/api/collections", {
+            method,
+            body
+        })
+            .then((res) => res.json())
+            .finally(() => setIsSubmitting(false));
+
+        if (data.nameError) {
+            setError("name", data.nameError);
         }
+        if (data.error) {
+            toast({
+                description: `Could not ${
+                    mode === "edit" ? "edit" : "create"
+                } collection: ${getErrorMessage(data.error)}`,
+                status: "error"
+            });
+            return;
+        }
+        onSave(data.collection);
+        onClose();
+        toast({
+            description: `Collection ${
+                mode === "edit" ? "modified" : "created"
+            }`,
+            status: "success"
+        });
     };
 
     const handleCancel = () => {
         onClose();
-        setName(initialCollection?.name || "");
-        setTags([...(initialCollection?.tags || [])]);
+        setValue("name", initialCollection?.name || "");
+        setValue("tags", initialCollection?.tags || []);
     };
 
     return (
@@ -90,22 +111,42 @@ export default function CollectionModal({
                 <ModalCloseButton />
 
                 <ModalBody>
-                    <form id="create-collection-form" onSubmit={handleSubmit}>
+                    <form
+                        id="create-collection-form"
+                        onSubmit={handleSubmit(onSubmit)}>
                         <Flex direction="column" gap={4}>
-                            <FormControl isInvalid={!!nameError}>
+                            <FormControl isInvalid={!!errors.name}>
                                 <FormLabel>Collection name</FormLabel>
                                 <Input
                                     type="text"
                                     isRequired
                                     placeholder="Name..."
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
+                                    {...register("name")}
                                 />
-                                <FormErrorMessage>{nameError}</FormErrorMessage>
+                                <FormErrorMessage>
+                                    {errors.name?.message}
+                                </FormErrorMessage>
                             </FormControl>
-                            <FormControl>
+                            <FormControl isInvalid={!!errors.tags}>
                                 <FormLabel>Tags</FormLabel>
-                                <TagInput value={tags} onChange={setTags} />
+                                <Controller
+                                    control={control}
+                                    name="tags"
+                                    defaultValue={[]}
+                                    render={({
+                                        field: { onChange, onBlur, value }
+                                    }) => (
+                                        <TagInput
+                                            value={value}
+                                            onChange={onChange}
+                                            onBlur={onBlur}
+                                        />
+                                    )}
+                                />
+
+                                <FormErrorMessage>
+                                    {errors.tags?.message}
+                                </FormErrorMessage>
                                 <FormHelperText>
                                     Confirm tags with Enter, Tab, or comma keys
                                 </FormHelperText>
@@ -121,7 +162,7 @@ export default function CollectionModal({
                     <Button
                         type="submit"
                         form="create-collection-form"
-                        isLoading={isLoading}>
+                        isLoading={isSubmitting}>
                         {mode === "edit" ? "Save" : "Create"}
                     </Button>
                 </ModalFooter>
@@ -129,74 +170,3 @@ export default function CollectionModal({
         </Modal>
     );
 }
-
-const TagInput = ({
-    value,
-    onChange
-}: {
-    value: string[];
-    onChange: (value: string[]) => void;
-}) => {
-    const [inputValue, setInputValue] = useState("");
-    const borderColor = useColorModeValue("gray.200", "gray.600");
-
-    const addTag = (tag: string) => {
-        setInputValue("");
-        tag = tag.trim();
-        if (value.includes(tag.toLowerCase())) {
-            return;
-        }
-        onChange([...value, tag]);
-    };
-
-    const handleInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-        switch (e.key) {
-            case "Enter": {
-                if (!inputValue) {
-                    // submit
-                    break;
-                }
-                // fall through
-            }
-            case "Tab":
-            case ",": {
-                e.preventDefault();
-                addTag(inputValue);
-                break;
-            }
-            default:
-            // nothing
-        }
-    };
-
-    const removeTag = (index: number) => {
-        value.splice(index, 1);
-        onChange([...value]);
-    };
-
-    return (
-        <Flex
-            flexWrap="wrap"
-            p={2}
-            rounded="md"
-            border="1px solid"
-            borderColor={borderColor}>
-            {value.map((value, i) => (
-                <Tag key={value} borderRadius="full" m={1}>
-                    <TagLabel>{value}</TagLabel>
-                    <TagCloseButton onClick={() => removeTag(i)} />
-                </Tag>
-            ))}
-            <Box minW="1rem" flexGrow="1">
-                <Input
-                    variant="unstyled"
-                    placeholder="Enter tags..."
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyDown={handleInputKeyDown}
-                    m={1}
-                />
-            </Box>
-        </Flex>
-    );
-};

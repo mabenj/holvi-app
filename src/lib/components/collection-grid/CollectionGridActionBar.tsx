@@ -101,7 +101,10 @@ export default function CollectionGridActionBar({
         const url = isCreatingNew
             ? `/api/collections/upload?name=${collectionName}`
             : `/api/collections/${collectionId}/files/upload`;
-        const response = await upload(formData, url, "POST");
+        const response = await upload(formData, url, "POST").catch((error) => ({
+            status: "error",
+            error
+        }));
         if (response.status === "error" || response.error) {
             toast({
                 description: `Error uploading ${
