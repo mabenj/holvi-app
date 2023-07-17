@@ -11,5 +11,5 @@ export interface CollectionFileDto {
     thumbnailHeight?: number;
     createdAt: number;
     updatedAt: number;
-    tags?: [];
+    tags: string[];
 }

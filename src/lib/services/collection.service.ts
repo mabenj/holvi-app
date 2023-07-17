@@ -6,6 +6,7 @@ import { UserFileSystem } from "../common/user-file-system";
 import { EMPTY_UUIDV4, isUuidv4 } from "../common/utilities";
 import { CollectionDto } from "../interfaces/collection-dto";
 import { CollectionFileDto } from "../interfaces/collection-file-dto";
+import { UpdateCollectionFileData } from "../validators/update-collection-file-validator";
 import { UpdateCollectionData } from "../validators/update-collection-validator";
 
 const CHUNK_SIZE_BYTES = 3_000_000; // 3mb
@@ -61,8 +62,112 @@ interface GetStreamResult {
     filename?: string;
 }
 
+interface UpdateFileResult {
+    notFound?: boolean;
+    file?: CollectionFileDto;
+}
+
 export class CollectionService {
     constructor(private readonly userId: string) {}
+
+    async updateFile(
+        collectionId: string,
+        data: UpdateCollectionFileData
+    ): Promise<UpdateFileResult> {
+        const db = await Database.getInstance();
+        const fileInDb = await db.models.CollectionFile.findOne({
+            where: {
+                id: data.id,
+                CollectionId: collectionId
+            },
+            include: {
+                model: db.models.Collection,
+                required: true,
+                where: {
+                    UserId: this.userId
+                }
+            }
+        });
+        if (!fileInDb) {
+            return { notFound: true };
+        }
+
+        const transaction = await db.transaction();
+        try {
+            // update file
+            fileInDb.label = data.name;
+            await fileInDb.save();
+
+            // create new tags
+            await db.models.Tag.bulkCreate(
+                data.tags.map((tag) => ({ name: tag })),
+                {
+                    ignoreDuplicates: true,
+                    returning: false,
+                    transaction
+                }
+            );
+
+            // update junction table
+            await db.models.CollectionFileTag.destroy({
+                where: {
+                    CollectionFileId: fileInDb.id,
+                    TagName: {
+                        [Op.notIn]: data.tags
+                    }
+                }
+            });
+            await db.models.CollectionFileTag.bulkCreate(
+                data.tags.map((tag) => ({
+                    TagName: tag,
+                    CollectionFileId: fileInDb.id
+                })),
+                {
+                    ignoreDuplicates: true,
+                    returning: false,
+                    transaction
+                }
+            );
+
+            // fetch tags from junction table
+            const fileTags = await db.models.CollectionFileTag.findAll({
+                where: {
+                    CollectionFileId: fileInDb.id
+                }
+            });
+
+            transaction.commit();
+            return {
+                file: {
+                    id: fileInDb.id,
+                    collectionId: fileInDb.CollectionId,
+                    name: fileInDb.label,
+                    mimeType: fileInDb.mimeType,
+                    src: this.getSrc(
+                        collectionId,
+                        fileInDb.filename,
+                        fileInDb.mimeType
+                    ),
+                    width: fileInDb.width,
+                    height: fileInDb.height,
+                    thumbnailSrc: this.getSrc(
+                        collectionId,
+                        fileInDb.id,
+                        fileInDb.mimeType,
+                        true
+                    ),
+                    thumbnailWidth: fileInDb.thumbnailWidth,
+                    thumbnailHeight: fileInDb.thumbnailHeight,
+                    tags: fileTags.map((tag) => tag.TagName),
+                    createdAt: fileInDb.createdAt.getTime(),
+                    updatedAt: fileInDb.updatedAt.getTime()
+                }
+            };
+        } catch (error) {
+            transaction.rollback();
+            throw error;
+        }
+    }
 
     async get(collectionId: string): Promise<GetResult> {
         if (!isUuidv4(collectionId)) {
@@ -149,20 +254,25 @@ export class CollectionService {
             };
         }
         const db = await Database.getInstance();
-        const collection = await db.models.Collection.findOne({
+        const collectionFiles = await db.models.CollectionFile.findAll({
             where: {
-                UserId: this.userId,
-                id: collectionId
+                CollectionId: collectionId
             },
-            include: [db.models.CollectionFile, db.models.Tag]
+            include: [
+                {
+                    model: db.models.Collection,
+                    required: true,
+                    where: {
+                        UserId: this.userId
+                    }
+                },
+                {
+                    model: db.models.Tag
+                }
+            ]
         });
-        if (!collection) {
-            return {
-                notFound: true
-            };
-        }
         const files =
-            collection.CollectionFiles?.map((file) => ({
+            collectionFiles?.map((file) => ({
                 id: file.id,
                 collectionId: file.CollectionId,
                 name: file.label,
@@ -179,7 +289,8 @@ export class CollectionService {
                 thumbnailWidth: file.thumbnailWidth,
                 thumbnailHeight: file.thumbnailHeight,
                 createdAt: file.createdAt.getTime(),
-                updatedAt: file.updatedAt.getTime()
+                updatedAt: file.updatedAt.getTime(),
+                tags: file.Tags?.map((tag) => tag.name) || []
             })) || [];
         return {
             files
@@ -349,7 +460,8 @@ export class CollectionService {
                     thumbnailWidth: row.thumbnailWidth,
                     thumbnailHeight: row.thumbnailHeight,
                     createdAt: row.createdAt.getTime(),
-                    updatedAt: row.updatedAt.getTime()
+                    updatedAt: row.updatedAt.getTime(),
+                    tags: []
                 }))
             };
         } catch (error) {
@@ -384,7 +496,7 @@ export class CollectionService {
             if (!collectionInDb) {
                 return { notFound: true };
             }
-            // update collection
+            // update file
             collectionInDb.name = collection.name;
             await collectionInDb.save({ transaction });
 
@@ -397,6 +509,7 @@ export class CollectionService {
                     transaction
                 }
             );
+
             // update junction table
             await db.models.CollectionTag.destroy({
                 where: {

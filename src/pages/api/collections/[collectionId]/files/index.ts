@@ -1,6 +1,31 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
+import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
 import { GetCollectionFilesResponse } from "@/lib/interfaces/get-collection-files-response";
 import { CollectionService } from "@/lib/services/collection.service";
+import {
+    UpdateCollectionFileData,
+    UpdateCollectionFileValidator
+} from "@/lib/validators/update-collection-file-validator";
+
+async function post(
+    req: ApiRequest<UpdateCollectionFileData>,
+    res: ApiResponse<{ file?: CollectionFileDto }>
+) {
+    const { collectionId } = req.query as {
+        collectionId: string;
+        fileId: string;
+    };
+    const collectionService = new CollectionService(req.session.user.id);
+    const { notFound, file } = await collectionService.updateFile(
+        collectionId,
+        req.body
+    );
+    if (!file || notFound) {
+        res.status(404).json({ status: "error", error: "Not found" });
+        return;
+    }
+    res.status(200).json({ status: "ok", file });
+}
 
 async function get(req: ApiRequest, res: ApiResponse) {
     const {
@@ -137,4 +162,10 @@ export const config = {
     }
 };
 
-export default ApiRoute.create({ get });
+export default ApiRoute.create({
+    get,
+    post: {
+        handler: post,
+        validator: UpdateCollectionFileValidator
+    }
+});

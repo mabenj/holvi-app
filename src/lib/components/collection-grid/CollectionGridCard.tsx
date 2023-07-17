@@ -33,6 +33,7 @@ import Image from "next/image";
 import { useRouter } from "next/router";
 import { useRef, useState } from "react";
 import { PhotoView } from "react-photo-view";
+import CollectionFileModal from "../CollectionFileModal";
 import CollectionModal from "../CollectionModal";
 
 interface CollectionGridCardProps {
@@ -52,9 +53,14 @@ export default function CollectionGridCard({
         useDeleteCollection();
     const { deleteFile, isDeleting: isDeletingFile } = useDeleteFile();
     const {
-        isOpen: isModalOpen,
-        onOpen: onModalOpen,
-        onClose: onModalClose
+        isOpen: isCollectionModalOpen,
+        onOpen: onCollectionModalOpen,
+        onClose: onCollectionModalClose
+    } = useDisclosure();
+    const {
+        isOpen: isFileModalOpen,
+        onOpen: onFileModalOpen,
+        onClose: onFileModalClose
     } = useDisclosure();
     const {
         isOpen: isAlertOpen,
@@ -71,6 +77,13 @@ export default function CollectionGridCard({
 
     const handleCollectionSaved = (collection: CollectionDto) => {
         onUpdated({ ...collection, type: "collection" });
+    };
+
+    const handleFileSaved = (file: CollectionFileDto) => {
+        onUpdated({
+            ...file,
+            type: file.mimeType.includes("image") ? "image" : "video"
+        });
     };
 
     const handleDelete = async () => {
@@ -142,7 +155,12 @@ export default function CollectionGridCard({
                             />
 
                             <MenuList>
-                                <MenuItem onClick={onModalOpen}>
+                                <MenuItem
+                                    onClick={
+                                        isCollection
+                                            ? onCollectionModalOpen
+                                            : onFileModalOpen
+                                    }>
                                     Edit {isCollection ? "collection" : "file"}
                                 </MenuItem>
                                 <MenuItem onClick={onAlertOpen}>
@@ -165,14 +183,28 @@ export default function CollectionGridCard({
 
             {isCollection && (
                 <CollectionModal
-                    isOpen={isModalOpen}
-                    onClose={onModalClose}
+                    isOpen={isCollectionModalOpen}
+                    onClose={onCollectionModalClose}
                     onSave={handleCollectionSaved}
                     mode="edit"
                     initialCollection={{
                         id: item.id,
                         name: item.name,
                         tags: item.tags
+                    }}
+                />
+            )}
+
+            {(isImage || isVideo) && (
+                <CollectionFileModal
+                    isOpen={isFileModalOpen}
+                    onClose={onFileModalClose}
+                    onSave={handleFileSaved}
+                    initialFile={{
+                        collectionId: (item as CollectionFileDto).collectionId,
+                        id: item.id,
+                        name: item.name,
+                        tags: item.tags || []
                     }}
                 />
             )}

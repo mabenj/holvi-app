@@ -131,7 +131,7 @@ export class ApiRoute {
             } catch (error) {
                 const userId = req.session?.user.id || null;
                 ApiRoute.logger.error(
-                    `Error handling ${req.method} method to ${req.url} ${
+                    `Error handling ${req.method} ${req.url} ${
                         userId && `(user: '${userId}')`
                     }`,
                     error
