@@ -16,15 +16,16 @@ import {
     useToast
 } from "@chakra-ui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { getErrorMessage } from "../common/utilities";
+import { useHttp } from "../hooks/useHttp";
 import { CollectionFileDto } from "../interfaces/collection-file-dto";
 import {
     UpdateCollectionFileData,
     UpdateCollectionFileValidator
 } from "../validators/update-collection-file-validator";
 import TagInput from "./TagInput";
+import { ApiData } from "../common/api-route";
 
 interface CollectionFileModalProps {
     isOpen: boolean;
@@ -39,12 +40,11 @@ export default function CollectionFileModal({
     onSave,
     initialFile
 }: CollectionFileModalProps) {
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    const http = useHttp();
     const {
         register,
         handleSubmit,
         formState: { errors },
-        setError,
         setValue,
         control
     } = useForm<UpdateCollectionFileData>({
@@ -58,22 +58,13 @@ export default function CollectionFileModal({
     const toast = useToast();
 
     const onSubmit = async (formData: UpdateCollectionFileData) => {
-        setIsSubmitting(true);
-        const data = await fetch(
+        const { data, error } = await http.post<ApiData<{ file?: CollectionFileDto }>>(
             `/api/collections/${initialFile.collectionId}/files`,
-            {
-                method: "POST",
-                body: JSON.stringify(formData)
-            }
-        )
-            .then((res) => res.json())
-            .finally(() => setIsSubmitting(false));
-
-        if (data.error) {
+            formData
+        );
+        if (error || !data?.file) {
             toast({
-                description: `Could not edit file: ${getErrorMessage(
-                    data.error
-                )}`,
+                description: `Could not edit file: ${getErrorMessage(error)}`,
                 status: "error"
             });
             return;
@@ -152,7 +143,7 @@ export default function CollectionFileModal({
                     <Button
                         type="submit"
                         form="collection-file-form"
-                        isLoading={isSubmitting}>
+                        isLoading={http.isLoading}>
                         Save
                     </Button>
                 </ModalFooter>

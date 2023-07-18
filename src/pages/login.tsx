@@ -1,4 +1,6 @@
 import { ApiData } from "@/lib/common/api-route";
+import { getErrorMessage } from "@/lib/common/utilities";
+import { useHttp } from "@/lib/hooks/useHttp";
 import { SignUpResponse } from "@/lib/interfaces/sign-up-response";
 import {
     LoginFormData,
@@ -32,7 +34,6 @@ import {
 import { zodResolver } from "@hookform/resolvers/zod";
 import Head from "next/head";
 import { useRouter } from "next/router";
-import { useState } from "react";
 import { useForm } from "react-hook-form";
 
 export default function Login() {
@@ -53,7 +54,6 @@ export default function Login() {
 }
 
 const LoginCard = () => {
-    const [isLoading, setIsLoading] = useState(false);
     const {
         register,
         handleSubmit,
@@ -62,20 +62,19 @@ const LoginCard = () => {
     } = useForm<LoginFormData>({
         resolver: zodResolver(LoginValidator)
     });
+    const http = useHttp();
     const toast = useToast();
     const router = useRouter();
 
     const onSubmit = async (formData: LoginFormData) => {
-        setIsLoading(true);
-        const data: ApiData = await fetch("/api/auth/login", {
-            method: "POST",
-            body: JSON.stringify(formData)
-        })
-            .then((res) => res.json())
-            .finally(() => setIsLoading(false));
-        if (data.status === "error") {
+        const { error, statusCode } = await http.post(
+            "/api/auth/login",
+            formData
+        );
+        if (error || statusCode !== 200) {
             setError("username", { message: "" });
-            setError("password", { message: data.error }); // show the message only below pwd field
+            // show the message only below pwd field
+            setError("password", { message: getErrorMessage(error) });
             return;
         }
         await router.push("/");
@@ -118,7 +117,7 @@ const LoginCard = () => {
 
                             <Button
                                 type="submit"
-                                isLoading={isLoading}
+                                isLoading={http.isLoading}
                                 form="login-form">
                                 Login
                             </Button>
@@ -133,7 +132,6 @@ const LoginCard = () => {
 };
 
 const SignUpModal = () => {
-    const [isLoading, setIsLoading] = useState(false);
     const { isOpen, onOpen, onClose } = useDisclosure();
     const {
         register,
@@ -143,28 +141,26 @@ const SignUpModal = () => {
     } = useForm<SignUpFormData>({
         resolver: zodResolver(SignUpValidator)
     });
+    const http = useHttp();
     const toast = useToast();
     const router = useRouter();
 
     const onSubmit = async (formData: SignUpFormData) => {
-        setIsLoading(true);
-        const data: ApiData<SignUpResponse> = await fetch("/api/auth/signup", {
-            method: "POST",
-            body: JSON.stringify(formData)
-        })
-            .then((res) => res.json())
-            .finally(() => setIsLoading(false));
-        if (data.status === "ok") {
-            return router.push("/").then(() =>
-                toast({
-                    description: "Successfully singed up",
-                    status: "success"
-                })
-            );
+        const { data, error } = await http.post<ApiData<SignUpResponse>>(
+            "/api/auth/signup",
+            formData
+        );
+        if (data?.status === "ok" && !error) {
+            await router.push("/");
+            toast({
+                description: "Successfully singed up",
+                status: "success"
+            });
+            return;
         }
-        data.usernameError &&
+        data?.usernameError &&
             setError("username", { message: data.usernameError });
-        data.passwordError &&
+        data?.passwordError &&
             setError("password", { message: data.passwordError });
     };
 
@@ -240,7 +236,7 @@ const SignUpModal = () => {
                         <Button
                             type="submit"
                             form="sign-up-form"
-                            isLoading={isLoading}>
+                            isLoading={http.isLoading}>
                             Sign up
                         </Button>
                     </ModalFooter>

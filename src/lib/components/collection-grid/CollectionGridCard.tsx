@@ -1,5 +1,4 @@
-import { useDeleteCollection } from "@/lib/hooks/useDeleteCollection";
-import { useDeleteFile } from "@/lib/hooks/useDeleteFile";
+import { useHttp } from "@/lib/hooks/useHttp";
 import { CollectionDto } from "@/lib/interfaces/collection-dto";
 import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
 import { CollectionGridItem } from "@/lib/interfaces/collection-grid-item";
@@ -49,9 +48,6 @@ export default function CollectionGridCard({
 }: CollectionGridCardProps) {
     const [isHovering, setIsHovering] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const { deleteCollection, isDeleting: isDeletingCollection } =
-        useDeleteCollection();
-    const { deleteFile, isDeleting: isDeletingFile } = useDeleteFile();
     const {
         isOpen: isCollectionModalOpen,
         onOpen: onCollectionModalOpen,
@@ -67,13 +63,13 @@ export default function CollectionGridCard({
         onOpen: onAlertOpen,
         onClose: onAlertClose
     } = useDisclosure();
+    const http = useHttp();
     const cancelDeleteRef = useRef(null);
     const toast = useToast();
 
     const isCollection = item.type === "collection";
     const isImage = item.type === "image";
     const isVideo = item.type === "video";
-    const isDeleting = isDeletingCollection || isDeletingFile;
 
     const handleCollectionSaved = (collection: CollectionDto) => {
         onUpdated({ ...collection, type: "collection" });
@@ -87,27 +83,26 @@ export default function CollectionGridCard({
     };
 
     const handleDelete = async () => {
-        try {
-            if (item.type === "collection") {
-                await deleteCollection(item.id);
-            } else if ("collectionId" in item) {
-                await deleteFile(item.collectionId, item.id);
-            }
-            onDeleted(item.id);
-            toast({
-                description: `${isCollection ? "Collection" : "File"} deleted`,
-                status: "success"
-            });
-        } catch (error) {
+        const { error } = await http.post(
+            "collectionId" in item
+                ? `/api/collections/${item.collectionId}/files/${item.id}`
+                : `/api/collections/${item.id}`
+        );
+        if (error) {
             toast({
                 description: `Error deleting ${
                     isCollection ? "collection" : "file"
                 }`,
                 status: "error"
             });
-        } finally {
-            onAlertClose();
+            return;
         }
+        onDeleted(item.id);
+        onAlertClose();
+        toast({
+            description: `${isCollection ? "Collection" : "File"} deleted`,
+            status: "info"
+        });
     };
 
     return (
@@ -170,7 +165,7 @@ export default function CollectionGridCard({
                             </MenuList>
                         </Menu>
                     )}
-                    {isDeleting && (
+                    {http.isLoading && (
                         <Spinner
                             position="absolute"
                             top="50%"

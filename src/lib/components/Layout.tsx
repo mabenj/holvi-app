@@ -13,8 +13,9 @@ import {
 import { useAtom } from "jotai";
 import Head from "next/head";
 import { useRouter } from "next/router";
-import { useState } from "react";
-import { ApiResponse } from "../interfaces/api-response";
+import { getErrorMessage } from "../common/utilities";
+import { useHttp } from "../hooks/useHttp";
+import { ApiData } from "../common/api-route";
 
 interface LayoutProps {
     children: React.ReactNode;
@@ -44,19 +45,16 @@ export default function Layout({ children }: LayoutProps) {
 }
 
 const Navbar = ({ username }: { username?: string }) => {
-    const [isSigningOut, setIsSigningOut] = useState(false);
+    const http = useHttp();
     const { colorMode, toggleColorMode } = useColorMode();
     const router = useRouter();
     const toast = useToast();
 
     const handleLogout = async () => {
-        setIsSigningOut(true);
-        const res: ApiResponse = await fetch("/api/auth/logout", {
-            method: "POST"
-        }).then((res) => res.json());
-        if (res.status !== "ok") {
+        const { error } = await http.post("/api/auth/logout");
+        if (error) {
             toast({
-                description: res.error,
+                description: `Error signing out: ${getErrorMessage(error)}`,
                 status: "error"
             });
         } else {
@@ -86,7 +84,7 @@ const Navbar = ({ username }: { username?: string }) => {
                         type="button"
                         onClick={handleLogout}
                         size="sm"
-                        isLoading={isSigningOut}>
+                        isLoading={http.isLoading}>
                         Log out
                     </Button>
                     <IconButton
