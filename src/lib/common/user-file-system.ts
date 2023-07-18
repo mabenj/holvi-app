@@ -319,23 +319,25 @@ async function generateThumbnail(
             const videoStream = metadata.streams.find(
                 (stream) => stream.codec_type === "video"
             );
+            let rotation = 0;
+            if (videoStream?.rotation) {
+                if (typeof videoStream.rotation === "number") {
+                    rotation = Math.abs(videoStream.rotation);
+                } else {
+                    rotation = Math.abs(
+                        Number(videoStream.rotation.replace(/\D/g, ""))
+                    );
+                }
+            }
             const videoWidth = videoStream?.width || 0;
             const videoHeight = videoStream?.height || 0;
-            let thumbnailWidth = 0;
-            let thumbnailHeight = 0;
-            if (videoWidth > videoHeight) {
-                // Landscape video
-                thumbnailWidth = Math.min(videoWidth, maxWidth);
-                thumbnailHeight = Math.floor(
-                    (thumbnailWidth / videoWidth) * videoHeight
-                );
-            } else {
-                // Portrait or square video
-                thumbnailHeight = Math.min(videoHeight, maxHeight);
-                thumbnailWidth = Math.floor(
-                    (thumbnailHeight / videoHeight) * videoWidth
-                );
-            }
+            const { width: thumbnailWidth, height: thumbnailHeight } =
+                calculateResolution({
+                    originalWidth: rotation === 90 ? videoHeight : videoWidth,
+                    originalHeight: rotation === 90 ? videoWidth : videoHeight,
+                    maxWidth,
+                    maxHeight
+                });
 
             const thumbnailTime =
                 (metadata.format.duration || 1) *
@@ -364,4 +366,20 @@ async function generateThumbnail(
                 );
         })
     );
+}
+
+function calculateResolution(options: {
+    originalWidth: number;
+    originalHeight: number;
+    maxWidth: number;
+    maxHeight: number;
+}) {
+    const { originalWidth, originalHeight, maxWidth, maxHeight } = options;
+    const ratioW = originalWidth / maxWidth;
+    const ratioH = originalHeight / maxHeight;
+    const factor = ratioW > ratioH ? ratioW : ratioH;
+    return {
+        width: Math.floor(originalWidth / factor),
+        height: Math.floor(originalHeight / factor)
+    };
 }
