@@ -1,7 +1,14 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
+import {
+    HolviError,
+    InvalidArgumentError,
+    NotFoundError,
+    UnauthorizedError
+} from "./errors";
 import Log from "./log";
 import { withUser, withoutUser } from "./route-helpers";
+import { getErrorMessage } from "./utilities";
 
 enum HttpMethod {
     GET = "GET",
@@ -129,20 +136,41 @@ export class ApiRoute {
             try {
                 await handler(req, res);
             } catch (error) {
-                const userId = req.session?.user.id || null;
-                ApiRoute.logger.error(
-                    `Error handling ${req.method} ${req.url} ${
-                        userId && `(user: '${userId}')`
-                    }`,
-                    error
-                );
-                res.status(500).json({
+                let code = 500;
+                let message = "Internal server error";
+                if (error instanceof NotFoundError) {
+                    code = 404;
+                    message = getMessage(error, "Not found");
+                } else if (error instanceof InvalidArgumentError) {
+                    code = 400;
+                    message = getMessage(error, "Invalid request");
+                } else if (error instanceof UnauthorizedError) {
+                    code = 401;
+                    message = getMessage(error, "Unauthorized");
+                } else if (error instanceof HolviError) {
+                    ApiRoute.logger.error(
+                        `HolviError ${req.method} ${req.url} (${error.message})`,
+                        error.inner
+                    );
+                } else {
+                    ApiRoute.logger.error(
+                        `Unexpected error ${req.method} ${
+                            req.url
+                        } (${getErrorMessage(error)})`,
+                        error
+                    );
+                }
+                res.status(code).json({
                     status: "error",
-                    error: "Internal server error"
+                    error: message
                 });
             }
         };
 
         return handle;
     }
+}
+
+function getMessage(error: Error, baseMsg: string) {
+    return `${baseMsg}${error.message ? ` (${error.message})` : ""}`;
 }

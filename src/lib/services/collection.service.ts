@@ -2,8 +2,9 @@ import Database from "@/db/Database";
 import { ReadStream } from "fs";
 import { IncomingMessage } from "http";
 import { Op } from "sequelize";
+import { HolviError, NotFoundError } from "../common/errors";
 import { UserFileSystem } from "../common/user-file-system";
-import { EMPTY_UUIDV4, isUuidv4 } from "../common/utilities";
+import { EMPTY_UUIDV4 } from "../common/utilities";
 import { CollectionDto } from "../interfaces/collection-dto";
 import { CollectionFileDto } from "../interfaces/collection-file-dto";
 import { UpdateCollectionFileData } from "../validators/update-collection-file-validator";
@@ -13,58 +14,21 @@ const CHUNK_SIZE_BYTES = 3_000_000; // 3mb
 
 interface CreateResult {
     collection?: CollectionDto;
-    error?: string;
     nameError?: string;
 }
 
-interface GetResult {
-    collection?: CollectionDto;
-    notFound?: boolean;
-}
-
-interface UpdateResult {
-    collection?: CollectionDto;
-    notFound?: boolean;
-    error?: string;
-}
-
-interface DeleteResult {
-    error?: string;
-}
-
-interface UploadResult {
-    error?: string;
-    files?: CollectionFileDto[];
-}
-
-interface GetFileResult {
-    file?: Buffer;
-    filename?: string;
-    mimeType?: string;
-    notFound?: boolean;
-}
-
-interface GetCollectionFilesResult {
-    notFound?: boolean;
-    files?: CollectionFileDto[];
-}
-
-interface DeleteFileResult {
-    error?: string;
+interface GetBufferResult {
+    file: Buffer;
+    filename: string;
+    mimeType: string;
 }
 
 interface GetStreamResult {
-    stream?: ReadStream;
-    chunkStartEnd?: [start: number, end: number];
-    totalLengthBytes?: number;
-    mimeType?: string;
-    notFound?: boolean;
-    filename?: string;
-}
-
-interface UpdateFileResult {
-    notFound?: boolean;
-    file?: CollectionFileDto;
+    stream: ReadStream;
+    chunkStartEnd: [start: number, end: number];
+    totalLengthBytes: number;
+    mimeType: string;
+    filename: string;
 }
 
 export class CollectionService {
@@ -73,13 +37,10 @@ export class CollectionService {
     async updateFile(
         collectionId: string,
         data: UpdateCollectionFileData
-    ): Promise<UpdateFileResult> {
+    ): Promise<CollectionFileDto> {
         const db = await Database.getInstance();
-        const fileInDb = await db.models.CollectionFile.findOne({
-            where: {
-                id: data.id,
-                CollectionId: collectionId
-            },
+        await this.throwIfNotUserCollection(collectionId);
+        const fileInDb = await db.models.CollectionFile.findByPk(data.id, {
             include: {
                 model: db.models.Collection,
                 required: true,
@@ -89,14 +50,14 @@ export class CollectionService {
             }
         });
         if (!fileInDb) {
-            return { notFound: true };
+            throw new NotFoundError(`File not found`);
         }
 
         const transaction = await db.transaction();
         try {
             // update file
             fileInDb.label = data.name;
-            await fileInDb.save();
+            await fileInDb.save({ transaction });
 
             // create new tags
             await db.models.Tag.bulkCreate(
@@ -115,7 +76,8 @@ export class CollectionService {
                     TagName: {
                         [Op.notIn]: data.tags
                     }
-                }
+                },
+                transaction
             });
             await db.models.CollectionFileTag.bulkCreate(
                 data.tags.map((tag) => ({
@@ -129,6 +91,8 @@ export class CollectionService {
                 }
             );
 
+            await transaction.commit();
+
             // fetch tags from junction table
             const fileTags = await db.models.CollectionFileTag.findAll({
                 where: {
@@ -136,98 +100,66 @@ export class CollectionService {
                 }
             });
 
-            transaction.commit();
             return {
-                file: {
-                    id: fileInDb.id,
-                    collectionId: fileInDb.CollectionId,
-                    name: fileInDb.label,
-                    mimeType: fileInDb.mimeType,
-                    src: this.getSrc(
-                        collectionId,
-                        fileInDb.filename,
-                        fileInDb.mimeType
-                    ),
-                    width: fileInDb.width,
-                    height: fileInDb.height,
-                    thumbnailSrc: this.getSrc(
-                        collectionId,
-                        fileInDb.id,
-                        fileInDb.mimeType,
-                        true
-                    ),
-                    thumbnailWidth: fileInDb.thumbnailWidth,
-                    thumbnailHeight: fileInDb.thumbnailHeight,
-                    tags: fileTags.map((tag) => tag.TagName),
-                    createdAt: fileInDb.createdAt.getTime(),
-                    updatedAt: fileInDb.updatedAt.getTime()
-                }
+                id: fileInDb.id,
+                collectionId: fileInDb.CollectionId,
+                name: fileInDb.label,
+                mimeType: fileInDb.mimeType,
+                src: this.getSrc(
+                    collectionId,
+                    fileInDb.filename,
+                    fileInDb.mimeType
+                ),
+                width: fileInDb.width,
+                height: fileInDb.height,
+                thumbnailSrc: this.getSrc(
+                    collectionId,
+                    fileInDb.id,
+                    fileInDb.mimeType,
+                    true
+                ),
+                thumbnailWidth: fileInDb.thumbnailWidth,
+                thumbnailHeight: fileInDb.thumbnailHeight,
+                tags: fileTags.map((tag) => tag.TagName),
+                createdAt: fileInDb.createdAt.getTime(),
+                updatedAt: fileInDb.updatedAt.getTime()
             };
         } catch (error) {
             transaction.rollback();
-            throw error;
+            throw new HolviError(`Error updating file '${data.id}'`, error);
         }
     }
 
-    async get(collectionId: string): Promise<GetResult> {
-        if (!isUuidv4(collectionId)) {
-            return {
-                notFound: true
-            };
-        }
+    async getCollection(collectionId: string): Promise<CollectionDto> {
         const db = await Database.getInstance();
-        const collection = await db.models.Collection.findOne({
-            where: {
-                id: collectionId,
-                UserId: this.userId
-            },
+        await this.throwIfNotUserCollection(collectionId);
+        const collection = await db.models.Collection.findByPk(collectionId, {
             include: db.models.Tag
         });
         if (!collection) {
-            return {
-                notFound: true
-            };
+            throw new NotFoundError(`Collection '${collectionId}' not found`);
         }
         return {
-            collection: {
-                id: collection.id,
-                name: collection.name,
-                tags: collection.Tags?.map((tag) => tag.name) || [],
-                thumbnails: [],
-                createdAt: collection.createdAt.getTime(),
-                updatedAt: collection.updatedAt.getTime()
-            }
+            id: collection.id,
+            name: collection.name,
+            tags: collection.Tags?.map((tag) => tag.name) || [],
+            thumbnails: [],
+            createdAt: collection.createdAt.getTime(),
+            updatedAt: collection.updatedAt.getTime()
         };
     }
 
-    async deleteFile(
-        collectionId: string,
-        fileId: string
-    ): Promise<DeleteFileResult> {
-        if (!isUuidv4(collectionId) || !isUuidv4(fileId)) {
-            return {
-                error: "Invalid collection of file id"
-            };
-        }
+    async deleteFile(collectionId: string, fileId: string) {
         const db = await Database.getInstance();
         const transaction = await db.transaction();
+        await this.throwIfNotUserCollection(collectionId);
 
         try {
-            const collectionFile = await db.models.CollectionFile.findOne({
-                where: {
-                    id: fileId,
-                    CollectionId: collectionId
-                },
-                include: {
-                    model: db.models.Collection,
-                    required: true,
-                    where: {
-                        UserId: this.userId
-                    }
-                }
-            });
+            const collectionFile = await db.models.CollectionFile.findByPk(
+                fileId
+            );
             if (!collectionFile) {
-                return {};
+                throw new NotFoundError(`File not found '${fileId}'`);
             }
             collectionFile.destroy({ transaction });
 
@@ -237,41 +169,23 @@ export class CollectionService {
                 collectionFile.filename
             );
 
-            transaction.commit();
-            return {};
+            await transaction.commit();
         } catch (error) {
             transaction.rollback();
-            throw error;
+            throw new HolviError(`Error deleting file '${fileId}'`, error);
         }
     }
 
-    async getCollectionFiles(
-        collectionId: string
-    ): Promise<GetCollectionFilesResult> {
-        if (!collectionId || !isUuidv4(collectionId)) {
-            return {
-                notFound: true
-            };
-        }
+    async getFiles(collectionId: string): Promise<CollectionFileDto[]> {
         const db = await Database.getInstance();
+        await this.throwIfNotUserCollection(collectionId);
         const collectionFiles = await db.models.CollectionFile.findAll({
             where: {
                 CollectionId: collectionId
             },
-            include: [
-                {
-                    model: db.models.Collection,
-                    required: true,
-                    where: {
-                        UserId: this.userId
-                    }
-                },
-                {
-                    model: db.models.Tag
-                }
-            ]
+            include: db.models.Tag
         });
-        const files =
+        return (
             collectionFiles?.map((file) => ({
                 id: file.id,
                 collectionId: file.CollectionId,
@@ -291,10 +205,8 @@ export class CollectionService {
                 createdAt: file.createdAt.getTime(),
                 updatedAt: file.updatedAt.getTime(),
                 tags: file.Tags?.map((tag) => tag.name) || []
-            })) || [];
-        return {
-            files
-        };
+            })) || []
+        );
     }
 
     async getVideoStream(
@@ -302,20 +214,12 @@ export class CollectionService {
         videoId: string,
         chunkStart: number
     ): Promise<GetStreamResult> {
-        if (!isUuidv4(collectionId) || !isUuidv4(videoId)) {
-            return {
-                notFound: true
-            };
-        }
-
         const fileInfo = await this.getCollectionFileInfo(
             collectionId,
             videoId
         );
         if (!fileInfo) {
-            return {
-                notFound: true
-            };
+            throw new NotFoundError(`File not found '${videoId}'`);
         }
 
         const fileSystem = new UserFileSystem(this.userId);
@@ -327,9 +231,9 @@ export class CollectionService {
                 CHUNK_SIZE_BYTES
             );
         if (!stream) {
-            return {
-                notFound: true
-            };
+            throw new HolviError(
+                `Could not get file stream for file '${videoId}'`
+            );
         }
 
         return {
@@ -341,32 +245,21 @@ export class CollectionService {
         };
     }
 
-    async getFileThumbnail(
+    async getFileThumbnailBuffer(
         collectionId: string,
         fileId: string
-    ): Promise<GetFileResult> {
-        return this.getFile(collectionId, fileId, true);
+    ): Promise<GetBufferResult> {
+        return this.getFileBuffer(collectionId, fileId, true);
     }
 
-    async getFile(
+    async getFileBuffer(
         collectionId: string,
         fileId: string,
         thumbnail: boolean = false
-    ): Promise<GetFileResult> {
-        if (
-            !collectionId ||
-            !isUuidv4(collectionId) ||
-            !fileId ||
-            !isUuidv4(fileId)
-        ) {
-            return { notFound: true };
-        }
-
+    ): Promise<GetBufferResult> {
         const fileInfo = await this.getCollectionFileInfo(collectionId, fileId);
         if (!fileInfo) {
-            return {
-                notFound: true
-            };
+            throw new NotFoundError(`File not found '${fileId}'`);
         }
 
         const fileSystem = new UserFileSystem(this.userId);
@@ -376,9 +269,7 @@ export class CollectionService {
             thumbnail
         );
         if (!file) {
-            return {
-                notFound: true
-            };
+            throw new HolviError(`Could not read file '${fileId}'`);
         }
         return {
             mimeType: fileInfo.mimeType,
@@ -391,15 +282,15 @@ export class CollectionService {
         collectionName: string,
         req: IncomingMessage
     ): Promise<CreateResult> {
-        const { collection, error } = await this.create(collectionName, []);
-        if (!collection || error) {
-            return { error };
+        const { collection, nameError } = await this.createCollection(
+            collectionName,
+            []
+        );
+        if (!collection || nameError) {
+            return { nameError };
         }
         try {
-            const { files, error } = await this.uploadFiles(collection.id, req);
-            if (!files || error) {
-                throw error;
-            }
+            const files = await this.uploadFiles(collection.id, req);
             collection.thumbnails = files
                 .map((file) => file.thumbnailSrc)
                 .slice(0, 4);
@@ -407,21 +298,18 @@ export class CollectionService {
                 collection
             };
         } catch (error) {
-            await this.delete(collection.id);
-            throw error;
+            await this.deleteCollection(collection.id);
+            throw new HolviError("Error uploading collection", error);
         }
     }
 
     async uploadFiles(
         collectionId: string,
         req: IncomingMessage
-    ): Promise<UploadResult> {
-        if (!collectionId || !isUuidv4(collectionId)) {
-            return { error: `Invalid collection id '${collectionId}'` };
-        }
-
+    ): Promise<CollectionFileDto[]> {
         const db = await Database.getInstance();
         const transaction = await db.transaction();
+        await this.throwIfNotUserCollection(collectionId);
         const fileSystem = new UserFileSystem(this.userId);
         try {
             const files = await fileSystem.uploadFilesToTempDir(req);
@@ -442,59 +330,62 @@ export class CollectionService {
             );
             await fileSystem.mergeTempDirToCollectionDir(collectionId);
             await transaction.commit();
-            return {
-                files: insertedRows.map((row) => ({
-                    id: row.id,
-                    collectionId: row.CollectionId,
-                    name: row.label,
-                    mimeType: row.mimeType,
-                    src: this.getSrc(row.CollectionId, row.id, row.mimeType),
-                    thumbnailSrc: this.getSrc(
-                        row.CollectionId,
-                        row.id,
-                        row.mimeType,
-                        true
-                    ),
-                    width: row.width,
-                    height: row.height,
-                    thumbnailWidth: row.thumbnailWidth,
-                    thumbnailHeight: row.thumbnailHeight,
-                    createdAt: row.createdAt.getTime(),
-                    updatedAt: row.updatedAt.getTime(),
-                    tags: []
-                }))
-            };
+            return insertedRows.map((row) => ({
+                id: row.id,
+                collectionId: row.CollectionId,
+                name: row.label,
+                mimeType: row.mimeType,
+                src: this.getSrc(row.CollectionId, row.id, row.mimeType),
+                thumbnailSrc: this.getSrc(
+                    row.CollectionId,
+                    row.id,
+                    row.mimeType,
+                    true
+                ),
+                width: row.width,
+                height: row.height,
+                thumbnailWidth: row.thumbnailWidth,
+                thumbnailHeight: row.thumbnailHeight,
+                createdAt: row.createdAt.getTime(),
+                updatedAt: row.updatedAt.getTime(),
+                tags: []
+            }));
         } catch (error) {
             transaction.rollback();
-            throw error;
+            throw new HolviError(
+                `Error uploading files to collection '${collectionId}'`,
+                error
+            );
         } finally {
             await fileSystem.clearTempDir();
         }
     }
 
-    async update(collection: UpdateCollectionData): Promise<UpdateResult> {
-        if (!collection.id) {
-            return { notFound: true };
-        }
-        if (!collection.name) {
-            return { error: "Invalid collection name" };
-        }
+    async updateCollection(
+        collection: UpdateCollectionData
+    ): Promise<CreateResult> {
+        const db = await Database.getInstance();
+        const transaction = await db.transaction();
+        await this.throwIfNotUserCollection(collection.id);
+
         if (await this.nameTaken(collection.name, collection.id)) {
-            return { error: "Collection name already exists" };
+            return { nameError: "Collection name already exists" };
         }
-        return Database.withTransaction(async (transaction, db) => {
-            const collectionInDb = await db.models.Collection.findOne({
-                where: {
-                    UserId: this.userId,
-                    id: collection.id
-                },
-                include: {
-                    model: db.models.CollectionFile,
-                    limit: 4
+
+        try {
+            const collectionInDb = await db.models.Collection.findByPk(
+                collection.id,
+                {
+                    include: {
+                        model: db.models.CollectionFile,
+                        limit: 4
+                    }
                 }
-            });
+            );
             if (!collectionInDb) {
-                return { notFound: true };
+                throw new NotFoundError(
+                    `Collection not found ${collection.id}`
+                );
             }
             // update file
             collectionInDb.name = collection.name;
@@ -530,12 +421,16 @@ export class CollectionService {
                     transaction
                 }
             );
+
+            await transaction.commit();
+
             // fetch tags from junction table
             const collectionTags = await db.models.CollectionTag.findAll({
                 where: {
                     CollectionId: collectionInDb.id
                 }
             });
+
             return {
                 collection: {
                     id: collectionInDb.id,
@@ -554,48 +449,49 @@ export class CollectionService {
                         ) || []
                 }
             };
-        }).catch((error) => {
-            throw new Error(
+        } catch (error) {
+            transaction.rollback();
+            throw new HolviError(
                 `Error updating collection '${collection.name}'`,
                 error
             );
-        });
+        }
     }
 
-    async delete(collectionId: string): Promise<DeleteResult> {
-        if (!isUuidv4(collectionId)) {
-            return { error: `Invalid collection id '${collectionId}'` };
-        }
+    async deleteCollection(collectionId: string) {
+        const db = await Database.getInstance();
+        const transaction = await db.transaction();
+        await this.throwIfNotUserCollection(collectionId);
 
-        return Database.withTransaction(async (transaction, db) => {
+        try {
             await db.models.Collection.destroy({
                 where: {
-                    UserId: this.userId,
                     id: collectionId
                 },
                 transaction
             });
             const fileSystem = new UserFileSystem(this.userId);
             await fileSystem.deleteCollectionDir(collectionId);
-            return {};
-        }).catch((error) => {
-            throw new Error(`Error deleting collection '${collectionId}'`, {
-                cause: error
-            });
-        });
+            await transaction.commit();
+        } catch (error) {
+            transaction.rollback();
+            throw new HolviError(
+                `Error deleting collection '${collectionId}'`,
+                error
+            );
+        }
     }
 
-    async create(name: string, tags: string[]): Promise<CreateResult> {
-        if (!name) {
-            return { nameError: "Invalid collection name" };
-        }
-        if (!Array.isArray(tags)) {
-            return { error: "Invalid collection tags" };
-        }
+    async createCollection(
+        name: string,
+        tags: string[]
+    ): Promise<CreateResult> {
         if (await this.nameTaken(name)) {
             return { nameError: "Collection name already exists" };
         }
-        return Database.withTransaction(async (transaction, db) => {
+        const db = await Database.getInstance();
+        const transaction = await db.transaction();
+        try {
             const collection = await db.models.Collection.create(
                 {
                     name,
@@ -619,6 +515,7 @@ export class CollectionService {
                 { transaction }
             );
 
+            await transaction.commit();
             return {
                 collection: {
                     id: collection.id,
@@ -629,43 +526,39 @@ export class CollectionService {
                     thumbnails: []
                 }
             };
-        });
+        } catch (error) {
+            transaction.rollback();
+            throw new HolviError("Error creating collection", error);
+        }
     }
 
-    async getAll(): Promise<CollectionDto[]> {
-        try {
-            const db = await Database.getInstance();
-            const result = await db.models.Collection.findAll({
-                where: {
-                    UserId: this.userId
+    async getAllCollections(): Promise<CollectionDto[]> {
+        const db = await Database.getInstance();
+        const result = await db.models.Collection.findAll({
+            where: {
+                UserId: this.userId
+            },
+            include: [
+                {
+                    model: db.models.Tag
                 },
-                include: [
-                    {
-                        model: db.models.Tag
-                    },
-                    {
-                        model: db.models.CollectionFile,
-                        limit: 4
-                    }
-                ]
-            });
-            return result.map((collection) => ({
-                id: collection.id,
-                name: collection.name,
-                tags: collection.Tags?.map((tag) => tag.name) || [],
-                thumbnails:
-                    collection.CollectionFiles?.map((file) =>
-                        this.getSrc(collection.id, file.id, file.mimeType, true)
-                    ) || [],
-                createdAt: collection.createdAt.getTime(),
-                updatedAt: collection.updatedAt.getTime()
-            }));
-        } catch (error) {
-            throw new Error(
-                `Error fetching collections for user '${this.userId}'`,
-                { cause: error }
-            );
-        }
+                {
+                    model: db.models.CollectionFile,
+                    limit: 4
+                }
+            ]
+        });
+        return result.map((collection) => ({
+            id: collection.id,
+            name: collection.name,
+            tags: collection.Tags?.map((tag) => tag.name) || [],
+            thumbnails:
+                collection.CollectionFiles?.map((file) =>
+                    this.getSrc(collection.id, file.id, file.mimeType, true)
+                ) || [],
+            createdAt: collection.createdAt.getTime(),
+            updatedAt: collection.updatedAt.getTime()
+        }));
     }
 
     private async getCollectionFileInfo(collectionId: string, fileId: string) {
@@ -695,9 +588,19 @@ export class CollectionService {
         };
     }
 
+    private async throwIfNotUserCollection(collectionId: string) {
+        const db = await Database.getInstance();
+        const collection = await db.models.Collection.findByPk(collectionId, {
+            attributes: ["UserId"]
+        });
+        if (!collection || collection.UserId !== this.userId) {
+            throw new NotFoundError(`Collection not found '${collectionId}'`);
+        }
+    }
+
     private async nameTaken(name: string, collectionId?: string) {
         const db = await Database.getInstance();
-        const existing = await db.models.Collection.findAll({
+        const existing = await db.models.Collection.findOne({
             where: {
                 UserId: this.userId,
                 id: {
@@ -706,7 +609,7 @@ export class CollectionService {
                 name: name.trim()
             }
         });
-        return existing.length > 0;
+        return !!existing;
     }
 
     private getSrc(

@@ -17,9 +17,8 @@ import {
     useToast
 } from "@chakra-ui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { getErrorMessage } from "../common/utilities";
+import { useHttp } from "../hooks/useHttp";
 import {
     CreateCollectionFormData,
     CreateCollectionValidator
@@ -41,7 +40,6 @@ export default function CollectionModal({
     mode,
     initialCollection
 }: CollectionModalProps) {
-    const [isSubmitting, setIsSubmitting] = useState(false);
     const {
         register,
         handleSubmit,
@@ -56,53 +54,61 @@ export default function CollectionModal({
         },
         resolver: zodResolver(CreateCollectionValidator)
     });
+    const http = useHttp();
     const toast = useToast();
 
     const onSubmit = async (formData: CreateCollectionFormData) => {
-        const method = mode === "create" ? "POST" : "PUT";
-        const body = JSON.stringify(
-            mode === "create"
-                ? formData
-                : { id: initialCollection?.id!, ...formData }
-        );
-        setIsSubmitting(true);
-        const data = await fetch("/api/collections", {
-            method,
-            body
-        })
-            .then((res) => res.json())
-            .finally(() => setIsSubmitting(false));
+        const method = mode === "edit" ? http.put : http.post;
+        const { data, error } = await method("/api/collections", {
+            id: mode === "edit" ? initialCollection?.id : undefined,
+            ...formData
+        });
 
-        if (data.nameError) {
-            setError("name", data.nameError);
+        if (data?.nameError) {
+            setError("name", {
+                message: data.nameError
+            });
+            return;
         }
-        if (data.error) {
+        if (error) {
             toast({
-                description: `Could not ${
-                    mode === "edit" ? "edit" : "create"
-                } collection: ${getErrorMessage(data.error)}`,
+                description: `Error ${
+                    mode === "edit" ? "editing" : "creating"
+                } collection`,
                 status: "error"
             });
             return;
         }
         onSave(data.collection);
-        onClose();
         toast({
             description: `Collection ${
                 mode === "edit" ? "modified" : "created"
             }`,
             status: "success"
         });
+        onClose();
+        setValue(
+            "name",
+            mode === "edit"
+                ? data.collection.name
+                : initialCollection?.name || ""
+        );
+        setValue(
+            "tags",
+            mode === "edit"
+                ? data.collection.tags
+                : initialCollection?.tags || []
+        );
     };
 
-    const handleCancel = () => {
+    const close = () => {
         onClose();
         setValue("name", initialCollection?.name || "");
         setValue("tags", initialCollection?.tags || []);
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={handleCancel}>
+        <Modal isOpen={isOpen} onClose={close}>
             <ModalOverlay />
             <ModalContent>
                 <ModalHeader>
@@ -156,13 +162,13 @@ export default function CollectionModal({
                 </ModalBody>
 
                 <ModalFooter>
-                    <Button variant="ghost" mr={3} onClick={handleCancel}>
+                    <Button variant="ghost" mr={3} onClick={close}>
                         Cancel
                     </Button>
                     <Button
                         type="submit"
                         form="create-collection-form"
-                        isLoading={isSubmitting}>
+                        isLoading={http.isLoading}>
                         {mode === "edit" ? "Save" : "Create"}
                     </Button>
                 </ModalFooter>

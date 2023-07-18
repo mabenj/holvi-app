@@ -17,7 +17,7 @@ async function getCollections(
     res: ApiResponse<GetCollectionsResponse>
 ) {
     const collectionService = new CollectionService(req.session.user.id);
-    const collections = await collectionService.getAll();
+    const collections = await collectionService.getAllCollections();
     res.status(200).json({ status: "ok", collections });
 }
 
@@ -26,12 +26,10 @@ async function updateCollection(
     res: ApiResponse<UpdateCollectionResponse>
 ) {
     const collectionService = new CollectionService(req.session.user.id);
-    const { collection: updated, error } = await collectionService.update(
-        req.body
-    );
-    if (error) {
-        res.status(400).json({ status: "error", error });
-        return;
+    const { collection: updated, nameError } =
+        await collectionService.updateCollection(req.body);
+    if (nameError) {
+        res.status(400).json({ status: "error", error: nameError, nameError });
     }
     res.status(200).json({ status: "ok", collection: updated });
 }
@@ -42,12 +40,15 @@ async function createCollection(
 ) {
     const { name, tags } = req.body;
     const collectionService = new CollectionService(req.session.user.id);
-    const { collection, error, nameError } = await collectionService.create(name, tags);
-    if (!collection || error || nameError) {
+    const { collection, nameError } = await collectionService.createCollection(
+        name,
+        tags
+    );
+    if (!collection || nameError) {
         res.status(400).json({
             status: "error",
-            error: error || "Error creating collection",
-            nameError: nameError
+            error: nameError || "Error creating collection",
+            nameError
         });
         return;
     }

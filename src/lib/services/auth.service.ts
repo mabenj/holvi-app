@@ -3,6 +3,7 @@ import { IronSession } from "iron-session";
 import Cryptography from "../common/cryptography";
 import Log from "../common/log";
 import { UserDto } from "../interfaces/user-dto";
+import { HolviError } from "../common/errors";
 
 interface RegisterUserResult {
     usernameError?: string;
@@ -11,8 +12,6 @@ interface RegisterUserResult {
 }
 
 export default class AuthService {
-    private static readonly logger = new Log("AuthService");
-
     static async registerUser(
         username: string,
         password: string
@@ -47,9 +46,8 @@ export default class AuthService {
                 }
             };
         } catch (error) {
-            this.logger.error("Error registering user", error);
             transaction.rollback();
-            throw error;
+            throw new HolviError("Error registering user", error)
         }
     }
 

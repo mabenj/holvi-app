@@ -1,4 +1,5 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
+import { InvalidArgumentError } from "@/lib/common/errors";
 import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
 import { GetCollectionFilesResponse } from "@/lib/interfaces/get-collection-files-response";
 import { CollectionService } from "@/lib/services/collection.service";
@@ -16,14 +17,7 @@ async function post(
         fileId: string;
     };
     const collectionService = new CollectionService(req.session.user.id);
-    const { notFound, file } = await collectionService.updateFile(
-        collectionId,
-        req.body
-    );
-    if (!file || notFound) {
-        res.status(404).json({ status: "error", error: "Not found" });
-        return;
-    }
+    const file = await collectionService.updateFile(collectionId, req.body);
     res.status(200).json({ status: "ok", file });
 }
 
@@ -60,11 +54,7 @@ async function handleGetCollectionFiles(
     collectionId: string
 ) {
     const service = new CollectionService(req.session.user.id);
-    const { notFound, files } = await service.getCollectionFiles(collectionId);
-    if (notFound) {
-        res.status(404).json({ status: "error", error: "Not found" });
-        return;
-    }
+    const files = await service.getFiles(collectionId);
     res.status(200).json({ status: "ok", files });
 }
 
@@ -75,15 +65,11 @@ async function handleGetThumbnail(
     fileId: string
 ) {
     const service = new CollectionService(req.session.user.id);
-    const { file, notFound, filename } = await service.getFile(
+    const { file, filename } = await service.getFileBuffer(
         collectionId,
         fileId,
         true
     );
-    if (!file || notFound) {
-        res.status(404).json({ status: "error", error: "Not found" });
-        return;
-    }
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "public, max-age=86400"); // 24h
     res.setHeader(
@@ -100,14 +86,10 @@ async function handleGetCollectionImage(
     imageId: string
 ) {
     const service = new CollectionService(req.session.user.id);
-    const { file, mimeType, notFound, filename } = await service.getFile(
+    const { file, mimeType, filename } = await service.getFileBuffer(
         collectionId,
         imageId
     );
-    if (!file || !mimeType || notFound) {
-        res.status(404).json({ status: "error", error: "Not found" });
-        return;
-    }
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Cache-Control", "public, max-age=86400"); // 24h
     res.setHeader("Content-Disposition", `inline; filename=${filename}`);
@@ -122,11 +104,7 @@ async function handleGetCollectionVideo(
 ) {
     const range = req.headers.range;
     if (!range) {
-        res.status(400).json({
-            status: "error",
-            error: "Missing range header"
-        });
-        return;
+        throw new InvalidArgumentError("Missing range header")
     }
     const chunkStart = Number(range.replace(/\D/g, ""));
     const service = new CollectionService(req.session.user.id);
@@ -135,14 +113,8 @@ async function handleGetCollectionVideo(
         chunkStartEnd,
         totalLengthBytes,
         mimeType,
-        notFound,
         filename
     } = await service.getVideoStream(collectionId, videoId, chunkStart);
-
-    if (notFound || !stream || !chunkStartEnd) {
-        res.status(404).json({ status: "error", error: "Not found" });
-        return;
-    }
 
     const contentLength = chunkStartEnd[1] - chunkStartEnd[0] + 1;
     res.writeHead(206, {

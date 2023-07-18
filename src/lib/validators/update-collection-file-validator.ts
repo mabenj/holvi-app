@@ -5,7 +5,7 @@ export const UpdateCollectionFileValidator = z.object({
     name: z
         .string()
         .min(1, "File name must be at least 1 character long")
-        .max(20, "File name must be less than 20 characters long"),
+        .max(100, "File name must be less than 100 characters long"),
     tags: z
         .array(z.string())
         .refine((values) => values.every((value) => value.length > 1), {

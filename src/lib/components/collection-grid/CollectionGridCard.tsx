@@ -83,7 +83,7 @@ export default function CollectionGridCard({
     };
 
     const handleDelete = async () => {
-        const { error } = await http.post(
+        const { error } = await http.delete(
             "collectionId" in item
                 ? `/api/collections/${item.collectionId}/files/${item.id}`
                 : `/api/collections/${item.id}`

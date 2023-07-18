@@ -1,4 +1,5 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
+import { InvalidArgumentError } from "@/lib/common/errors";
 import { CollectionDto } from "@/lib/interfaces/collection-dto";
 import { CollectionService } from "@/lib/services/collection.service";
 
@@ -12,20 +13,17 @@ async function uploadCollection(
 ) {
     const { name } = req.query as { name: string };
     if (!name) {
-        res.status(400).json({
-            status: "error",
-            error: "Invalid collection name"
-        });
+        throw new InvalidArgumentError("Invalid collection name");
     }
     const collectionService = new CollectionService(req.session.user.id);
-    const { collection, error } = await collectionService.uploadCollection(
+    const { collection, nameError } = await collectionService.uploadCollection(
         name,
         req
     );
-    if (!collection || error) {
+    if (!collection || nameError) {
         res.status(400).json({
             status: "error",
-            error: error || "Error uploading collection"
+            error: nameError || "Error uploading collection"
         });
         return;
     }

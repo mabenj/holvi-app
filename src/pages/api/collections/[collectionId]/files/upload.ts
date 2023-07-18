@@ -8,14 +8,7 @@ async function uploadFiles(
 ) {
     const { collectionId } = req.query as { collectionId: string };
     const collectionService = new CollectionService(req.session.user.id);
-    const { error, files } = await collectionService.uploadFiles(
-        collectionId,
-        req
-    );
-    if (error) {
-        res.status(400).json({ status: "error", error });
-        return;
-    }
+    const files = await collectionService.uploadFiles(collectionId, req);
     res.status(201).json({ status: "ok", files });
 }
 

@@ -144,16 +144,16 @@ export default function CollectionGrid({ collectionId }: CollectionGridProps) {
 
 async function fetcher(collectionId: string): Promise<CollectionGridItem[]> {
     if (collectionId === "root") {
-        const res = await fetch("/api/collections");
-        const data = await res.json();
+        const data = await fetch("/api/collections").then((res) => res.json());
         const { collections } = data as { collections: CollectionDto[] };
         return collections.map((collection) => ({
             ...collection,
             type: "collection"
         }));
     }
-    const res = await fetch(`/api/collections/${collectionId}/files`);
-    const data = await res.json();
+    const data = await fetch(`/api/collections/${collectionId}/files`).then(
+        (res) => res.json()
+    );
     const { files } = data as { files: CollectionFileDto[] };
     return files.map((file) => ({
         ...file,

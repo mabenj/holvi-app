@@ -8,24 +8,14 @@ async function getCollection(
 ) {
     const { collectionId } = req.query as { collectionId: string };
     const collectionService = new CollectionService(req.session.user.id);
-    const { collection, notFound } = await collectionService.get(collectionId);
-    if (!collection || notFound) {
-        res.status(404).json({ status: "error", error: "Not found" });
-        return;
-    }
+    const collection = await collectionService.getCollection(collectionId);
     res.status(200).json({ status: "ok", collection });
 }
 
 async function deleteCollection(req: ApiRequest, res: ApiResponse) {
-    const { collectionId } = req.query;
+    const { collectionId } = req.query as { collectionId: string };
     const collectionService = new CollectionService(req.session.user.id);
-    const { error } = await collectionService.delete(
-        collectionId?.toString() || ""
-    );
-    if (error) {
-        res.status(400).json({ status: "error", error });
-        return;
-    }
+    await collectionService.deleteCollection(collectionId);
     res.status(200).json({ status: "ok" });
 }
 

@@ -7,11 +7,7 @@ async function deleteFile(req: ApiRequest, res: ApiResponse) {
         fileId: string;
     };
     const collectionService = new CollectionService(req.session.user.id);
-    const { error } = await collectionService.deleteFile(collectionId, fileId);
-    if (error) {
-        res.status(400).json({ status: "error", error });
-        return;
-    }
+    await collectionService.deleteFile(collectionId, fileId);
     res.status(200).json({ status: "ok" });
 }
 

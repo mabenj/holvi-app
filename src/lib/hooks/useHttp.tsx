@@ -9,7 +9,10 @@ interface HttpResponse<T> {
 export function useHttp() {
     const [isLoading, setIsLoading] = useState(false);
 
-    const httpGet = <T,>(url: string, headers?: Record<string, any>) => {
+    const httpGet = <T extends any = any>(
+        url: string,
+        headers?: Record<string, any>
+    ) => {
         return request<T>({
             url,
             method: "GET",
@@ -17,7 +20,7 @@ export function useHttp() {
         });
     };
 
-    const httpPost = <T,>(
+    const httpPost = <T extends any = any>(
         url: string,
         payload?: any,
         headers?: Record<string, any>
@@ -30,7 +33,7 @@ export function useHttp() {
         });
     };
 
-    const httpPut = <T,>(
+    const httpPut = <T extends any = any>(
         url: string,
         payload?: any,
         headers?: Record<string, any>
@@ -43,7 +46,10 @@ export function useHttp() {
         });
     };
 
-    const httpDelete = <T,>(url: string, headers?: Record<string, any>) => {
+    const httpDelete = <T extends any = any>(
+        url: string,
+        headers?: Record<string, any>
+    ) => {
         return request<T>({
             url,
             method: "DELETE",
@@ -51,7 +57,7 @@ export function useHttp() {
         });
     };
 
-    const request = async <T,>(options: {
+    const request = async <T extends any = any>(options: {
         url: string;
         method: "GET" | "POST" | "PUT" | "DELETE";
         payload?: any;
