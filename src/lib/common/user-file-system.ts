@@ -11,15 +11,16 @@ import {
     unlink
 } from "fs/promises";
 import { IncomingMessage } from "http";
-import { nanoid } from "nanoid";
 import path from "path";
 import { promisify } from "util";
 import appConfig from "./app-config";
+import Cryptography from "./cryptography";
+import { HolviError } from "./errors";
 import Log from "./log";
 
 interface UploadedFile {
+    id: string;
     mimeType: string;
-    filename: string;
     originalFilename: string;
     width?: number;
     height?: number;
@@ -38,13 +39,13 @@ export class UserFileSystem {
         this.logger = new Log(userId);
     }
 
-    async deleteFileAndThumbnail(collectionId: string, filename: string) {
+    async deleteFileAndThumbnail(collectionId: string, fileId: string) {
         try {
-            await unlink(path.join(this.rootDir, collectionId, "tn", filename));
-            await unlink(path.join(this.rootDir, collectionId, filename));
+            await unlink(path.join(this.rootDir, collectionId, "tn", fileId));
+            await unlink(path.join(this.rootDir, collectionId, fileId));
         } catch (error) {
             this.logger.error(
-                `Error deleting file and thumbnail (collection: ${collectionId}, filename: ${filename})`,
+                `Error deleting file and thumbnail (collection: ${collectionId}, file: ${fileId})`,
                 error
             );
             throw error;
@@ -65,12 +66,12 @@ export class UserFileSystem {
 
     async getFileStream(
         collectionId: string,
-        filename: string,
+        fileId: string,
         chunkStart: number,
         chunkSize: number
     ) {
         try {
-            const filePath = path.join(this.rootDir, collectionId, filename);
+            const filePath = path.join(this.rootDir, collectionId, fileId);
             const fileSize = await stat(filePath).then((stats) => stats.size);
             const chunkEnd = Math.min(chunkStart + chunkSize, fileSize - 1);
 
@@ -86,7 +87,7 @@ export class UserFileSystem {
             };
         } catch (error) {
             this.logger.error(
-                `Error fetching file stream (collection: ${collectionId}, filename: ${filename}, start: ${chunkStart}, size: ${chunkSize})`,
+                `Error fetching file stream (collection: ${collectionId}, file: ${fileId}, start: ${chunkStart}, size: ${chunkSize})`,
                 error
             );
             throw error;
@@ -95,7 +96,7 @@ export class UserFileSystem {
 
     async readFile(
         collectionId: string,
-        filename: string,
+        fileId: string,
         thumbnail: boolean = false
     ) {
         try {
@@ -103,12 +104,12 @@ export class UserFileSystem {
             if (thumbnail) {
                 filepath.push("tn");
             }
-            filepath.push(filename);
+            filepath.push(fileId);
             const file = await readBytes(path.join(...filepath));
             return file;
         } catch (error) {
             this.logger.error(
-                `Error reading file (collection: ${collectionId}, filename: ${filename}, thumbnail: ${thumbnail})`,
+                `Error reading file (collection: ${collectionId}, file: ${fileId}, thumbnail: ${thumbnail})`,
                 error
             );
             throw error;
@@ -138,6 +139,9 @@ export class UserFileSystem {
             const result: UploadedFile[] = [];
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
+                if (!file.newFilename) {
+                    throw new HolviError("Uploaded file missing new filename");
+                }
                 const isImage = file.mimetype?.includes("image") || false;
                 const isVideo = file.mimetype?.includes("video") || false;
                 if (!isImage && !isVideo) {
@@ -145,7 +149,7 @@ export class UserFileSystem {
                 }
 
                 const fallbackName = `${timestamp}_${i}`;
-                const filename = file.newFilename || fallbackName;
+                const filename = file.newFilename;
                 const originalFilename =
                     file.originalFilename?.split("/").at(-1) ||
                     file.originalFilename ||
@@ -158,7 +162,7 @@ export class UserFileSystem {
                         path.join(this.tempDir, "tn", filename)
                     );
                 result.push({
-                    filename,
+                    id: filename,
                     originalFilename,
                     mimeType: file.mimetype || "unknown",
                     width,
@@ -239,7 +243,7 @@ async function parseForm(
         maxFileSize: appConfig.maxFileUploadSize,
         maxTotalFileSize: appConfig.maxTotalFileUploadSize,
         uploadDir: uploadDir,
-        filename: () => nanoid(),
+        filename: () => Cryptography.getUuid(),
         filter: (part) =>
             !!part.mimetype?.includes("image") ||
             !!part.mimetype?.includes("video")

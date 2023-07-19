@@ -18,7 +18,6 @@ export class CollectionFile extends Model<
     declare id: CreationOptional<string>;
     declare label: string;
     declare mimeType: string;
-    declare filename: string;
     declare width?: number;
     declare height?: number;
     declare thumbnailWidth?: number;
@@ -45,11 +44,6 @@ export class CollectionFile extends Model<
                 },
                 mimeType: {
                     type: DataTypes.STRING,
-                    allowNull: false
-                },
-                filename: {
-                    type: DataTypes.CITEXT,
-                    unique: true,
                     allowNull: false
                 },
                 width: {

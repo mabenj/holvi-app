@@ -40,17 +40,9 @@ export class CollectionService {
     ): Promise<CollectionFileDto> {
         const db = await Database.getInstance();
         await this.throwIfNotUserCollection(collectionId);
-        const fileInDb = await db.models.CollectionFile.findByPk(data.id, {
-            include: {
-                model: db.models.Collection,
-                required: true,
-                where: {
-                    UserId: this.userId
-                }
-            }
-        });
+        const fileInDb = await db.models.CollectionFile.findByPk(data.id);
         if (!fileInDb) {
-            throw new NotFoundError(`File not found`);
+            throw new NotFoundError(`File '${data.id}' not found`);
         }
 
         const transaction = await db.transaction();
@@ -105,11 +97,7 @@ export class CollectionService {
                 collectionId: fileInDb.CollectionId,
                 name: fileInDb.label,
                 mimeType: fileInDb.mimeType,
-                src: this.getSrc(
-                    collectionId,
-                    fileInDb.filename,
-                    fileInDb.mimeType
-                ),
+                src: this.getSrc(collectionId, fileInDb.id, fileInDb.mimeType),
                 width: fileInDb.width,
                 height: fileInDb.height,
                 thumbnailSrc: this.getSrc(
@@ -166,7 +154,7 @@ export class CollectionService {
             const fileSystem = new UserFileSystem(this.userId);
             await fileSystem.deleteFileAndThumbnail(
                 collectionId,
-                collectionFile.filename
+                collectionFile.id
             );
 
             await transaction.commit();
@@ -226,7 +214,7 @@ export class CollectionService {
         const { stream, totalLengthBytes, chunkStartEnd } =
             await fileSystem.getFileStream(
                 collectionId,
-                fileInfo.filename,
+                fileInfo.id,
                 chunkStart,
                 CHUNK_SIZE_BYTES
             );
@@ -265,7 +253,7 @@ export class CollectionService {
         const fileSystem = new UserFileSystem(this.userId);
         const file = await fileSystem.readFile(
             collectionId,
-            fileInfo.filename,
+            fileInfo.id,
             thumbnail
         );
         if (!file) {
@@ -315,9 +303,9 @@ export class CollectionService {
             const files = await fileSystem.uploadFilesToTempDir(req);
             const insertedRows = await db.models.CollectionFile.bulkCreate(
                 files.map((file) => ({
+                    id: file.id,
                     label: file.originalFilename,
                     mimeType: file.mimeType,
-                    filename: file.filename,
                     width: file.width,
                     height: file.height,
                     thumbnailWidth: file.thumbnailWidth,
@@ -384,7 +372,7 @@ export class CollectionService {
             );
             if (!collectionInDb) {
                 throw new NotFoundError(
-                    `Collection not found ${collection.id}`
+                    `Collection not found '${collection.id}'`
                 );
             }
             // update file
@@ -568,7 +556,7 @@ export class CollectionService {
                 CollectionId: collectionId,
                 id: fileId
             },
-            attributes: ["mimeType", "filename", "label"],
+            attributes: ["mimeType", "id", "label"],
             include: {
                 model: db.models.Collection,
                 required: true,
@@ -582,7 +570,7 @@ export class CollectionService {
             return null;
         }
         return {
-            filename: collectionFile.filename,
+            id: collectionFile.id,
             label: collectionFile.label,
             mimeType: collectionFile.mimeType
         };
@@ -591,7 +579,8 @@ export class CollectionService {
     private async throwIfNotUserCollection(collectionId: string) {
         const db = await Database.getInstance();
         const collection = await db.models.Collection.findByPk(collectionId, {
-            attributes: ["UserId"]
+            attributes: ["UserId"],
+            raw: true
         });
         if (!collection || collection.UserId !== this.userId) {
             throw new NotFoundError(`Collection not found '${collectionId}'`);
