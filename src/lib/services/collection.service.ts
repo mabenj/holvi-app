@@ -2,15 +2,14 @@ import Database from "@/db/Database";
 import { ReadStream } from "fs";
 import { IncomingMessage } from "http";
 import { Op } from "sequelize";
+import appConfig from "../common/app-config";
 import { HolviError, NotFoundError } from "../common/errors";
 import { UserFileSystem } from "../common/user-file-system";
-import { EMPTY_UUIDV4 } from "../common/utilities";
+import { EMPTY_UUIDV4, getFileSrc } from "../common/utilities";
 import { CollectionDto } from "../interfaces/collection-dto";
 import { CollectionFileDto } from "../interfaces/collection-file-dto";
 import { UpdateCollectionFileData } from "../validators/update-collection-file-validator";
 import { UpdateCollectionData } from "../validators/update-collection-validator";
-
-const CHUNK_SIZE_BYTES = 3_000_000; // 3mb
 
 interface CreateResult {
     collection?: CollectionDto;
@@ -97,15 +96,19 @@ export class CollectionService {
                 collectionId: fileInDb.CollectionId,
                 name: fileInDb.label,
                 mimeType: fileInDb.mimeType,
-                src: this.getSrc(collectionId, fileInDb.id, fileInDb.mimeType),
+                src: getFileSrc({
+                    collectionId,
+                    fileId: fileInDb.id,
+                    mimeType: fileInDb.mimeType
+                }),
                 width: fileInDb.width,
                 height: fileInDb.height,
-                thumbnailSrc: this.getSrc(
+                thumbnailSrc: getFileSrc({
                     collectionId,
-                    fileInDb.id,
-                    fileInDb.mimeType,
-                    true
-                ),
+                    fileId: fileInDb.id,
+                    mimeType: fileInDb.mimeType,
+                    thumbnail: true
+                }),
                 thumbnailWidth: fileInDb.thumbnailWidth,
                 thumbnailHeight: fileInDb.thumbnailHeight,
                 tags: fileTags.map((tag) => tag.TagName),
@@ -179,13 +182,17 @@ export class CollectionService {
                 collectionId: file.CollectionId,
                 name: file.label,
                 mimeType: file.mimeType,
-                src: this.getSrc(file.CollectionId, file.id, file.mimeType),
-                thumbnailSrc: this.getSrc(
-                    file.CollectionId,
-                    file.id,
-                    file.mimeType,
-                    true
-                ),
+                src: getFileSrc({
+                    collectionId: file.CollectionId,
+                    fileId: file.id,
+                    mimeType: file.mimeType
+                }),
+                thumbnailSrc: getFileSrc({
+                    collectionId: file.CollectionId,
+                    fileId: file.id,
+                    mimeType: file.mimeType,
+                    thumbnail: true
+                }),
                 width: file.width,
                 height: file.height,
                 thumbnailWidth: file.thumbnailWidth,
@@ -216,7 +223,7 @@ export class CollectionService {
                 collectionId,
                 fileInfo.id,
                 chunkStart,
-                CHUNK_SIZE_BYTES
+                appConfig.streamChunkSize
             );
         if (!stream) {
             throw new HolviError(
@@ -323,13 +330,17 @@ export class CollectionService {
                 collectionId: row.CollectionId,
                 name: row.label,
                 mimeType: row.mimeType,
-                src: this.getSrc(row.CollectionId, row.id, row.mimeType),
-                thumbnailSrc: this.getSrc(
-                    row.CollectionId,
-                    row.id,
-                    row.mimeType,
-                    true
-                ),
+                src: getFileSrc({
+                    collectionId: row.CollectionId,
+                    fileId: row.id,
+                    mimeType: row.mimeType
+                }),
+                thumbnailSrc: getFileSrc({
+                    collectionId: row.CollectionId,
+                    fileId: row.id,
+                    mimeType: row.mimeType,
+                    thumbnail: true
+                }),
                 width: row.width,
                 height: row.height,
                 thumbnailWidth: row.thumbnailWidth,
@@ -428,12 +439,12 @@ export class CollectionService {
                     tags: collectionTags.map((tag) => tag.TagName),
                     thumbnails:
                         collectionInDb.CollectionFiles?.map((file) =>
-                            this.getSrc(
-                                collectionInDb.id,
-                                file.id,
-                                file.mimeType,
-                                true
-                            )
+                            getFileSrc({
+                                collectionId: collectionInDb.id,
+                                fileId: file.id,
+                                mimeType: file.mimeType,
+                                thumbnail: true
+                            })
                         ) || []
                 }
             };
@@ -542,7 +553,12 @@ export class CollectionService {
             tags: collection.Tags?.map((tag) => tag.name) || [],
             thumbnails:
                 collection.CollectionFiles?.map((file) =>
-                    this.getSrc(collection.id, file.id, file.mimeType, true)
+                    getFileSrc({
+                        collectionId: collection.id,
+                        fileId: file.id,
+                        mimeType: file.mimeType,
+                        thumbnail: true
+                    })
                 ) || [],
             createdAt: collection.createdAt.getTime(),
             updatedAt: collection.updatedAt.getTime()
@@ -599,17 +615,5 @@ export class CollectionService {
             }
         });
         return !!existing;
-    }
-
-    private getSrc(
-        collectionId: string,
-        fileId: string,
-        mimeType: string,
-        thumbnail: boolean = false
-    ) {
-        const isImage = mimeType.includes("image");
-        return `/api/collections/${collectionId}/files?${
-            thumbnail ? "thumbnail" : isImage ? "image" : "video"
-        }=${fileId}`;
     }
 }

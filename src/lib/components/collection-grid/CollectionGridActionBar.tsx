@@ -1,7 +1,11 @@
+import { ApiData } from "@/lib/common/api-route";
 import { getErrorMessage } from "@/lib/common/utilities";
 import useDebounce from "@/lib/hooks/useDebounce";
+import { useHttp } from "@/lib/hooks/useHttp";
 import { useUpload } from "@/lib/hooks/useUpload";
 import { CollectionDto } from "@/lib/interfaces/collection-dto";
+import { CollectionGridItem } from "@/lib/interfaces/collection-grid-item";
+import { SearchResult } from "@/lib/interfaces/search-result";
 import { AddIcon, SearchIcon } from "@chakra-ui/icons";
 import {
     Box,
@@ -47,6 +51,7 @@ export default function CollectionGridActionBar({
         asc: boolean;
     } | null>(null);
     const { upload, isUploading, progress } = useUpload();
+    const http = useHttp();
 
     const toast = useToast();
 
@@ -60,13 +65,44 @@ export default function CollectionGridActionBar({
         if (!collectionId) {
             return;
         }
+        if (!query) {
+            actionDispatcher({
+                type: "SEARCH_END",
+                result: null
+            });
+            return;
+        }
         if (collectionId === "root") {
             actionDispatcher({ type: "SEARCH_START" });
-            //TODO: make request to server
+            const { data, error } = await http.get<ApiData<SearchResult>>(
+                `/api/search?query=${query}`
+            );
+            let result: CollectionGridItem[] | null = [];
+            if (!data || error) {
+                toast({
+                    description: `Could not search: '${getErrorMessage(
+                        error
+                    )}'`,
+                    status: "error"
+                });
+                result = null;
+            } else {
+                result.push(
+                    ...data.collections.map((c) => ({
+                        ...c,
+                        type: "collection"
+                    }))
+                );
+                result.push(
+                    ...data.files.map((c) => ({
+                        ...c,
+                        type: c.mimeType.includes("image") ? "image" : "video"
+                    }))
+                );
+            }
             actionDispatcher({
-                type: "SEARCH_SUCCESS",
-                collections: [],
-                files: []
+                type: "SEARCH_END",
+                result
             });
             return;
         }
@@ -78,9 +114,8 @@ export default function CollectionGridActionBar({
         actionDispatcher({ type: "SEARCH_START" });
         //TODO: make request to server
         actionDispatcher({
-            type: "SEARCH_SUCCESS",
-            collections: [],
-            files: []
+            type: "SEARCH_END",
+            result: []
         });
     };
 
@@ -147,7 +182,7 @@ export default function CollectionGridActionBar({
         <>
             <Flex alignItems="center" gap={2} px={2}>
                 <Box flexGrow={1}>
-                    <SearchBar onSearch={handleSearch} disabled={isLoading} />
+                    <SearchBar onSearch={handleSearch} />
                 </Box>
                 {canFilter && (
                     <FilterBtn
@@ -412,13 +447,7 @@ const CreateCollectionBtn = ({
     );
 };
 
-const SearchBar = ({
-    onSearch,
-    disabled
-}: {
-    onSearch: (query: string) => void;
-    disabled: boolean;
-}) => {
+const SearchBar = ({ onSearch }: { onSearch: (query: string) => void }) => {
     const DEBOUNCE_MS = 500;
     const [query, setQuery] = useState<string | null>(null);
     const debouncedQuery = useDebounce(query, DEBOUNCE_MS);
@@ -441,7 +470,6 @@ const SearchBar = ({
                 placeholder="Search..."
                 value={query || ""}
                 onChange={(e) => setQuery(e.target.value)}
-                disabled={disabled}
             />
         </InputGroup>
     );

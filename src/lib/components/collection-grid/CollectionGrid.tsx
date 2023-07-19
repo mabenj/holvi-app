@@ -17,6 +17,10 @@ interface CollectionGridState {
         field: string;
         asc: boolean;
     };
+    search: {
+        isSearching: boolean;
+        result: CollectionGridItem[] | null;
+    };
 }
 
 export type CollectionGridAction =
@@ -28,9 +32,8 @@ export type CollectionGridAction =
     | { type: "FILTER"; filters: string[]; query?: string }
     | { type: "SEARCH_START" }
     | {
-          type: "SEARCH_SUCCESS";
-          collections: CollectionDto[];
-          files: CollectionFileDto[];
+          type: "SEARCH_END";
+          result: CollectionGridItem[] | null;
       };
 
 interface CollectionGridProps {
@@ -38,7 +41,12 @@ interface CollectionGridProps {
 }
 
 export default function CollectionGrid({ collectionId }: CollectionGridProps) {
-    const { data, isLoading, error, mutate } = useSWR(collectionId, fetcher);
+    const {
+        data,
+        isLoading: isFetching,
+        error,
+        mutate
+    } = useSWR(collectionId, fetcher);
     const [state, dispatch] = useReducer(reducer, {
         items: [],
         filters: ["collections", "images", "videos"],
@@ -46,8 +54,15 @@ export default function CollectionGrid({ collectionId }: CollectionGridProps) {
         sort: {
             field: "name",
             asc: true
+        },
+        search: {
+            isSearching: false,
+            result: null
         }
     });
+
+    const isLoading = isFetching || state.search.isSearching;
+    const currentItems = state.search.result || state.items;
 
     useEffect(() => {
         const stateItemIds = state.items.map((item) => item.id);
@@ -126,16 +141,19 @@ export default function CollectionGrid({ collectionId }: CollectionGridProps) {
                     </Flex>
                 )}
                 <SimpleGrid columns={[3, 3, 3, 4]} spacing={[1, 1, 1, 2]}>
-                    {sort(applyFilters(state.items)).map((item) => (
-                        <CollectionGridCard
-                            key={item.id}
-                            onDeleted={(id) => dispatch({ type: "DELETE", id })}
-                            onUpdated={(item) =>
-                                dispatch({ type: "UPDATE", item })
-                            }
-                            item={item}
-                        />
-                    ))}
+                    {!isLoading &&
+                        sort(applyFilters(currentItems)).map((item) => (
+                            <CollectionGridCard
+                                key={item.id}
+                                onDeleted={(id) =>
+                                    dispatch({ type: "DELETE", id })
+                                }
+                                onUpdated={(item) =>
+                                    dispatch({ type: "UPDATE", item })
+                                }
+                                item={item}
+                            />
+                        ))}
                 </SimpleGrid>
             </PhotoProvider>
         </Flex>
@@ -200,11 +218,13 @@ function reducer(
             break;
         }
         case "SEARCH_START": {
-            //TODO
+            state.search.isSearching = true;
+            state.search.result = null;
             break;
         }
-        case "SEARCH_SUCCESS": {
-            //TODO
+        case "SEARCH_END": {
+            state.search.isSearching = false;
+            state.search.result = action.result;
             break;
         }
         default:

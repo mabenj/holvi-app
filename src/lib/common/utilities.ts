@@ -74,3 +74,16 @@ export function caseInsensitiveSorter<T, K extends keyof T>(
         return asc ? result : -result;
     };
 }
+
+export function getFileSrc(options: {
+    collectionId: string;
+    fileId: string;
+    mimeType: string;
+    thumbnail?: boolean;
+}) {
+    const { collectionId, fileId, mimeType, thumbnail = false } = options;
+    const isImage = mimeType.includes("image");
+    return `/api/collections/${collectionId}/files?${
+        thumbnail ? "thumbnail" : isImage ? "image" : "video"
+    }=${fileId}`;
+}

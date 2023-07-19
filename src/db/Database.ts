@@ -1,7 +1,7 @@
 import appConfig from "@/lib/common/app-config";
 import Log from "@/lib/common/log";
 import { sleep } from "@/lib/common/utilities";
-import { Sequelize, Transaction } from "sequelize";
+import { QueryTypes, Sequelize, Transaction } from "sequelize";
 import { Collection } from "./models/Collection";
 import { CollectionFile } from "./models/CollectionFile";
 import { CollectionFileTag } from "./models/CollectionFileTag";
@@ -33,6 +33,13 @@ export default class Database {
             logging: false
         });
         this.logger = new Log("DB");
+    }
+
+    public select(sql: string, replacements?: Record<string, any>){
+        return this.sequelize.query(sql, {
+            replacements: replacements,
+            type: QueryTypes.SELECT
+        })
     }
 
     public transaction() {
