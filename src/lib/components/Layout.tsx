@@ -6,6 +6,7 @@ import {
     Button,
     Container,
     Flex,
+    Heading,
     IconButton,
     useColorMode,
     useToast
@@ -15,7 +16,6 @@ import Head from "next/head";
 import { useRouter } from "next/router";
 import { getErrorMessage } from "../common/utilities";
 import { useHttp } from "../hooks/useHttp";
-import { ApiData } from "../common/api-route";
 
 interface LayoutProps {
     children: React.ReactNode;
@@ -36,7 +36,7 @@ export default function Layout({ children }: LayoutProps) {
             <Navbar username={user?.username} />
             <main>
                 <Container maxW="7xl" p={[0, 0, 0, 5]}>
-                    <Box py={10} />
+                    <Box py={5} />
                     {children}
                 </Container>
             </main>
@@ -74,12 +74,12 @@ const Navbar = ({ username }: { username?: string }) => {
                 w="100%"
                 p={4}>
                 <Link href="/" _hover={{ textDecoration: "none" }}>
-                    holvi
+                    <Heading size="md" fontWeight="light">
+                        HOLVI
+                    </Heading>
                 </Link>
                 <Flex alignItems="center" gap={3}>
-                    <span>
-                        Logged in as <strong>{username}</strong>
-                    </span>
+                    <strong>{username}</strong>
                     <Button
                         type="button"
                         onClick={handleLogout}

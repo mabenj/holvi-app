@@ -180,42 +180,49 @@ export default function CollectionGridActionBar({
 
     return (
         <>
-            <Flex alignItems="center" gap={2} px={2}>
-                <Box flexGrow={1}>
+            <Flex
+                alignItems="center"
+                direction={["column", "column", "row"]}
+                w="100%"
+                gap={2}
+                px={2}>
+                <Box flexGrow={1} w="100%">
                     <SearchBar onSearch={handleSearch} />
                 </Box>
-                {canFilter && (
-                    <FilterBtn
-                        filters={currentFilters}
-                        onFilter={handleFilter}
-                        disabled={isLoading}
-                    />
-                )}
-                <SortBtn onSort={handleSort} disabled={isLoading} />
-                {canListFiles && (
-                    <ListAllFilesBtn
-                        onClick={handleListFiles}
-                        disabled={isLoading}
-                    />
-                )}
-                {canUploadFiles && (
-                    <UploadFilesBtn
-                        onUpload={handleUploadFiles}
-                        disabled={isLoading}
-                    />
-                )}
-                {canUploadCollection && (
-                    <UploadCollectionBtn
-                        onUpload={handleUploadFiles}
-                        disabled={isLoading}
-                    />
-                )}
-                {canCreateCollection && (
-                    <CreateCollectionBtn
-                        onCreated={handleCreated}
-                        disabled={isLoading}
-                    />
-                )}
+                <Flex alignItems="center" gap={2}>
+                    {canFilter && (
+                        <FilterBtn
+                            filters={currentFilters}
+                            onFilter={handleFilter}
+                            disabled={isLoading}
+                        />
+                    )}
+                    <SortBtn onSort={handleSort} disabled={isLoading} />
+                    {canListFiles && (
+                        <ListAllFilesBtn
+                            onClick={handleListFiles}
+                            disabled={isLoading}
+                        />
+                    )}
+                    {canUploadFiles && (
+                        <UploadFilesBtn
+                            onUpload={handleUploadFiles}
+                            disabled={isLoading}
+                        />
+                    )}
+                    {canUploadCollection && (
+                        <UploadCollectionBtn
+                            onUpload={handleUploadFiles}
+                            disabled={isLoading}
+                        />
+                    )}
+                    {canCreateCollection && (
+                        <CreateCollectionBtn
+                            onCreated={handleCreated}
+                            disabled={isLoading}
+                        />
+                    )}
+                </Flex>
             </Flex>
             {isUploading && (
                 <Progress

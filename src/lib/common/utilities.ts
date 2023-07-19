@@ -87,3 +87,15 @@ export function getFileSrc(options: {
         thumbnail ? "thumbnail" : isImage ? "image" : "video"
     }=${fileId}`;
 }
+
+export function launchFullscreen(element: any) {
+    if (element.requestFullscreen) {
+        element.requestFullscreen();
+    } else if (element.mozRequestFullScreen) {
+        element.mozRequestFullScreen();
+    } else if (element.webkitRequestFullscreen) {
+        element.webkitRequestFullscreen();
+    } else if (element.msRequestFullscreen) {
+        element.msRequestFullscreen();
+    }
+}
