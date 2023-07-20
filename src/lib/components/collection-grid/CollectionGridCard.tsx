@@ -141,6 +141,8 @@ export default function CollectionGridCard({
                             <MenuButton
                                 as={IconButton}
                                 aria-label="Edit"
+                                color="white"
+                                backgroundColor="whiteAlpha.200"
                                 icon={<Icon path={mdiDotsVertical} size={1} />}
                                 variant="ghost"
                                 position="absolute"
@@ -148,6 +150,12 @@ export default function CollectionGridCard({
                                 top="0.5rem"
                                 style={{
                                     filter: "drop-shadow(0 0 2px black)"
+                                }}
+                                _hover={{
+                                    backgroundColor: "whiteAlpha.400"
+                                }}
+                                _active={{
+                                    backgroundColor: "whiteAlpha.400"
                                 }}
                             />
 
