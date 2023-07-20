@@ -22,10 +22,12 @@ import {
     useToast
 } from "@chakra-ui/react";
 import {
+    mdiDelete,
     mdiDotsVertical,
     mdiFolderMultipleImage,
     mdiImageOutline,
-    mdiPlayCircle
+    mdiPlayCircle,
+    mdiSquareEditOutline
 } from "@mdi/js";
 import Icon from "@mdi/react";
 import Image from "next/image";
@@ -151,6 +153,12 @@ export default function CollectionGridCard({
 
                             <MenuList>
                                 <MenuItem
+                                    icon={
+                                        <Icon
+                                            path={mdiSquareEditOutline}
+                                            size={0.7}
+                                        />
+                                    }
                                     onClick={
                                         isCollection
                                             ? onCollectionModalOpen
@@ -158,7 +166,9 @@ export default function CollectionGridCard({
                                     }>
                                     Edit {isCollection ? "collection" : "file"}
                                 </MenuItem>
-                                <MenuItem onClick={onAlertOpen}>
+                                <MenuItem
+                                    icon={<Icon path={mdiDelete} size={0.7} />}
+                                    onClick={onAlertOpen}>
                                     Delete{" "}
                                     {isCollection ? "collection" : "file"}
                                 </MenuItem>
