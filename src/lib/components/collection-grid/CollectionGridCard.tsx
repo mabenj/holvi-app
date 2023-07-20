@@ -238,6 +238,7 @@ export default function CollectionGridCard({
                             <Button
                                 colorScheme="red"
                                 onClick={handleDelete}
+                                isLoading={http.isLoading}
                                 ml={3}>
                                 Delete
                             </Button>
