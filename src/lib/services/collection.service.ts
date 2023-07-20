@@ -91,30 +91,7 @@ export class CollectionService {
                 }
             });
 
-            return {
-                id: fileInDb.id,
-                collectionId: fileInDb.CollectionId,
-                name: fileInDb.label,
-                mimeType: fileInDb.mimeType,
-                src: getFileSrc({
-                    collectionId,
-                    fileId: fileInDb.id,
-                    mimeType: fileInDb.mimeType
-                }),
-                width: fileInDb.width,
-                height: fileInDb.height,
-                thumbnailSrc: getFileSrc({
-                    collectionId,
-                    fileId: fileInDb.id,
-                    mimeType: fileInDb.mimeType,
-                    thumbnail: true
-                }),
-                thumbnailWidth: fileInDb.thumbnailWidth,
-                thumbnailHeight: fileInDb.thumbnailHeight,
-                tags: fileTags.map((tag) => tag.TagName),
-                createdAt: fileInDb.createdAt.getTime(),
-                updatedAt: fileInDb.updatedAt.getTime()
-            };
+            return fileInDb.toDto();
         } catch (error) {
             transaction.rollback();
             throw new HolviError(`Error updating file '${data.id}'`, error);
@@ -130,14 +107,7 @@ export class CollectionService {
         if (!collection) {
             throw new NotFoundError(`Collection '${collectionId}' not found`);
         }
-        return {
-            id: collection.id,
-            name: collection.name,
-            tags: collection.Tags?.map((tag) => tag.name) || [],
-            thumbnails: [],
-            createdAt: collection.createdAt.getTime(),
-            updatedAt: collection.updatedAt.getTime()
-        };
+        return collection.toDto();
     }
 
     async deleteFile(collectionId: string, fileId: string) {
@@ -176,32 +146,7 @@ export class CollectionService {
             },
             include: db.models.Tag
         });
-        return (
-            collectionFiles?.map((file) => ({
-                id: file.id,
-                collectionId: file.CollectionId,
-                name: file.label,
-                mimeType: file.mimeType,
-                src: getFileSrc({
-                    collectionId: file.CollectionId,
-                    fileId: file.id,
-                    mimeType: file.mimeType
-                }),
-                thumbnailSrc: getFileSrc({
-                    collectionId: file.CollectionId,
-                    fileId: file.id,
-                    mimeType: file.mimeType,
-                    thumbnail: true
-                }),
-                width: file.width,
-                height: file.height,
-                thumbnailWidth: file.thumbnailWidth,
-                thumbnailHeight: file.thumbnailHeight,
-                createdAt: file.createdAt.getTime(),
-                updatedAt: file.updatedAt.getTime(),
-                tags: file.Tags?.map((tag) => tag.name) || []
-            })) || []
-        );
+        return collectionFiles?.map((file) => file.toDto()) || [];
     }
 
     async getVideoStream(
@@ -325,30 +270,7 @@ export class CollectionService {
             );
             await fileSystem.mergeTempDirToCollectionDir(collectionId);
             await transaction.commit();
-            return insertedRows.map((row) => ({
-                id: row.id,
-                collectionId: row.CollectionId,
-                name: row.label,
-                mimeType: row.mimeType,
-                src: getFileSrc({
-                    collectionId: row.CollectionId,
-                    fileId: row.id,
-                    mimeType: row.mimeType
-                }),
-                thumbnailSrc: getFileSrc({
-                    collectionId: row.CollectionId,
-                    fileId: row.id,
-                    mimeType: row.mimeType,
-                    thumbnail: true
-                }),
-                width: row.width,
-                height: row.height,
-                thumbnailWidth: row.thumbnailWidth,
-                thumbnailHeight: row.thumbnailHeight,
-                createdAt: row.createdAt.getTime(),
-                updatedAt: row.updatedAt.getTime(),
-                tags: []
-            }));
+            return insertedRows.map((row) => row.toDto());
         } catch (error) {
             transaction.rollback();
             throw new HolviError(
@@ -432,11 +354,7 @@ export class CollectionService {
 
             return {
                 collection: {
-                    id: collectionInDb.id,
-                    name: collectionInDb.name,
-                    createdAt: collectionInDb.createdAt.getTime(),
-                    updatedAt: collectionInDb.updatedAt.getTime(),
-                    tags: collectionTags.map((tag) => tag.TagName),
+                    ...collectionInDb.toDto(),
                     thumbnails:
                         collectionInDb.CollectionFiles?.map((file) =>
                             getFileSrc({
@@ -517,12 +435,8 @@ export class CollectionService {
             await transaction.commit();
             return {
                 collection: {
-                    id: collection.id,
-                    name: collection.name,
-                    createdAt: collection.createdAt.getTime(),
-                    updatedAt: collection.updatedAt.getTime(),
-                    tags: collectionTags.map((tag) => tag.TagName),
-                    thumbnails: []
+                    ...collection.toDto(),
+                    tags: collectionTags.map((tag) => tag.TagName)
                 }
             };
         } catch (error) {
@@ -533,7 +447,7 @@ export class CollectionService {
 
     async getAllCollections(): Promise<CollectionDto[]> {
         const db = await Database.getInstance();
-        const result = await db.models.Collection.findAll({
+        const collections = await db.models.Collection.findAll({
             where: {
                 UserId: this.userId
             },
@@ -547,22 +461,7 @@ export class CollectionService {
                 }
             ]
         });
-        return result.map((collection) => ({
-            id: collection.id,
-            name: collection.name,
-            tags: collection.Tags?.map((tag) => tag.name) || [],
-            thumbnails:
-                collection.CollectionFiles?.map((file) =>
-                    getFileSrc({
-                        collectionId: collection.id,
-                        fileId: file.id,
-                        mimeType: file.mimeType,
-                        thumbnail: true
-                    })
-                ) || [],
-            createdAt: collection.createdAt.getTime(),
-            updatedAt: collection.updatedAt.getTime()
-        }));
+        return collections.map((collection) => collection.toDto());
     }
 
     private async getCollectionFileInfo(collectionId: string, fileId: string) {
@@ -612,7 +511,8 @@ export class CollectionService {
                     [Op.ne]: collectionId || EMPTY_UUIDV4
                 },
                 name: name.trim()
-            }
+            },
+            raw: true
         });
         return !!existing;
     }

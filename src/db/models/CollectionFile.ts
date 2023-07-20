@@ -1,3 +1,5 @@
+import { getFileSrc } from "@/lib/common/utilities";
+import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
 import {
     CreationOptional,
     DataTypes,
@@ -65,5 +67,32 @@ export class CollectionFile extends Model<
                 sequelize
             }
         );
+    }
+
+    toDto(): CollectionFileDto {
+        return {
+            id: this.id,
+            collectionId: this.CollectionId,
+            name: this.label,
+            mimeType: this.mimeType,
+            src: getFileSrc({
+                collectionId: this.CollectionId,
+                fileId: this.id,
+                mimeType: this.mimeType
+            }),
+            width: this.width,
+            height: this.height,
+            thumbnailSrc: getFileSrc({
+                collectionId: this.CollectionId,
+                fileId: this.id,
+                mimeType: this.mimeType,
+                thumbnail: true
+            }),
+            thumbnailWidth: this.thumbnailWidth,
+            thumbnailHeight: this.thumbnailHeight,
+            tags: this.Tags?.map((tag) => tag.name) || [],
+            createdAt: this.createdAt.getTime(),
+            updatedAt: this.updatedAt.getTime()
+        };
     }
 }

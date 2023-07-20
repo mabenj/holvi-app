@@ -11,6 +11,8 @@ import {
 import { CollectionFile } from "./CollectionFile";
 import { Tag } from "./Tag";
 import { User } from "./User";
+import { CollectionDto } from "@/lib/interfaces/collection-dto";
+import { getFileSrc } from "@/lib/common/utilities";
 
 export class Collection extends Model<
     InferAttributes<Collection>,
@@ -45,5 +47,21 @@ export class Collection extends Model<
                 sequelize
             }
         );
+    }
+
+    toDto(): CollectionDto{
+        return {
+            id: this.id,
+            name: this.name,
+            tags: this.Tags?.map((tag) => tag.name) || [],
+            thumbnails: this.CollectionFiles?.map(file => getFileSrc({
+                collectionId: this.id,
+                fileId: file.id,
+                mimeType: file.mimeType,
+                thumbnail: true
+            })) || [],
+            createdAt: this.createdAt.getTime(),
+            updatedAt: this.updatedAt.getTime()
+        }
     }
 }
