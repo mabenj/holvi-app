@@ -6,7 +6,7 @@ import {
     NotFoundError,
     UnauthorizedError
 } from "./errors";
-import Log from "./log";
+import Log, { LogColor } from "./log";
 import { withUser, withoutUser } from "./route-helpers";
 import { getErrorMessage } from "./utilities";
 
@@ -54,7 +54,7 @@ interface ApiRouteOptions {
 }
 
 export class ApiRoute {
-    private static readonly logger = new Log("API");
+    private static readonly logger = new Log("API", LogColor.MAGENTA);
 
     static create(options: ApiRouteOptions): NextApiHandler {
         const {

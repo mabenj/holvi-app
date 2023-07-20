@@ -1,5 +1,5 @@
 import appConfig from "@/lib/common/app-config";
-import Log from "@/lib/common/log";
+import Log, { LogColor } from "@/lib/common/log";
 import { sleep } from "@/lib/common/utilities";
 import { QueryTypes, Sequelize, Transaction } from "sequelize";
 import { Collection } from "./models/Collection";
@@ -32,7 +32,7 @@ export default class Database {
             benchmark: true,
             logging: false
         });
-        this.logger = new Log("DB");
+        this.logger = new Log("DB", LogColor.BLUE);
     }
 
     public select(sql: string, replacements?: Record<string, any>){
