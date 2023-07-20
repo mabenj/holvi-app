@@ -124,19 +124,14 @@ export default function CollectionGridActionBar({
         collectionName?: string
     ) => {
         if (files.length === 0) {
-            toast({
-                description: "No files selected",
-                status: "error"
-            });
             return;
         }
         const isCreatingNew = !!collectionName;
-        const formData = new FormData();
-        files.forEach((file) => formData.append("file", file));
+
         const url = isCreatingNew
             ? `/api/collections/upload?name=${collectionName}`
             : `/api/collections/${collectionId}/files/upload`;
-        const response = await upload(formData, url, "POST").catch((error) => ({
+        const response = await upload(files, url, "POST").catch((error) => ({
             status: "error",
             error
         }));
@@ -207,19 +202,19 @@ export default function CollectionGridActionBar({
                     {canUploadFiles && (
                         <UploadFilesBtn
                             onUpload={handleUploadFiles}
-                            disabled={isLoading}
+                            disabled={isLoading || isUploading}
                         />
                     )}
                     {canUploadCollection && (
                         <UploadCollectionBtn
                             onUpload={handleUploadFiles}
-                            disabled={isLoading}
+                            disabled={isLoading || isUploading}
                         />
                     )}
                     {canCreateCollection && (
                         <CreateCollectionBtn
                             onCreated={handleCreated}
-                            disabled={isLoading}
+                            disabled={isLoading || isUploading}
                         />
                     )}
                 </Flex>
@@ -228,7 +223,6 @@ export default function CollectionGridActionBar({
                 <Progress
                     value={progress}
                     size="xs"
-                    hasStripe
                     position="absolute"
                     top={0}
                     left={0}
@@ -251,7 +245,7 @@ const ListAllFilesBtn = ({
             variant="ghost"
             onClick={onClick}
             title="List all files"
-            disabled={disabled}>
+            isDisabled={disabled}>
             List files
         </Button>
     );
@@ -278,7 +272,7 @@ const FilterBtn = ({
                 icon={<Icon path={mdiFilterVariant} size={1} />}
                 variant="ghost"
                 title="Filter"
-                disabled={disabled}
+                isDisabled={disabled}
             />
             <MenuList>
                 <MenuOptionGroup
@@ -322,7 +316,7 @@ const SortBtn = ({
                 icon={<Icon path={mdiSort} size={1} />}
                 variant="ghost"
                 title="Sort"
-                disabled={disabled}
+                isDisabled={disabled}
             />
             <MenuList>
                 <MenuOptionGroup
@@ -355,10 +349,10 @@ const UploadCollectionBtn = ({
     const handleUpload = (e: ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files || []);
         const name =
-            files[0].webkitRelativePath.split("/")[0] || "New collection";
+            files[0]?.webkitRelativePath.split("/")[0] || "New collection";
         onUpload(files, name);
-        if (fileInputRef.current) {
-            fileInputRef.current.files = null;
+        if (fileInputRef.current?.value) {
+            fileInputRef.current.value = "";
         }
     };
 
@@ -381,7 +375,7 @@ const UploadCollectionBtn = ({
                 variant="ghost"
                 onClick={() => fileInputRef?.current?.click()}
                 icon={<Icon path={mdiFolderUpload} size={1} />}
-                disabled={disabled}
+                isDisabled={disabled}
             />
         </div>
     );
@@ -399,8 +393,8 @@ const UploadFilesBtn = ({
     const handleUpload = (e: ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files || []);
         onUpload(files);
-        if (fileInputRef.current) {
-            fileInputRef.current.files = null;
+        if (fileInputRef.current?.value) {
+            fileInputRef.current.value = "";
         }
     };
 
@@ -416,7 +410,7 @@ const UploadFilesBtn = ({
             />
             <Button
                 leftIcon={<Icon path={mdiUpload} size={1} />}
-                disabled={disabled}
+                isDisabled={disabled}
                 onClick={() => fileInputRef?.current?.click()}>
                 Upload
             </Button>
@@ -439,7 +433,7 @@ const CreateCollectionBtn = ({
                 onClick={onOpen}
                 leftIcon={<AddIcon />}
                 title="Create a new collection"
-                disabled={disabled}>
+                isDisabled={disabled}>
                 Create
             </Button>
             <CollectionModal
