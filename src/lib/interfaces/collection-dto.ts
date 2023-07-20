@@ -1,8 +1,8 @@
 export interface CollectionDto {
     id: string;
     name: string;
+    description?: string;
     tags: string[];
     thumbnails: string[];
-    createdAt: number;
-    updatedAt: number;
+    timestamp: number;
 }

@@ -1,3 +1,5 @@
+import { getFileSrc } from "@/lib/common/utilities";
+import { CollectionDto } from "@/lib/interfaces/collection-dto";
 import {
     CreationOptional,
     DataTypes,
@@ -11,8 +13,6 @@ import {
 import { CollectionFile } from "./CollectionFile";
 import { Tag } from "./Tag";
 import { User } from "./User";
-import { CollectionDto } from "@/lib/interfaces/collection-dto";
-import { getFileSrc } from "@/lib/common/utilities";
 
 export class Collection extends Model<
     InferAttributes<Collection>,
@@ -20,6 +20,7 @@ export class Collection extends Model<
 > {
     declare id: CreationOptional<string>;
     declare name: string;
+    declare description?: CreationOptional<string>;
     declare createdAt: CreationOptional<Date>;
     declare updatedAt: CreationOptional<Date>;
 
@@ -40,6 +41,9 @@ export class Collection extends Model<
                     type: DataTypes.STRING,
                     allowNull: false
                 },
+                description: {
+                    type: DataTypes.STRING
+                },
                 createdAt: DataTypes.DATE,
                 updatedAt: DataTypes.DATE
             },
@@ -49,19 +53,22 @@ export class Collection extends Model<
         );
     }
 
-    toDto(): CollectionDto{
+    toDto(): CollectionDto {
         return {
             id: this.id,
             name: this.name,
+            description: this.description,
             tags: this.Tags?.map((tag) => tag.name) || [],
-            thumbnails: this.CollectionFiles?.map(file => getFileSrc({
-                collectionId: this.id,
-                fileId: file.id,
-                mimeType: file.mimeType,
-                thumbnail: true
-            })) || [],
-            createdAt: this.createdAt.getTime(),
-            updatedAt: this.updatedAt.getTime()
-        }
+            thumbnails:
+                this.CollectionFiles?.map((file) =>
+                    getFileSrc({
+                        collectionId: this.id,
+                        fileId: file.id,
+                        mimeType: file.mimeType,
+                        thumbnail: true
+                    })
+                ) || [],
+            timestamp: this.createdAt.getTime()
+        };
     }
 }

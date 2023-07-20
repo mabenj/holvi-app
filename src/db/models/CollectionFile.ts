@@ -24,6 +24,10 @@ export class CollectionFile extends Model<
     declare height?: number;
     declare thumbnailWidth?: number;
     declare thumbnailHeight?: number;
+    declare gpsLatitude?: CreationOptional<string>;
+    declare gpsLongitude?: CreationOptional<string>;
+    declare gpsAltitude?: CreationOptional<string>;
+    declare takenAt?: CreationOptional<Date>;
 
     declare createdAt: CreationOptional<Date>;
     declare updatedAt: CreationOptional<Date>;
@@ -60,6 +64,18 @@ export class CollectionFile extends Model<
                 thumbnailHeight: {
                     type: DataTypes.INTEGER
                 },
+                takenAt: {
+                    type: DataTypes.DATE
+                },
+                gpsLatitude: {
+                    type: DataTypes.CITEXT
+                },
+                gpsLongitude: {
+                    type: DataTypes.CITEXT
+                },
+                gpsAltitude: {
+                    type: DataTypes.CITEXT
+                },
                 createdAt: DataTypes.DATE,
                 updatedAt: DataTypes.DATE
             },
@@ -70,6 +86,14 @@ export class CollectionFile extends Model<
     }
 
     toDto(): CollectionFileDto {
+        const gps =
+            this.gpsLatitude && this.gpsLongitude
+                ? {
+                      lat: this.gpsLatitude,
+                      long: this.gpsLongitude,
+                      alt: this.gpsAltitude
+                  }
+                : undefined;
         return {
             id: this.id,
             collectionId: this.CollectionId,
@@ -91,8 +115,8 @@ export class CollectionFile extends Model<
             thumbnailWidth: this.thumbnailWidth,
             thumbnailHeight: this.thumbnailHeight,
             tags: this.Tags?.map((tag) => tag.name) || [],
-            createdAt: this.createdAt.getTime(),
-            updatedAt: this.updatedAt.getTime()
+            timestamp: (this.takenAt || this.createdAt).getTime(),
+            gps: gps
         };
     }
 }

@@ -41,9 +41,6 @@ export class UserFileSystem {
 
     async deleteFileAndThumbnail(collectionId: string, fileId: string) {
         try {
-            this.logger.info(
-                `Deleting file and thumbnail '${collectionId}/${fileId}'`
-            );
             await unlink(path.join(this.rootDir, collectionId, "tn", fileId));
             await unlink(path.join(this.rootDir, collectionId, fileId));
         } catch (error) {
@@ -57,7 +54,6 @@ export class UserFileSystem {
 
     async deleteCollectionDir(collectionId: string) {
         try {
-            this.logger.info(`Deleting collection dir '${collectionId}'`);
             await deleteDirectory(path.join(this.rootDir, collectionId));
         } catch (error) {
             this.logger.error(
@@ -109,11 +105,6 @@ export class UserFileSystem {
                 filepath.push("tn");
             }
             filepath.push(fileId);
-            this.logger.info(
-                `Reading file${
-                    thumbnail ? " thumbnail" : ""
-                } '${collectionId}/${fileId}'`
-            );
             const file = await readBytes(path.join(...filepath));
             return file;
         } catch (error) {
@@ -129,9 +120,6 @@ export class UserFileSystem {
 
     async mergeTempDirToCollectionDir(collectionId: string) {
         try {
-            this.logger.info(
-                `Merging temp dir to collection dir '${collectionId}'`
-            );
             await moveDirectoryContents(
                 this.tempDir,
                 path.join(this.rootDir, collectionId)
@@ -194,7 +182,6 @@ export class UserFileSystem {
     }
 
     async clearTempDir() {
-        this.logger.info(`Deleting temp dir '${this.tempDir}'`);
         try {
             await deleteDirectory(this.tempDir);
         } catch (error) {

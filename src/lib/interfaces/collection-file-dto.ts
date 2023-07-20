@@ -9,7 +9,11 @@ export interface CollectionFileDto {
     height?: number;
     thumbnailWidth?: number;
     thumbnailHeight?: number;
-    createdAt: number;
-    updatedAt: number;
+    timestamp: number;
     tags: string[];
+    gps?: {
+        lat: string;
+        long: string;
+        alt?: string;
+    };
 }

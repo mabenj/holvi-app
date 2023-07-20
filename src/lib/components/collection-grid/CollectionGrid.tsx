@@ -147,7 +147,7 @@ export default function CollectionGrid({ collectionId }: CollectionGridProps) {
 
     const sort = (items: CollectionGridItem[]) => {
         const { field, asc } = state.sort;
-        const key = field === "name" ? "name" : "createdAt";
+        const key = field === "name" ? "name" : "timestamp";
         return items.sort(caseInsensitiveSorter(key, asc));
     };
 
