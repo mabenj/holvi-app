@@ -1,3 +1,4 @@
+import ExifParser from "exif-parser";
 import formidable from "formidable";
 import { createReadStream } from "fs";
 import {
@@ -17,6 +18,16 @@ import appConfig from "./app-config";
 import Cryptography from "./cryptography";
 import { HolviError } from "./errors";
 import Log, { LogColor } from "./log";
+import { getErrorMessage } from "./utilities";
+
+interface ExifData {
+    gps?: {
+        latitude: number;
+        longitude: number;
+        altitude?: number;
+    };
+    takenAt?: Date;
+}
 
 interface UploadedFile {
     id: string;
@@ -26,6 +37,12 @@ interface UploadedFile {
     height?: number;
     thumbnailWidth?: number;
     thumbnailHeight?: number;
+    takenAt?: Date;
+    gps?: {
+        latitude: number;
+        longitude: number;
+        altitude?: number;
+    };
 }
 
 export class UserFileSystem {
@@ -164,6 +181,10 @@ export class UserFileSystem {
                         path.join(this.tempDir, filename),
                         path.join(this.tempDir, "tn", filename)
                     );
+                const exif = isImage
+                    ? await this.getExif(path.join(this.tempDir, filename))
+                    : undefined;
+
                 result.push({
                     id: filename,
                     originalFilename,
@@ -171,7 +192,9 @@ export class UserFileSystem {
                     width,
                     height,
                     thumbnailWidth,
-                    thumbnailHeight
+                    thumbnailHeight,
+                    gps: exif?.gps,
+                    takenAt: exif?.takenAt
                 });
             }
             return result;
@@ -190,6 +213,51 @@ export class UserFileSystem {
                 error
             );
             throw error;
+        }
+    }
+
+    private async getExif(imagePath: string): Promise<ExifData | undefined> {
+        try {
+            const buffer = await readBytes(path.join(imagePath));
+            if (!buffer) {
+                throw new HolviError("Could not read image to buffer");
+            }
+            const parser = ExifParser.create(buffer);
+            const { tags } = parser.parse();
+            const {
+                GPSLatitude,
+                GPSLatitudeRef,
+                GPSLongitude,
+                GPSLongitudeRef,
+                GPSAltitude,
+                GPSAltitudeRef,
+                CreateDate
+            } = tags;
+            const gps =
+                GPSLatitude && GPSLatitudeRef && GPSLongitude && GPSLongitudeRef
+                    ? {
+                          latitude: (GPSLatitudeRef === "N"
+                              ? GPSLatitude
+                              : -GPSLatitude) as number,
+                          longitude: (GPSLongitudeRef === "E"
+                              ? GPSLongitude
+                              : -GPSLongitude) as number,
+                          altitude: GPSAltitude as number | undefined
+                      }
+                    : undefined;
+            const takenAt = CreateDate
+                ? new Date(CreateDate * 1000) // *1000 converts seconds to milliseconds
+                : undefined;
+            return {
+                gps,
+                takenAt
+            };
+        } catch (error) {
+            this.logger.warn(
+                `Could not parse exif data of image '${imagePath}' (${getErrorMessage(
+                    error
+                )})`
+            );
         }
     }
 }

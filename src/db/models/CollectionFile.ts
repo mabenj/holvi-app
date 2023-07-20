@@ -24,9 +24,9 @@ export class CollectionFile extends Model<
     declare height?: number;
     declare thumbnailWidth?: number;
     declare thumbnailHeight?: number;
-    declare gpsLatitude?: CreationOptional<string>;
-    declare gpsLongitude?: CreationOptional<string>;
-    declare gpsAltitude?: CreationOptional<string>;
+    declare gpsLatitude?: CreationOptional<number>;
+    declare gpsLongitude?: CreationOptional<number>;
+    declare gpsAltitude?: CreationOptional<number>;
     declare takenAt?: CreationOptional<Date>;
 
     declare createdAt: CreationOptional<Date>;
@@ -68,13 +68,13 @@ export class CollectionFile extends Model<
                     type: DataTypes.DATE
                 },
                 gpsLatitude: {
-                    type: DataTypes.CITEXT
+                    type: DataTypes.DECIMAL
                 },
                 gpsLongitude: {
-                    type: DataTypes.CITEXT
+                    type: DataTypes.DECIMAL
                 },
                 gpsAltitude: {
-                    type: DataTypes.CITEXT
+                    type: DataTypes.DECIMAL
                 },
                 createdAt: DataTypes.DATE,
                 updatedAt: DataTypes.DATE

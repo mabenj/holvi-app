@@ -262,7 +262,11 @@ export class CollectionService {
                     height: file.height,
                     thumbnailWidth: file.thumbnailWidth,
                     thumbnailHeight: file.thumbnailHeight,
-                    CollectionId: collectionId
+                    CollectionId: collectionId,
+                    gpsLatitude: file.gps?.latitude,
+                    gpsLongitude: file.gps?.longitude,
+                    gpsAltitude: file.gps?.altitude,
+                    takenAt: file.takenAt
                 })),
                 {
                     transaction

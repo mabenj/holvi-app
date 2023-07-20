@@ -12,8 +12,8 @@ export interface CollectionFileDto {
     timestamp: number;
     tags: string[];
     gps?: {
-        lat: string;
-        long: string;
-        alt?: string;
+        lat: number;
+        long: number;
+        alt?: number;
     };
 }

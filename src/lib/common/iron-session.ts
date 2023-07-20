@@ -1,4 +1,3 @@
-import { UserDto } from "@/lib/interfaces/user-dto";
 import { withIronSessionApiRoute, withIronSessionSsr } from "iron-session/next";
 import {
     GetServerSidePropsContext,
@@ -20,10 +19,4 @@ export function withSessionSsr<
     ) => GetServerSidePropsResult<P> | Promise<GetServerSidePropsResult<P>>
 ) {
     return withIronSessionSsr(handler, appConfig.sessionOptions);
-}
-
-declare module "iron-session" {
-    interface IronSessionData {
-        user: UserDto;
-    }
 }

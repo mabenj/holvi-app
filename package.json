@@ -24,6 +24,7 @@
         "chalk": "^5.3.0",
         "eslint": "8.43.0",
         "eslint-config-next": "13.4.7",
+        "exif-parser": "^0.1.12",
         "ffmpeg-static": "^5.1.0",
         "ffprobe-static": "^3.1.0",
         "fluent-ffmpeg": "^2.1.2",
