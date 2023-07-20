@@ -1,4 +1,3 @@
-import { currentUser } from "@/pages/_app";
 import { MoonIcon, SunIcon } from "@chakra-ui/icons";
 import { Link } from "@chakra-ui/next-js";
 import {
@@ -11,19 +10,18 @@ import {
     useColorMode,
     useToast
 } from "@chakra-ui/react";
-import { useAtom } from "jotai";
 import Head from "next/head";
 import { useRouter } from "next/router";
 import { getErrorMessage } from "../common/utilities";
 import { useHttp } from "../hooks/useHttp";
+import { UserDto } from "../interfaces/user-dto";
 
 interface LayoutProps {
     children: React.ReactNode;
+    user: UserDto;
 }
 
-export default function Layout({ children }: LayoutProps) {
-    const [user] = useAtom(currentUser);
-
+export default function Layout({ children, user }: LayoutProps) {
     return (
         <>
             <Head>
@@ -33,7 +31,7 @@ export default function Layout({ children }: LayoutProps) {
                 />
                 <link rel="icon" href="/favicon.ico" />
             </Head>
-            <Navbar username={user?.username} />
+            <Navbar username={user.username} />
             <main>
                 <Container maxW="7xl" p={[0, 0, 0, 5]}>
                     <Box py={5} />

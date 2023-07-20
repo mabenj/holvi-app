@@ -1,18 +1,22 @@
 import { caseInsensitiveSorter } from "@/lib/common/utilities";
+import { useHttp } from "@/lib/hooks/useHttp";
 import { CollectionDto } from "@/lib/interfaces/collection-dto";
 import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
 import { CollectionGridItem } from "@/lib/interfaces/collection-grid-item";
-import { Flex, SimpleGrid, Spinner } from "@chakra-ui/react";
+import { Flex, SimpleGrid } from "@chakra-ui/react";
 import { useEffect, useReducer } from "react";
 import { PhotoProvider } from "react-photo-view";
 import useSWR from "swr";
+import IfNotLoading from "../IfNotLoading";
 import CollectionGridActionBar from "./CollectionGridActionBar";
 import CollectionGridCard from "./CollectionGridCard";
 
 interface CollectionGridState {
     items: CollectionGridItem[];
-    filters: string[];
-    query: string;
+    filter: {
+        filters: string[];
+        query: string;
+    };
     sort: {
         field: string;
         asc: boolean;
@@ -41,16 +45,12 @@ interface CollectionGridProps {
 }
 
 export default function CollectionGrid({ collectionId }: CollectionGridProps) {
-    const {
-        data,
-        isLoading: isFetching,
-        error,
-        mutate
-    } = useSWR(collectionId, fetcher);
     const [state, dispatch] = useReducer(reducer, {
         items: [],
-        filters: ["collections", "images", "videos"],
-        query: "",
+        filter: {
+            filters: ["collections", "images", "videos"],
+            query: ""
+        },
         sort: {
             field: "name",
             asc: true
@@ -60,6 +60,39 @@ export default function CollectionGrid({ collectionId }: CollectionGridProps) {
             result: null
         }
     });
+    const http = useHttp();
+
+    const fetcher = async (
+        collectionId: string
+    ): Promise<CollectionGridItem[]> => {
+        const url =
+            collectionId === "root"
+                ? "/api/collections"
+                : `/api/collections/${collectionId}/files`;
+        const { data, error } = await http.get(url);
+        if (!data || error) {
+            throw new Error((error as any) || "Unable to fetch grid data");
+        }
+
+        if (collectionId === "root") {
+            const { collections } = data as { collections: CollectionDto[] };
+            return collections.map((collection) => ({
+                ...collection,
+                type: "collection"
+            }));
+        }
+        const { files } = data as { files: CollectionFileDto[] };
+        return files.map((file) => ({
+            ...file,
+            type: file.mimeType.includes("image") ? "image" : "video"
+        }));
+    };
+
+    const {
+        data,
+        isLoading: isFetching,
+        mutate
+    } = useSWR(collectionId, fetcher);
 
     const isLoading = isFetching || state.search.isSearching;
     const currentItems = state.search.result || state.items;
@@ -86,36 +119,36 @@ export default function CollectionGrid({ collectionId }: CollectionGridProps) {
     }, [data]);
 
     const applyFilters = (items: CollectionGridItem[]) => {
+        const { filters, query } = state.filter;
         let filtered = [];
-        if (state.filters.includes("collections")) {
+        if (filters.includes("collections")) {
             const collections = items.filter(
                 ({ type }) => type === "collection"
             );
             filtered.push(...collections);
         }
-        if (state.filters.includes("images")) {
+        if (filters.includes("images")) {
             const images = items.filter(({ type }) => type === "image");
             filtered.push(...images);
         }
-        if (state.filters.includes("videos")) {
+        if (filters.includes("videos")) {
             const videos = items.filter(({ type }) => type === "video");
             filtered.push(...videos);
         }
-        if (state.query) {
+        if (query) {
             filtered = filtered.filter(
                 (item) =>
-                    item.name.includes(state.query) ||
-                    item.tags?.some(
-                        (tag) => tag.localeCompare(state.query) === 0
-                    )
+                    item.name.includes(query) ||
+                    item.tags?.some((tag) => tag.localeCompare(query) === 0)
             );
         }
         return filtered;
     };
 
     const sort = (items: CollectionGridItem[]) => {
-        const key = state.sort.field === "name" ? "name" : "createdAt";
-        return items.sort(caseInsensitiveSorter(key, state.sort.asc));
+        const { field, asc } = state.sort;
+        const key = field === "name" ? "name" : "createdAt";
+        return items.sort(caseInsensitiveSorter(key, asc));
     };
 
     return (
@@ -126,23 +159,12 @@ export default function CollectionGrid({ collectionId }: CollectionGridProps) {
                 collectionId={collectionId}
             />
             <PhotoProvider
-                toolbarRender={({ index }) =>
-                    state.items && <span>{state.items[index].name}</span>
-                }>
-                {isLoading && (
-                    <Flex
-                        alignItems="center"
-                        justifyContent="center"
-                        w="100%"
-                        gap={3}
-                        py={5}>
-                        <Spinner size="sm" />
-                        <span>Loading...</span>
-                    </Flex>
-                )}
-                <SimpleGrid columns={[3, 3, 3, 4]} spacing={[1, 1, 1, 2]}>
-                    {!isLoading &&
-                        sort(applyFilters(currentItems)).map((item) => (
+                toolbarRender={({ index }) => (
+                    <span>{currentItems[index].name}</span>
+                )}>
+                <IfNotLoading isLoading={isLoading}>
+                    <SimpleGrid columns={[3, 3, 3, 4]} spacing={[1, 1, 1, 2]}>
+                        {sort(applyFilters(currentItems)).map((item) => (
                             <CollectionGridCard
                                 key={item.id}
                                 onDeleted={(id) =>
@@ -154,29 +176,11 @@ export default function CollectionGrid({ collectionId }: CollectionGridProps) {
                                 item={item}
                             />
                         ))}
-                </SimpleGrid>
+                    </SimpleGrid>
+                </IfNotLoading>
             </PhotoProvider>
         </Flex>
     );
-}
-
-async function fetcher(collectionId: string): Promise<CollectionGridItem[]> {
-    if (collectionId === "root") {
-        const data = await fetch("/api/collections").then((res) => res.json());
-        const { collections } = data as { collections: CollectionDto[] };
-        return collections.map((collection) => ({
-            ...collection,
-            type: "collection"
-        }));
-    }
-    const data = await fetch(`/api/collections/${collectionId}/files`).then(
-        (res) => res.json()
-    );
-    const { files } = data as { files: CollectionFileDto[] };
-    return files.map((file) => ({
-        ...file,
-        type: file.mimeType.includes("image") ? "image" : "video"
-    }));
 }
 
 function reducer(
@@ -213,8 +217,8 @@ function reducer(
             break;
         }
         case "FILTER": {
-            state.filters = action.filters;
-            state.query = action.query || "";
+            state.filter.filters = action.filters;
+            state.filter.query = action.query || "";
             break;
         }
         case "SEARCH_START": {

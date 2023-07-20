@@ -11,10 +11,10 @@ import {
     SignUpValidator
 } from "@/lib/validators/sign-up-validator";
 import {
-    Box,
     Button,
     Card,
     CardBody,
+    Center,
     Container,
     Divider,
     Flex,
@@ -34,19 +34,21 @@ import {
 import { zodResolver } from "@hookform/resolvers/zod";
 import Head from "next/head";
 import { useRouter } from "next/router";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 
 export default function Login() {
     return (
         <>
             <Head>
-                <title>Holvi - Login</title>
+                <title>Login</title>
                 <meta name="description" content="Login to Holvi" />
             </Head>
             <main>
                 <Container maxW="lg">
-                    <Box py={10}></Box>
-                    <LoginCard />
+                    <Center w="100%" h="100dvh">
+                        <LoginCard />
+                    </Center>
                 </Container>
             </main>
         </>
@@ -54,6 +56,7 @@ export default function Login() {
 }
 
 const LoginCard = () => {
+    const [isBusy, setIsBusy] = useState(false);
     const {
         register,
         handleSubmit,
@@ -67,6 +70,7 @@ const LoginCard = () => {
     const router = useRouter();
 
     const onSubmit = async (formData: LoginFormData) => {
+        setIsBusy(true);
         const { error, statusCode } = await http.post(
             "/api/auth/login",
             formData
@@ -75,6 +79,7 @@ const LoginCard = () => {
             setError("username", { message: "" });
             // show the message only below pwd field
             setError("password", { message: getErrorMessage(error) });
+            setIsBusy(false);
             return;
         }
         await router.push("/");
@@ -82,10 +87,11 @@ const LoginCard = () => {
             description: "Successfully logged in",
             status: "success"
         });
+        setIsBusy(false);
     };
 
     return (
-        <Card variant="outline">
+        <Card variant="outline" w="100%">
             <CardBody>
                 <Flex direction="column" gap={5}>
                     <form id="login-form" onSubmit={handleSubmit(onSubmit)}>
@@ -117,7 +123,7 @@ const LoginCard = () => {
 
                             <Button
                                 type="submit"
-                                isLoading={http.isLoading}
+                                isLoading={http.isLoading || isBusy}
                                 form="login-form">
                                 Login
                             </Button>

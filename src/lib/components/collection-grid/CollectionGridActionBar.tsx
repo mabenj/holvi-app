@@ -414,14 +414,12 @@ const UploadFilesBtn = ({
                 multiple
                 onChange={handleUpload}
             />
-            <IconButton
-                aria-label="Upload files"
-                title="Upload files"
-                variant="ghost"
-                onClick={() => fileInputRef?.current?.click()}
-                icon={<Icon path={mdiUpload} size={1} />}
+            <Button
+                leftIcon={<Icon path={mdiUpload} size={1} />}
                 disabled={disabled}
-            />
+                onClick={() => fileInputRef?.current?.click()}>
+                Upload
+            </Button>
         </div>
     );
 };

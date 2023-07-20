@@ -10,7 +10,7 @@ export default function Custom404() {
             <main>
                 <Container maxW="lg">
                     <Center w="100%" h="100dvh">
-                        <Heading>404 - Not found</Heading>
+                        <Heading>404 - Not found 🤷‍♀️</Heading>
                     </Center>
                 </Container>
             </main>

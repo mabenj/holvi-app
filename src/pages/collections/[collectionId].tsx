@@ -1,9 +1,10 @@
+import { NotFoundError } from "@/lib/common/errors";
 import { withSessionSsr } from "@/lib/common/iron-session";
-import { isUuidv4 } from "@/lib/common/utilities";
 import Layout from "@/lib/components/Layout";
 import CollectionGrid from "@/lib/components/collection-grid/CollectionGrid";
 import { CollectionDto } from "@/lib/interfaces/collection-dto";
 import { UserDto } from "@/lib/interfaces/user-dto";
+import { CollectionService } from "@/lib/services/collection.service";
 import { Link } from "@chakra-ui/next-js";
 import {
     Box,
@@ -14,80 +15,58 @@ import {
     Heading,
     Tag
 } from "@chakra-ui/react";
-import { useAtom } from "jotai";
 import Head from "next/head";
 import { useEffect, useState } from "react";
-import useSWRImmutable from "swr/immutable";
-import { currentUser, rootCollection } from "../_app";
 
 export const getServerSideProps = withSessionSsr(
     async function getServerSideProps({ req, query }) {
-        const collectionId = query.collectionId?.toString();
-        if (!collectionId || !isUuidv4(collectionId)) {
+        const { collectionId } = query as { collectionId: string };
+        try {
+            const collection = await new CollectionService(
+                req.session.user.id
+            ).getCollection(collectionId);
             return {
-                notFound: true
+                props: {
+                    user: req.session.user,
+                    collection: collection
+                }
             };
-        }
-        return {
-            props: {
-                user: req.session.user,
-                collectionId: collectionId
+        } catch (error) {
+            if (error instanceof NotFoundError) {
+                return {
+                    notFound: true
+                };
             }
-        };
+            throw new Error("Internal server error");
+        }
     }
 );
 
-const fetcher = (url: string) =>
-    fetch(url)
-        .then((res) => res.json())
-        .then((data) => data.collection as CollectionDto);
-
 export default function CollectionPage({
     user,
-    collectionId
+    collection
 }: {
     user: UserDto;
-    collectionId: string;
+    collection: CollectionDto;
 }) {
-    const { data, isLoading, error } = useSWRImmutable(
-        `/api/collections/${collectionId}`,
-        fetcher
-    );
-    const [collection, setCollection] = useAtom(rootCollection);
-    const [_, setUser] = useAtom(currentUser);
-
-    useEffect(() => setUser(user), [setUser, user]);
-
-    useEffect(() => {
-        if (!data) {
-            return;
-        }
-        setCollection(data);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [data]);
-
-    const collectionName = isLoading
-        ? "Loading..."
-        : collection?.name || collectionId;
-
     return (
         <>
             <Head>
-                <title>{collectionName}</title>
+                <title>{collection.name}</title>
             </Head>
-            <Layout>
-                <Breadcrumbs collectionName={collectionName} />
+            <Layout user={user}>
+                <Breadcrumbs collectionName={collection.name} />
                 <Flex direction="column" gap={3} px={4} pt={8}>
-                    <Heading>{collectionName}</Heading>
+                    <Heading>{collection.name}</Heading>
                     <Flex gap={2}>
-                        {collection?.tags.map((tag) => (
+                        {collection.tags.map((tag) => (
                             <CollectionTag key={tag} tag={tag} />
                         ))}
                     </Flex>
                 </Flex>
 
                 <Box py={5} />
-                <CollectionGrid collectionId={collectionId} />
+                <CollectionGrid collectionId={collection.id} />
             </Layout>
         </>
     );
@@ -96,17 +75,17 @@ export default function CollectionPage({
 const Breadcrumbs = ({ collectionName }: { collectionName: string }) => (
     <Breadcrumb px={4}>
         <BreadcrumbItem>
-            <BreadcrumbLink as={Link} href="/">
+            <BreadcrumbLink as={Link} href="/" fontWeight="semibold">
                 Home
             </BreadcrumbLink>
         </BreadcrumbItem>
 
         <BreadcrumbItem>
-            <span>Collections</span>
+            <Box color="gray.500">Collections</Box>
         </BreadcrumbItem>
 
         <BreadcrumbItem isCurrentPage>
-            <BreadcrumbLink>{collectionName}</BreadcrumbLink>
+            <Box color="gray.500">{collectionName}</Box>
         </BreadcrumbItem>
     </Breadcrumb>
 );
