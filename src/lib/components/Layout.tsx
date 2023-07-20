@@ -1,5 +1,5 @@
 import { MoonIcon, SunIcon } from "@chakra-ui/icons";
-import { Link } from "@chakra-ui/next-js";
+import { Image, Link } from "@chakra-ui/next-js";
 import {
     Box,
     Button,
@@ -12,6 +12,7 @@ import {
 } from "@chakra-ui/react";
 import Head from "next/head";
 import { useRouter } from "next/router";
+import brandImage from "../../../public/favicon-32x32.png";
 import { getErrorMessage } from "../common/utilities";
 import { useHttp } from "../hooks/useHttp";
 import { UserDto } from "../interfaces/user-dto";
@@ -72,9 +73,17 @@ const Navbar = ({ username }: { username?: string }) => {
                 w="100%"
                 p={4}>
                 <Link href="/" _hover={{ textDecoration: "none" }}>
-                    <Heading size="md" fontWeight="light">
-                        HOLVI
-                    </Heading>
+                    <Flex alignItems="center" gap={3}>
+                        <Image
+                            src={brandImage}
+                            alt="Holvi"
+                            placeholder="blur"
+                        />
+
+                        <Heading size="md" fontWeight="light">
+                            HOLVI
+                        </Heading>
+                    </Flex>
                 </Link>
                 <Flex alignItems="center" gap={3}>
                     <strong>{username}</strong>

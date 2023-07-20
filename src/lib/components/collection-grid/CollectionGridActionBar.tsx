@@ -252,7 +252,7 @@ const ListAllFilesBtn = ({
             onClick={onClick}
             title="List all files"
             disabled={disabled}>
-            All files
+            List files
         </Button>
     );
 };
