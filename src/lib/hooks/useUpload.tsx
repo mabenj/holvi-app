@@ -1,29 +1,21 @@
-import { useState } from "react";
-import PseudoProgress from "../common/pseudo-progress";
-
-const TIME_CONSTANT_FACTOR = 1 / 50_000;
+import { Flex, Spinner, ToastId, useToast } from "@chakra-ui/react";
+import { useRef, useState } from "react";
 
 export function useUpload() {
-    const [progress, setProgress] = useState(0);
     const [isUploading, setIsUploading] = useState(false);
+    const toast = useToast();
+    const toastIdRef = useRef<ToastId | null>(null);
 
     const upload = (files: File[], url: string, method: "POST" | "PUT") => {
-        const totalSize = files.reduce((acc, curr) => acc + curr.size, 0);
+        const xhr = new XMLHttpRequest();
         const formData = new FormData();
         files.forEach((file) => formData.append("file", file));
 
         return new Promise<any>((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            const pseudoProgress = new PseudoProgress(
-                totalSize * TIME_CONSTANT_FACTOR,
-                (progress) => setProgress(Math.floor(progress * 100))
-            );
-
             xhr.onreadystatechange = () => {
                 if (xhr.readyState !== 4) {
                     return;
                 }
-                pseudoProgress.end();
                 try {
                     const data = JSON.parse(xhr.response);
                     resolve(data);
@@ -31,20 +23,44 @@ export function useUpload() {
                     reject(error);
                 } finally {
                     setTimeout(() => {
+                        toastIdRef.current && toast.close(toastIdRef.current);
                         setIsUploading(false);
-                        setProgress(0);
                     }, 200);
                 }
             };
 
             xhr.upload.addEventListener("error", (e) => reject(e), false);
+            xhr.upload.addEventListener(
+                "progress",
+                (e) => {
+                    const percent = Math.floor((e.loaded / e.total) * 100);
+                    const isProcessing = percent >= 99;
+                    if (toastIdRef.current) {
+                        toast.update(toastIdRef.current, {
+                            description: isProcessing ? (
+                                <Flex gap={2} alignItems="center">
+                                    <Spinner size="sm" />
+                                    <span>Server processing....</span>
+                                </Flex>
+                            ) : (
+                                `Uploading... ${percent}%`
+                            )
+                        });
+                    }
+                },
+                false
+            );
 
             xhr.open(method, url);
             xhr.send(formData);
             setIsUploading(true);
-            pseudoProgress.start();
+            toastIdRef.current = toast({
+                description: `Uploading...`,
+                status: "info",
+                duration: null
+            });
         });
     };
 
-    return { upload, progress, isUploading };
+    return { upload, isUploading };
 }

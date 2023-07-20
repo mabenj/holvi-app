@@ -50,7 +50,7 @@ export default function CollectionGridActionBar({
         field: string;
         asc: boolean;
     } | null>(null);
-    const { upload, isUploading, progress } = useUpload();
+    const { upload, isUploading } = useUpload();
     const http = useHttp();
 
     const toast = useToast();
@@ -219,16 +219,6 @@ export default function CollectionGridActionBar({
                     )}
                 </Flex>
             </Flex>
-            {isUploading && (
-                <Progress
-                    value={progress}
-                    size="xs"
-                    position="absolute"
-                    top={0}
-                    left={0}
-                    right={0}
-                />
-            )}
         </>
     );
 }
