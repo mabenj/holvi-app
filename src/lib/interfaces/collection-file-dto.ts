@@ -15,5 +15,6 @@ export interface CollectionFileDto {
         lat: number;
         long: number;
         alt?: number;
+        label?: string;
     };
 }

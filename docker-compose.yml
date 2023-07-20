@@ -25,6 +25,7 @@ services:
             - SESSION_TTL_SECONDS=7200
             - MAX_FILE_SIZE_KB=4294967296
             - MAX_TOTAL_FILE_SIZE_KB=17179869184
+            - GEO_API_KEY=get-free-api-key-from-https://positionstack.com/product
         volumes:
             - app-data:/app/data
         ports:

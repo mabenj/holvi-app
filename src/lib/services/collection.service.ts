@@ -266,6 +266,7 @@ export class CollectionService {
                     gpsLatitude: file.gps?.latitude,
                     gpsLongitude: file.gps?.longitude,
                     gpsAltitude: file.gps?.altitude,
+                    gpsLabel: file.gps?.label,
                     takenAt: file.takenAt
                 })),
                 {

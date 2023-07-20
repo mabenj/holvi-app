@@ -18,13 +18,14 @@ import appConfig from "./app-config";
 import Cryptography from "./cryptography";
 import { HolviError } from "./errors";
 import Log, { LogColor } from "./log";
-import { getErrorMessage } from "./utilities";
+import { getErrorMessage, sleep } from "./utilities";
 
 interface ExifData {
     gps?: {
         latitude: number;
         longitude: number;
         altitude?: number;
+        label?: string;
     };
     takenAt?: Date;
 }
@@ -42,6 +43,7 @@ interface UploadedFile {
         latitude: number;
         longitude: number;
         altitude?: number;
+        label?: string;
     };
 }
 
@@ -217,40 +219,95 @@ export class UserFileSystem {
     }
 
     private async getExif(imagePath: string): Promise<ExifData | undefined> {
+        const GEO_API_COOLDOWN_MS = 500;
+        const SECONDS_TO_MS = 1000;
+
         try {
             const buffer = await readBytes(path.join(imagePath));
             if (!buffer) {
                 throw new HolviError("Could not read image to buffer");
             }
             const parser = ExifParser.create(buffer);
-            const { tags } = parser.parse();
             const {
-                GPSLatitude,
-                GPSLatitudeRef,
-                GPSLongitude,
-                GPSLongitudeRef,
-                GPSAltitude,
-                GPSAltitudeRef,
-                CreateDate
-            } = tags;
-            const gps =
-                GPSLatitude && GPSLatitudeRef && GPSLongitude && GPSLongitudeRef
-                    ? {
-                          latitude: (GPSLatitudeRef === "N"
-                              ? GPSLatitude
-                              : -GPSLatitude) as number,
-                          longitude: (GPSLongitudeRef === "E"
-                              ? GPSLongitude
-                              : -GPSLongitude) as number,
-                          altitude: GPSAltitude as number | undefined
-                      }
-                    : undefined;
+                tags: {
+                    GPSLatitude,
+                    GPSLatitudeRef,
+                    GPSLongitude,
+                    GPSLongitudeRef,
+                    GPSAltitude,
+                    GPSAltitudeRef,
+                    CreateDate
+                }
+            } = parser.parse();
+
             const takenAt = CreateDate
-                ? new Date(CreateDate * 1000) // *1000 converts seconds to milliseconds
+                ? new Date(CreateDate * SECONDS_TO_MS)
                 : undefined;
+
+            if (
+                !GPSLatitude ||
+                !GPSLatitudeRef ||
+                !GPSLongitude ||
+                !GPSLongitudeRef
+            ) {
+                return { takenAt };
+            }
+
+            const latitude = (
+                GPSLatitudeRef === "N" ? GPSLatitude : -GPSLatitude
+            ) as number;
+            const longitude = (
+                GPSLongitudeRef === "E" ? GPSLongitude : -GPSLongitude
+            ) as number;
+            const altitude = GPSAltitude as number;
+            let label: string | undefined;
+
+            const res = await fetch(
+                `http://api.positionstack.com/v1/reverse?access_key=${appConfig.geoApiKey}&query=${latitude},${longitude}&output=json`
+            );
+            if (res.status !== 200) {
+                this.logger.warn(
+                    `Geocoding API request responded with '${res.status}' (${res.statusText})`
+                );
+            } else {
+                const { data } = await res.json();
+                let {
+                    country,
+                    region,
+                    county,
+                    locality,
+                    neighbourhood,
+                    name,
+                    label: apiLabel
+                } = data[0] || {};
+                let specificArea = county || locality || neighbourhood;
+                if (!specificArea || !country) {
+                    label = apiLabel || name || undefined;
+                } else {
+                    const stringBuilder = [] as string[];
+                    if (specificArea.toLowerCase() !== region.toLowerCase()) {
+                        stringBuilder.push(specificArea);
+                    }
+                    stringBuilder.push(region);
+                    if (
+                        specificArea.toLowerCase() !== region.toLowerCase() &&
+                        !region.includes(country)
+                    ) {
+                        stringBuilder.push(country);
+                    }
+                    label = stringBuilder.join(", ");
+                }
+            }
+            await sleep(GEO_API_COOLDOWN_MS);
+
             return {
-                gps,
-                takenAt
+                takenAt,
+                gps: {
+                    latitude,
+                    longitude,
+                    altitude,
+                    label
+                }
             };
         } catch (error) {
             this.logger.warn(

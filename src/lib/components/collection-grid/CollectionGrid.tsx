@@ -1,10 +1,13 @@
-import { caseInsensitiveSorter } from "@/lib/common/utilities";
+import { caseInsensitiveSorter, formatDate } from "@/lib/common/utilities";
 import { useHttp } from "@/lib/hooks/useHttp";
 import { CollectionDto } from "@/lib/interfaces/collection-dto";
 import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
 import { CollectionGridItem } from "@/lib/interfaces/collection-grid-item";
-import { Flex, SimpleGrid } from "@chakra-ui/react";
-import { useEffect, useReducer } from "react";
+import { Link } from "@chakra-ui/next-js";
+import { Box, Flex, SimpleGrid } from "@chakra-ui/react";
+import { mdiMapMarker } from "@mdi/js";
+import Icon from "@mdi/react";
+import { useEffect, useReducer, useState } from "react";
 import { PhotoProvider } from "react-photo-view";
 import useSWR from "swr";
 import IfNotLoading from "../IfNotLoading";
@@ -60,6 +63,9 @@ export default function CollectionGrid({ collectionId }: CollectionGridProps) {
             result: null
         }
     });
+    const [itemsToRender, setItemsToRender] = useState(
+        [] as CollectionGridItem[]
+    );
     const http = useHttp();
 
     const fetcher = async (
@@ -95,7 +101,6 @@ export default function CollectionGrid({ collectionId }: CollectionGridProps) {
     } = useSWR(collectionId, fetcher);
 
     const isLoading = isFetching || state.search.isSearching;
-    const currentItems = state.search.result || state.items;
 
     useEffect(() => {
         const stateItemIds = state.items.map((item) => item.id);
@@ -117,6 +122,13 @@ export default function CollectionGrid({ collectionId }: CollectionGridProps) {
 
         dispatch({ type: "SET", items: data });
     }, [data]);
+
+    useEffect(() => {
+        setItemsToRender(
+            sort(applyFilters(state.search.result || state.items))
+        );
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [state.items, state.sort, state.filter, state.search.result]);
 
     const applyFilters = (items: CollectionGridItem[]) => {
         const { filters, query } = state.filter;
@@ -160,11 +172,11 @@ export default function CollectionGrid({ collectionId }: CollectionGridProps) {
             />
             <PhotoProvider
                 toolbarRender={({ index }) => (
-                    <span>{currentItems[index].name}</span>
+                    <PhotoViewerToolbar item={itemsToRender[index]} />
                 )}>
                 <IfNotLoading isLoading={isLoading}>
                     <SimpleGrid columns={[3, 3, 3, 4]} spacing={[1, 1, 1, 2]}>
-                        {sort(applyFilters(currentItems)).map((item) => (
+                        {itemsToRender.map((item) => (
                             <CollectionGridCard
                                 key={item.id}
                                 onDeleted={(id) =>
@@ -182,6 +194,29 @@ export default function CollectionGrid({ collectionId }: CollectionGridProps) {
         </Flex>
     );
 }
+const PhotoViewerToolbar = ({ item }: { item: CollectionGridItem }) => {
+    return (
+        <Flex direction="column" alignItems="end" pr={5}>
+            <Box fontSize="sm">{item.name}</Box>
+            <Flex gap={2} fontSize="xs" textColor="whiteAlpha.600">
+                <Box>
+                    {item.type === "image" && item.gps && (
+                        <Link
+                            href={`https://www.google.com/maps/search/?api=1&query=${item.gps.lat},${item.gps.long}`}
+                            target="_blank">
+                            <Flex alignItems="center" gap={1}>
+                                <Icon path={mdiMapMarker} size={0.5} />
+                                <span>{item.gps.label || "Google Maps"}</span>
+                            </Flex>
+                        </Link>
+                    )}
+                </Box>
+                {item.type === "image" && item.gps && <span>|</span>}
+                <span>{formatDate(item.timestamp)}</span>
+            </Flex>
+        </Flex>
+    );
+};
 
 function reducer(
     state: CollectionGridState,
@@ -217,8 +252,10 @@ function reducer(
             break;
         }
         case "FILTER": {
-            state.filter.filters = action.filters;
-            state.filter.query = action.query || "";
+            state.filter = {
+                filters: action.filters,
+                query: action.query || ""
+            };
             break;
         }
         case "SEARCH_START": {

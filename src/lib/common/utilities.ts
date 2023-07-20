@@ -99,3 +99,15 @@ export function launchFullscreen(element: any) {
         element.msRequestFullscreen();
     }
 }
+
+export function formatDate(date: Date | number) {
+    if (typeof date === "number") {
+        date = new Date(date);
+    }
+    return date.toLocaleDateString("en-us", {
+        weekday: "short",
+        year: "numeric",
+        month: "short",
+        day: "numeric"
+    });
+}

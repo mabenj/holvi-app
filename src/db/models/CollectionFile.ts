@@ -27,6 +27,7 @@ export class CollectionFile extends Model<
     declare gpsLatitude?: CreationOptional<number>;
     declare gpsLongitude?: CreationOptional<number>;
     declare gpsAltitude?: CreationOptional<number>;
+    declare gpsLabel?: CreationOptional<string>;
     declare takenAt?: CreationOptional<Date>;
 
     declare createdAt: CreationOptional<Date>;
@@ -76,6 +77,9 @@ export class CollectionFile extends Model<
                 gpsAltitude: {
                     type: DataTypes.DECIMAL
                 },
+                gpsLabel: {
+                    type: DataTypes.STRING
+                },
                 createdAt: DataTypes.DATE,
                 updatedAt: DataTypes.DATE
             },
@@ -91,7 +95,8 @@ export class CollectionFile extends Model<
                 ? {
                       lat: this.gpsLatitude,
                       long: this.gpsLongitude,
-                      alt: this.gpsAltitude
+                      alt: this.gpsAltitude,
+                      label: this.gpsLabel
                   }
                 : undefined;
         return {
