@@ -9,7 +9,9 @@ export function useUpload() {
     const upload = (files: File[], url: string, method: "POST" | "PUT") => {
         const xhr = new XMLHttpRequest();
         const formData = new FormData();
-        files.forEach((file) => formData.append("file", file));
+        files.forEach((file) =>
+            formData.append(file.lastModified.toString(), file)
+        );
 
         return new Promise<any>((resolve, reject) => {
             xhr.onreadystatechange = () => {

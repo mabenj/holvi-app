@@ -104,10 +104,14 @@ export function formatDate(date: Date | number) {
     if (typeof date === "number") {
         date = new Date(date);
     }
-    return date.toLocaleDateString("en-us", {
+    return date.toLocaleDateString(undefined, {
         weekday: "short",
         year: "numeric",
         month: "short",
         day: "numeric"
     });
 }
+
+export function isValidDate(d: any) {
+    return !isNaN(d) && d instanceof Date;
+  }

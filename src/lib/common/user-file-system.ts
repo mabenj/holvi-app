@@ -18,7 +18,7 @@ import appConfig from "./app-config";
 import Cryptography from "./cryptography";
 import { HolviError } from "./errors";
 import Log, { LogColor } from "./log";
-import { getErrorMessage } from "./utilities";
+import { getErrorMessage, isValidDate } from "./utilities";
 
 interface ExifData {
     gps?: {
@@ -28,6 +28,14 @@ interface ExifData {
         label?: string;
     };
     takenAt?: Date;
+}
+
+interface ParsedFile {
+    filepath: string;
+    newFilename: string;
+    originalFilename: string | null;
+    mimeType: string | null;
+    lastModified: Date | null;
 }
 
 interface UploadedFile {
@@ -164,8 +172,8 @@ export class UserFileSystem {
                 if (!file.newFilename) {
                     throw new HolviError("Uploaded file missing new filename");
                 }
-                const isImage = file.mimetype?.includes("image") || false;
-                const isVideo = file.mimetype?.includes("video") || false;
+                const isImage = file.mimeType?.includes("image") || false;
+                const isVideo = file.mimeType?.includes("video") || false;
                 if (!isImage && !isVideo) {
                     throw new Error("Unsupported file type");
                 }
@@ -190,13 +198,13 @@ export class UserFileSystem {
                 result.push({
                     id: filename,
                     originalFilename,
-                    mimeType: file.mimetype || "unknown",
+                    mimeType: file.mimeType || "unknown",
                     width,
                     height,
                     thumbnailWidth,
                     thumbnailHeight,
                     gps: exif?.gps,
-                    takenAt: exif?.takenAt
+                    takenAt: exif?.takenAt || file.lastModified || undefined
                 });
             }
             return result;
@@ -222,7 +230,7 @@ export class UserFileSystem {
         const SECONDS_TO_MS = 1000;
 
         try {
-            const buffer = await readBytes(path.join(imagePath));
+            const buffer = await readBytes(imagePath);
             if (!buffer) {
                 throw new HolviError("Could not read image to buffer");
             }
@@ -362,7 +370,7 @@ async function parseForm(
     req: IncomingMessage,
     uploadDir: string,
     onProgress?: (percent: number) => void
-): Promise<formidable.File[]> {
+): Promise<ParsedFile[]> {
     await createDirIfNotExists(uploadDir);
 
     const form = formidable({
@@ -390,7 +398,20 @@ async function parseForm(
     }
 
     const [fields, files] = await form.parse(req);
-    return Object.keys(files).flatMap((file) => files[file]);
+    return Object.keys(files).flatMap((key) => {
+        const lastModified = new Date(parseInt(key, 10));
+        const formidableFile = files[key];
+        const fileList = Array.isArray(formidableFile)
+            ? formidableFile
+            : [formidableFile];
+        return fileList.map((file) => ({
+            filepath: file.filepath,
+            newFilename: file.newFilename,
+            originalFilename: file.originalFilename,
+            mimeType: file.mimetype,
+            lastModified: isValidDate(lastModified) ? lastModified : null
+        }));
+    });
 }
 
 async function generateThumbnail(
