@@ -33,9 +33,9 @@ import Icon from "@mdi/react";
 import Image from "next/image";
 import { useRouter } from "next/router";
 import { useRef, useState } from "react";
-import { PhotoView } from "react-photo-view";
-import CollectionFileModal from "../CollectionFileModal";
-import CollectionModal from "../CollectionModal";
+import CollectionFileModal from "../modals/CollectionFileModal";
+import CollectionModal from "../modals/CollectionModal";
+import { Photo } from "../photo-viewer/PhotoViewer";
 
 interface CollectionGridCardProps {
     item: CollectionGridItem;
@@ -366,7 +366,7 @@ const CollectionThumbnail = ({
 
 const ImageThumbnail = ({ item }: { item: CollectionFileDto }) => {
     return (
-        <PhotoView src={item.src!}>
+        <Photo id={item.id}>
             <Box maxW="100%" maxH="100%" overflow="hidden">
                 <Image
                     src={item.thumbnailSrc!}
@@ -377,57 +377,21 @@ const ImageThumbnail = ({ item }: { item: CollectionFileDto }) => {
                     }}
                 />
             </Box>
-        </PhotoView>
+        </Photo>
     );
 };
 
 const VideoThumbnail = ({ item }: { item: CollectionFileDto }) => {
-    const videoRef = useRef<HTMLVideoElement>(null);
-
-    // TODO check these:
-    // https://github.com/CookPete/react-player
-    // https://github.com/sampotts/plyr
-
     return (
-        <>
-            <PhotoView
-                render={({ attrs, scale }) => {
-                    return (
-                        <div
-                            style={{
-                                transform: "translate(-50%, -50%)",
-                                width: "100%",
-                                height: "100%",
-                                display: "flex",
-                                justifyContent: "center",
-                                alignItems: "center"
-                            }}>
-                            <video
-                                {...attrs}
-                                ref={videoRef}
-                                src={item.src}
-                                poster={item.thumbnailSrc}
-                                style={{
-                                    width: "100%",
-                                    height: "90dvh"
-                                }}
-                                controls
-                            />
-                        </div>
-                    );
-                }}>
-                <Image
-                    src={item.thumbnailSrc!}
-                    alt={item.name}
-                    fill
-                    style={{
-                        objectFit: "cover"
-                    }}
-                    onClick={() => {
-                        setTimeout(() => videoRef.current?.play(), 1000);
-                    }}
-                />
-            </PhotoView>
+        <Photo id={item.id}>
+            <Image
+                src={item.thumbnailSrc!}
+                alt={item.name}
+                fill
+                style={{
+                    objectFit: "cover"
+                }}
+            />
             <Box
                 position="absolute"
                 pointerEvents="none"
@@ -441,6 +405,6 @@ const VideoThumbnail = ({ item }: { item: CollectionFileDto }) => {
                     }}
                 />
             </Box>
-        </>
+        </Photo>
     );
 };

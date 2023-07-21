@@ -1,16 +1,13 @@
-import { caseInsensitiveSorter, formatDate } from "@/lib/common/utilities";
+import { caseInsensitiveSorter } from "@/lib/common/utilities";
 import { useHttp } from "@/lib/hooks/useHttp";
 import { CollectionDto } from "@/lib/interfaces/collection-dto";
 import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
 import { CollectionGridItem } from "@/lib/interfaces/collection-grid-item";
-import { Link } from "@chakra-ui/next-js";
-import { Box, Flex, SimpleGrid } from "@chakra-ui/react";
-import { mdiMapMarker } from "@mdi/js";
-import Icon from "@mdi/react";
+import { Flex, SimpleGrid } from "@chakra-ui/react";
 import { useEffect, useReducer, useState } from "react";
-import { PhotoProvider } from "react-photo-view";
 import useSWR from "swr";
 import IfNotLoading from "../IfNotLoading";
+import PhotoViewer from "../photo-viewer/PhotoViewer";
 import CollectionGridActionBar from "./CollectionGridActionBar";
 import CollectionGridCard from "./CollectionGridCard";
 
@@ -170,53 +167,24 @@ export default function CollectionGrid({ collectionId }: CollectionGridProps) {
                 actionDispatcher={dispatch}
                 collectionId={collectionId}
             />
-            <PhotoProvider
-                toolbarRender={({ index }) => (
-                    <PhotoViewerToolbar item={itemsToRender[index]} />
-                )}>
-                <IfNotLoading isLoading={isLoading}>
-                    <SimpleGrid columns={[3, 3, 3, 4]} spacing={[1, 1, 1, 2]}>
-                        {itemsToRender.map((item) => (
-                            <CollectionGridCard
-                                key={item.id}
-                                onDeleted={(id) =>
-                                    dispatch({ type: "DELETE", id })
-                                }
-                                onUpdated={(item) =>
-                                    dispatch({ type: "UPDATE", item })
-                                }
-                                item={item}
-                            />
-                        ))}
-                    </SimpleGrid>
-                </IfNotLoading>
-            </PhotoProvider>
+            <IfNotLoading isLoading={isLoading}>
+                <SimpleGrid columns={[3, 3, 3, 4]} spacing={[1, 1, 1, 2]}>
+                    {itemsToRender.map((item) => (
+                        <CollectionGridCard
+                            key={item.id}
+                            onDeleted={(id) => dispatch({ type: "DELETE", id })}
+                            onUpdated={(item) =>
+                                dispatch({ type: "UPDATE", item })
+                            }
+                            item={item}
+                        />
+                    ))}
+                </SimpleGrid>
+                <PhotoViewer items={itemsToRender} />
+            </IfNotLoading>
         </Flex>
     );
 }
-const PhotoViewerToolbar = ({ item }: { item: CollectionGridItem }) => {
-    return (
-        <Flex direction="column" alignItems="end" pr={5}>
-            <Box fontSize="sm">{item.name}</Box>
-            <Flex gap={2} fontSize="xs" textColor="whiteAlpha.600">
-                <Box>
-                    {item.type === "image" && item.gps && (
-                        <Link
-                            href={`https://www.google.com/maps/search/?api=1&query=${item.gps.lat},${item.gps.long}`}
-                            target="_blank">
-                            <Flex alignItems="center" gap={1}>
-                                <Icon path={mdiMapMarker} size={0.5} />
-                                <span>{item.gps.label || "Google Maps"}</span>
-                            </Flex>
-                        </Link>
-                    )}
-                </Box>
-                {item.type === "image" && item.gps && <span>|</span>}
-                <span>{formatDate(item.timestamp)}</span>
-            </Flex>
-        </Flex>
-    );
-};
 
 function reducer(
     state: CollectionGridState,

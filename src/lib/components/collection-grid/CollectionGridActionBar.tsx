@@ -20,14 +20,13 @@ import {
     MenuItemOption,
     MenuList,
     MenuOptionGroup,
-    Progress,
     useDisclosure,
     useToast
 } from "@chakra-ui/react";
 import { mdiFilterVariant, mdiFolderUpload, mdiSort, mdiUpload } from "@mdi/js";
 import Icon from "@mdi/react";
 import { ChangeEvent, Dispatch, useEffect, useRef, useState } from "react";
-import CollectionModal from "../CollectionModal";
+import CollectionModal from "../modals/CollectionModal";
 import { CollectionGridAction } from "./CollectionGrid";
 
 interface CollectionGridActionBarProps {
@@ -87,18 +86,20 @@ export default function CollectionGridActionBar({
                 });
                 result = null;
             } else {
-                result.push(
-                    ...data.collections.map((c) => ({
-                        ...c,
-                        type: "collection"
-                    }))
+                const collectionItems: CollectionGridItem[] =
+                    data.collections.map((collection) => ({
+                        type: "collection",
+                        ...collection
+                    }));
+                const fileItems: CollectionGridItem[] = data.files.map(
+                    (file) => ({
+                        type: file.mimeType.includes("image")
+                            ? "image"
+                            : "video",
+                        ...file
+                    })
                 );
-                result.push(
-                    ...data.files.map((c) => ({
-                        ...c,
-                        type: c.mimeType.includes("image") ? "image" : "video"
-                    }))
-                );
+                result.push(...[...collectionItems, ...fileItems]);
             }
             actionDispatcher({
                 type: "SEARCH_END",

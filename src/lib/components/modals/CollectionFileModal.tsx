@@ -1,4 +1,3 @@
-import { CollectionDto } from "@/lib/interfaces/collection-dto";
 import {
     Button,
     Flex,
@@ -18,111 +17,86 @@ import {
 } from "@chakra-ui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
-import { useHttp } from "../hooks/useHttp";
+import { ApiData } from "../../common/api-route";
+import { getErrorMessage } from "../../common/utilities";
+import { useHttp } from "../../hooks/useHttp";
+import { CollectionFileDto } from "../../interfaces/collection-file-dto";
 import {
-    CreateCollectionFormData,
-    CreateCollectionValidator
-} from "../validators/create-collection-validator";
-import TagInput from "./TagInput";
+    UpdateCollectionFileData,
+    UpdateCollectionFileValidator
+} from "../../validators/update-collection-file-validator";
+import TagInput from "../TagInput";
 
-interface CollectionModalProps {
+interface CollectionFileModalProps {
     isOpen: boolean;
-    mode: "edit" | "create";
     onClose: () => void;
-    onSave: (collection: CollectionDto) => void;
-    initialCollection?: Partial<CollectionDto>;
+    onSave: (collection: CollectionFileDto) => void;
+    initialFile: Partial<CollectionFileDto>;
 }
 
-export default function CollectionModal({
+export default function CollectionFileModal({
     isOpen,
     onClose,
     onSave,
-    mode,
-    initialCollection
-}: CollectionModalProps) {
+    initialFile
+}: CollectionFileModalProps) {
+    const http = useHttp();
     const {
         register,
         handleSubmit,
         formState: { errors },
-        setError,
         setValue,
         control
-    } = useForm<CreateCollectionFormData>({
+    } = useForm<UpdateCollectionFileData>({
         defaultValues: {
-            name: initialCollection?.name,
-            tags: initialCollection?.tags || []
+            id: initialFile.id,
+            name: initialFile.name,
+            tags: initialFile.tags || []
         },
-        resolver: zodResolver(CreateCollectionValidator)
+        resolver: zodResolver(UpdateCollectionFileValidator)
     });
-    const http = useHttp();
     const toast = useToast();
 
-    const onSubmit = async (formData: CreateCollectionFormData) => {
-        const method = mode === "edit" ? http.put : http.post;
-        const { data, error } = await method("/api/collections", {
-            id: mode === "edit" ? initialCollection?.id : undefined,
-            ...formData
-        });
-
-        if (data?.nameError) {
-            setError("name", {
-                message: data.nameError
-            });
-            return;
-        }
-        if (error) {
+    const onSubmit = async (formData: UpdateCollectionFileData) => {
+        const { data, error } = await http.post<
+            ApiData<{ file?: CollectionFileDto }>
+        >(`/api/collections/${initialFile.collectionId}/files`, formData);
+        if (error || !data?.file) {
             toast({
-                description: `Error ${
-                    mode === "edit" ? "editing" : "creating"
-                } collection`,
+                description: `Could not edit file: ${getErrorMessage(error)}`,
                 status: "error"
             });
             return;
         }
-        onSave(data.collection);
+        onSave(data.file);
+        onClose();
         toast({
-            description: `Collection ${
-                mode === "edit" ? "modified" : "created"
-            }`,
+            description: `Collection modified`,
             status: "success"
         });
-        onClose();
-        setValue(
-            "name",
-            mode === "edit"
-                ? data.collection.name
-                : initialCollection?.name || ""
-        );
-        setValue(
-            "tags",
-            mode === "edit"
-                ? data.collection.tags
-                : initialCollection?.tags || []
-        );
     };
 
-    const close = () => {
+    const handleCancel = () => {
         onClose();
-        setValue("name", initialCollection?.name || "");
-        setValue("tags", initialCollection?.tags || []);
+        setValue("name", initialFile.name || "");
+        setValue("tags", initialFile.tags || []);
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={close}>
+        <Modal isOpen={isOpen} onClose={handleCancel}>
             <ModalOverlay />
             <ModalContent>
-                <ModalHeader>
-                    {mode === "edit" ? "Edit collection" : "Create collection"}
-                </ModalHeader>
+                <ModalHeader>Edit file</ModalHeader>
                 <ModalCloseButton />
 
                 <ModalBody>
                     <form
-                        id="create-collection-form"
+                        id="collection-file-form"
                         onSubmit={handleSubmit(onSubmit)}>
                         <Flex direction="column" gap={4}>
+                            <Input {...register("id")} hidden />
                             <FormControl isInvalid={!!errors.name}>
-                                <FormLabel>Collection name</FormLabel>
+                                <FormLabel>File name</FormLabel>
                                 <Input
                                     type="text"
                                     isRequired
@@ -162,14 +136,14 @@ export default function CollectionModal({
                 </ModalBody>
 
                 <ModalFooter>
-                    <Button variant="ghost" mr={3} onClick={close}>
+                    <Button variant="ghost" mr={3} onClick={handleCancel}>
                         Cancel
                     </Button>
                     <Button
                         type="submit"
-                        form="create-collection-form"
+                        form="collection-file-form"
                         isLoading={http.isLoading}>
-                        {mode === "edit" ? "Save" : "Create"}
+                        Save
                     </Button>
                 </ModalFooter>
             </ModalContent>
