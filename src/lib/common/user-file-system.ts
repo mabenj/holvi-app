@@ -18,7 +18,7 @@ import appConfig from "./app-config";
 import Cryptography from "./cryptography";
 import { HolviError } from "./errors";
 import Log, { LogColor } from "./log";
-import { getErrorMessage, sleep } from "./utilities";
+import { getErrorMessage } from "./utilities";
 
 interface ExifData {
     gps?: {
@@ -219,7 +219,6 @@ export class UserFileSystem {
     }
 
     private async getExif(imagePath: string): Promise<ExifData | undefined> {
-        const GEO_API_COOLDOWN_MS = 500;
         const SECONDS_TO_MS = 1000;
 
         try {
@@ -285,20 +284,19 @@ export class UserFileSystem {
                     label = apiLabel || name || undefined;
                 } else {
                     const stringBuilder = [] as string[];
-                    if (specificArea.toLowerCase() !== region.toLowerCase()) {
+                    if (specificArea?.toLowerCase() !== region?.toLowerCase()) {
                         stringBuilder.push(specificArea);
                     }
-                    stringBuilder.push(region);
+                    region && stringBuilder.push(region);
                     if (
-                        specificArea.toLowerCase() !== region.toLowerCase() &&
-                        !region.includes(country)
+                        specificArea?.toLowerCase() !== region?.toLowerCase() &&
+                        !region?.includes(country)
                     ) {
                         stringBuilder.push(country);
                     }
-                    label = stringBuilder.join(", ");
+                    label = stringBuilder.join(", ") || apiLabel || name;
                 }
             }
-            await sleep(GEO_API_COOLDOWN_MS);
 
             return {
                 takenAt,

@@ -4,6 +4,7 @@ import {
     GetServerSidePropsResult,
     NextApiHandler
 } from "next";
+import { UserDto } from "../interfaces/user-dto";
 import appConfig from "./app-config";
 
 export function withSessionRoute(handler: NextApiHandler) {
@@ -19,4 +20,10 @@ export function withSessionSsr<
     ) => GetServerSidePropsResult<P> | Promise<GetServerSidePropsResult<P>>
 ) {
     return withIronSessionSsr(handler, appConfig.sessionOptions);
+}
+
+declare module "iron-session" {
+    interface IronSessionData {
+        user: UserDto;
+    }
 }
