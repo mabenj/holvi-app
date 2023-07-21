@@ -360,6 +360,7 @@ export class CollectionService {
             return {
                 collection: {
                     ...collectionInDb.toDto(),
+                    tags: collectionTags.map((tag) => tag.TagName),
                     thumbnails:
                         collectionInDb.CollectionFiles?.map((file) =>
                             getFileSrc({

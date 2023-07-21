@@ -81,6 +81,7 @@ export function useCollectionGrid(collectionId: string) {
         if (!isSameContents) {
             mutate(allItems);
         }
+        resetSearch()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [allItems]);
 
@@ -234,6 +235,11 @@ export function useCollectionGrid(collectionId: string) {
             nextItems.sort(caseInsensitiveSorter(sort.field, sort.asc))
         );
     };
+
+    const resetSearch = () => {
+        setSearchQuery("")
+        setSearchResult(null)
+    }
 
     return {
         isLoading: isFetching || isSearching || isUploading,

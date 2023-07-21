@@ -1,12 +1,15 @@
 import { CollectionGridItem } from "@/lib/interfaces/collection-grid-item";
 import { Alert, AlertIcon } from "@chakra-ui/react";
 import { atom, useAtom } from "jotai";
-import React, { HTMLAttributes, useEffect, useState } from "react";
+import React, { HTMLAttributes, useEffect, useRef, useState } from "react";
 import { PhotoSlider } from "react-photo-view";
 import { DataType } from "react-photo-view/dist/types";
 import PhotoViewerToolbar from "./PhotoViewerToolbar";
 
 const photoViewerActiveId = atom<string | null>(null);
+const photoViewerVideoRefMap = atom(
+    new Map<string, React.MutableRefObject<HTMLVideoElement | null>>()
+);
 
 interface PhotoViewerProps {
     items: CollectionGridItem[];
@@ -18,6 +21,7 @@ export default function PhotoViewer({ items }: PhotoViewerProps) {
     const [isVisible, setIsVisible] = useState(false);
 
     const [activeItemId, setActiveItemId] = useAtom(photoViewerActiveId);
+    const [videoRefMap] = useAtom(photoViewerVideoRefMap);
 
     useEffect(() => {
         const nextPhotos: DataType[] = items
@@ -48,16 +52,31 @@ export default function PhotoViewer({ items }: PhotoViewerProps) {
     }, [activeItemId]);
 
     const handleIndexChange = (index: number) => {
+        pauseActiveVideo()
         const itemId = photos[index]?.key?.toString() || null;
         setActiveItemId(itemId);
         setIndex(index);
     };
 
+    const handleClose = () => {
+        pauseActiveVideo()
+        setIsVisible(false);
+        setActiveItemId(null);
+    };
+
+    const pauseActiveVideo = () => {
+        if (!activeItemId) {
+            return
+        }
+        const videoRef = videoRefMap.get(activeItemId);
+        videoRef?.current?.pause();
+    }
+
     return (
         <PhotoSlider
             images={photos}
             visible={isVisible}
-            onClose={() => setIsVisible(false)}
+            onClose={handleClose}
             index={index}
             onIndexChange={handleIndexChange}
             toolbarRender={() => (
@@ -88,9 +107,25 @@ const VideoPlayer = ({
     item: CollectionGridItem;
     attrs: Partial<HTMLAttributes<HTMLElement>>;
 }) => {
-    // TODO check these:
-    // https://github.com/CookPete/react-player
-    // https://github.com/sampotts/plyr
+    const [activeItemId] = useAtom(photoViewerActiveId);
+    const [, setPhotoViewerVideoRefMap] = useAtom(photoViewerVideoRefMap);
+    const ref = useRef<HTMLVideoElement | null>(null);
+
+    useEffect(() => {
+        setPhotoViewerVideoRefMap((prev) => {
+            prev.set(item.id, ref);
+            return prev;
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [item.id, ref]);
+
+    useEffect(() => {
+        if (item.id !== activeItemId) {
+            return;
+        }
+        console.log("playing", item.name);
+        ref.current?.play();
+    }, [item.id, activeItemId]);
 
     if (item.type !== "video") {
         return (
@@ -115,6 +150,7 @@ const VideoPlayer = ({
             }}>
             <video
                 {...attrs}
+                ref={ref}
                 src={item.src}
                 poster={item.thumbnailSrc}
                 style={{
