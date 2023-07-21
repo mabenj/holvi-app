@@ -23,7 +23,7 @@ import {
     CreateCollectionFormData,
     CreateCollectionValidator
 } from "../../validators/create-collection-validator";
-import TagInput from "../TagInput";
+import TagInput from "../ui/TagInput";
 
 interface CollectionModalProps {
     isOpen: boolean;

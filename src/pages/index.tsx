@@ -1,6 +1,6 @@
 import { withUserSsr } from "@/lib/common/route-helpers";
-import Layout from "@/lib/components/Layout";
 import CollectionGrid from "@/lib/components/collection-grid/CollectionGrid";
+import Layout from "@/lib/components/ui/Layout";
 import { UserDto } from "@/lib/interfaces/user-dto";
 import Head from "next/head";
 

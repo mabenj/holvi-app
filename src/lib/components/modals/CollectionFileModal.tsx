@@ -25,7 +25,7 @@ import {
     UpdateCollectionFileData,
     UpdateCollectionFileValidator
 } from "../../validators/update-collection-file-validator";
-import TagInput from "../TagInput";
+import TagInput from "../ui/TagInput";
 
 interface CollectionFileModalProps {
     isOpen: boolean;

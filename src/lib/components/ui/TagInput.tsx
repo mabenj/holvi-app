@@ -8,9 +8,9 @@ import {
     useColorModeValue
 } from "@chakra-ui/react";
 import { KeyboardEvent, useEffect, useState } from "react";
-import { ApiData } from "../common/api-route";
-import useDebounce from "../hooks/useDebounce";
-import { useHttp } from "../hooks/useHttp";
+import { ApiData } from "../../common/api-route";
+import useDebounce from "../../hooks/useDebounce";
+import { useHttp } from "../../hooks/useHttp";
 
 interface TagInputProps {
     value?: string[];

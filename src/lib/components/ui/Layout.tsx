@@ -12,10 +12,10 @@ import {
 } from "@chakra-ui/react";
 import Head from "next/head";
 import { useRouter } from "next/router";
-import brandImage from "../../../public/favicon-32x32.png";
-import { getErrorMessage } from "../common/utilities";
-import { useHttp } from "../hooks/useHttp";
-import { UserDto } from "../interfaces/user-dto";
+import brandImage from "../../../../public/favicon-32x32.png";
+import { getErrorMessage } from "../../common/utilities";
+import { useHttp } from "../../hooks/useHttp";
+import { UserDto } from "../../interfaces/user-dto";
 
 interface LayoutProps {
     children: React.ReactNode;

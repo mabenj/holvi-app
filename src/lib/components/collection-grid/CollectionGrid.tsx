@@ -6,7 +6,7 @@ import { CollectionGridItem } from "@/lib/interfaces/collection-grid-item";
 import { Flex, SimpleGrid } from "@chakra-ui/react";
 import { useEffect, useReducer, useState } from "react";
 import useSWR from "swr";
-import IfNotLoading from "../IfNotLoading";
+import IfNotLoading from "../ui/IfNotLoading";
 import PhotoViewer from "../photo-viewer/PhotoViewer";
 import CollectionGridActionBar from "./CollectionGridActionBar";
 import CollectionGridCard from "./CollectionGridCard";

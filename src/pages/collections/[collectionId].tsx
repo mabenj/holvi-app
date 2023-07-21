@@ -1,7 +1,7 @@
 import { NotFoundError } from "@/lib/common/errors";
 import { withSessionSsr } from "@/lib/common/iron-session";
-import Layout from "@/lib/components/Layout";
 import CollectionGrid from "@/lib/components/collection-grid/CollectionGrid";
+import Layout from "@/lib/components/ui/Layout";
 import { CollectionDto } from "@/lib/interfaces/collection-dto";
 import { UserDto } from "@/lib/interfaces/user-dto";
 import { CollectionService } from "@/lib/services/collection.service";
