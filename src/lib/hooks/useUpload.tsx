@@ -1,10 +1,66 @@
+import { CollectionFile } from "@/db/models/CollectionFile";
 import { Flex, Spinner, ToastId, useToast } from "@chakra-ui/react";
 import { useRef, useState } from "react";
+import { getErrorMessage } from "../common/utilities";
+import { CollectionDto } from "../interfaces/collection-dto";
+import { CollectionFileDto } from "../interfaces/collection-file-dto";
 
 export function useUpload() {
     const [isUploading, setIsUploading] = useState(false);
     const toast = useToast();
     const toastIdRef = useRef<ToastId | null>(null);
+
+    const uploadCollection = async (
+        files: File[],
+        collectionName: string
+    ): Promise<CollectionDto> => {
+        try {
+            const response = await upload(
+                files,
+                `/api/collections/upload?name=${collectionName}`,
+                "POST"
+            );
+            if (response.status === "error" || response.error) {
+                throw new Error(response.error);
+            }
+            const { collection } = response;
+            return collection;
+        } catch (error) {
+            toast({
+                description: `Could not upload collection: ${getErrorMessage(
+                    error
+                )}`,
+                status: "error"
+            });
+            throw error
+        }
+    };
+
+    const uploadCollectionFiles = async (
+        files: File[],
+        collectionId: string
+    ): Promise<CollectionFileDto[]> => {
+        try {
+            const response = await upload(
+                files,
+                `/api/collections/${collectionId}/files/upload`,
+                "POST"
+            );
+            if (response.status === "error" || response.error) {
+                throw new Error(response.error);
+            }
+            const { files: collectionFiles } = response;
+            return collectionFiles;
+        } catch (error) {
+            toast({
+                description: `Could not upload files: ${getErrorMessage(
+                    error
+                )}`,
+                status: "error"
+            });
+            throw error
+        }
+    };
 
     const upload = (files: File[], url: string, method: "POST" | "PUT") => {
         const xhr = new XMLHttpRequest();
@@ -64,5 +120,5 @@ export function useUpload() {
         });
     };
 
-    return { upload, isUploading };
+    return { uploadCollection, uploadCollectionFiles, isUploading };
 }

@@ -1,9 +1,12 @@
 import { useToast } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import useSWR from "swr";
+import { ApiData } from "../common/api-route";
+import { caseInsensitiveSorter, getErrorMessage } from "../common/utilities";
 import { CollectionDto } from "../interfaces/collection-dto";
 import { CollectionFileDto } from "../interfaces/collection-file-dto";
 import { CollectionGridItem } from "../interfaces/collection-grid-item";
+import { SearchResult } from "../interfaces/search-result";
 import useDebounce from "./useDebounce";
 import { useHttp } from "./useHttp";
 import { useUpload } from "./useUpload";
@@ -27,7 +30,8 @@ export function useCollectionGrid(collectionId: string) {
     const [searchQuery, setSearchQuery] = useState("");
     const debouncedSearchQuery = useDebounce(searchQuery);
 
-    const { upload, isUploading } = useUpload();
+    const { uploadCollection, uploadCollectionFiles, isUploading } =
+        useUpload();
     const http = useHttp();
     const toast = useToast();
 
@@ -83,28 +87,22 @@ export function useCollectionGrid(collectionId: string) {
     // This useEffect is responsible for keeping items to render updated
     useEffect(() => {
         updateItemsToRender();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [allItems, sort, filters, searchResult]);
 
     useEffect(() => {
-        async function search(query: string) {
-            if (!debouncedSearchQuery) {
-                setSearchResult(null);
-            } else if (collectionId === "root") {
-                // TODO make request to server and update search result
-            } else {
-                // TODO necessary data already at client, construct search result based on query
-            }
-        }
-
         search(debouncedSearchQuery);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [debouncedSearchQuery]);
 
-    const addItem = (item: CollectionGridItem) => {
+    const addItem = (...newItems: CollectionGridItem[]) => {
         setAllItems((prev) => {
-            const next = prev.filter((prevItem) => prevItem.id !== item.id);
-            next.push(item);
-            return next;
+            return [
+                ...prev.filter((prevItem) =>
+                    newItems.every((newItem) => newItem.id !== prevItem.id)
+                ),
+                ...newItems
+            ];
         });
     };
 
@@ -130,80 +128,53 @@ export function useCollectionGrid(collectionId: string) {
         setSearchQuery(query);
     };
 
-    const uploadFiles = (files: File[], collectionName?: string) => {
-        // TODO
+    const uploadFiles = async (files: File[], collectionName?: string) => {
+        if (files.length === 0) {
+            return;
+        }
+        const isCreatingNew = !!collectionName;
+        let successMessage = "";
+        if (isCreatingNew) {
+            const collection = await uploadCollection(files, collectionName);
+            addItem({ ...collection, type: "collection" });
+            successMessage = `Collection '${collection.name}' uploaded`;
+        } else {
+            const collectionFiles = await uploadCollectionFiles(
+                files,
+                collectionId
+            );
+            addItem(
+                ...collectionFiles.map(
+                    (cf) =>
+                        ({
+                            ...cf,
+                            type: cf.mimeType.includes("image")
+                                ? "image"
+                                : "video"
+                        } as CollectionGridItem)
+                )
+            );
+            successMessage = `${collectionFiles.length} files uploaded`;
+        }
+        toast({
+            description: successMessage,
+            status: "success"
+        });
     };
 
     const listFiles = () => {
         // TODO
     };
 
-    const updateItemsToRender = () => {
-        // TODO
-        setItemsToRender([]);
-    };
-
-    return {
-        isLoading: isFetching || isSearching || isUploading,
-        items: itemsToRender,
-        filters: filters,
-        sort: sort,
-        query: searchQuery,
-        actions: {
-            add: addItem,
-            update: updateItem,
-            delete: deleteItem,
-            sort: sortItems,
-            filter: filterItems,
-            search: searchItems,
-            upload: uploadFiles,
-            listFiles: listFiles
-        }
-    };
-}
-
-// SORT AND FILTER
-/**
- * const applyFilters = (items: CollectionGridItem[]) => {
-        const { filters, query } = state.filter;
-        let filtered = [];
-        if (filters.includes("collections")) {
-            const collections = items.filter(
-                ({ type }) => type === "collection"
-            );
-            filtered.push(...collections);
-        }
-        if (filters.includes("images")) {
-            const images = items.filter(({ type }) => type === "image");
-            filtered.push(...images);
-        }
-        if (filters.includes("videos")) {
-            const videos = items.filter(({ type }) => type === "video");
-            filtered.push(...videos);
-        }
-        if (query) {
-            filtered = filtered.filter(
-                (item) =>
-                    item.name.includes(query) ||
-                    item.tags?.some((tag) => tag.localeCompare(query) === 0)
-            );
-        }
-        return filtered;
-    };
-
-    const sort = (items: CollectionGridItem[]) => {
-        const { field, asc } = state.sort;
-        const key = field === "name" ? "name" : "timestamp";
-        return items.sort(caseInsensitiveSorter(key, asc));
-    };
- */
-
-// SEARCH
-/**
-     * const { data, error } = await http.get<ApiData<SearchResult>>(
+    const search = async (query: string) => {
+        setIsSearching(true);
+        let result: CollectionGridItem[] | null = [];
+        if (!debouncedSearchQuery) {
+            result = null;
+        } else if (collectionId === "root") {
+            const { data, error } = await http.get<ApiData<SearchResult>>(
                 `/api/search?query=${query}`
             );
-            let result: CollectionGridItem[] | null = [];
             if (!data || error) {
                 toast({
                     description: `Could not search: '${getErrorMessage(
@@ -228,39 +199,57 @@ export function useCollectionGrid(collectionId: string) {
                 );
                 result.push(...[...collectionItems, ...fileItems]);
             }
-     */
-
-// UPLOAD
-/**
-             * if (files.length === 0) {
-            return;
+        } else {
+            // necessary data already at client, construct search result based on query
+            result = allItems.filter(
+                (item) =>
+                    item.name.toLowerCase().includes(query.toLowerCase()) ||
+                    item.tags.some(
+                        (tag) =>
+                            tag.localeCompare(query, undefined, {
+                                sensitivity: "base"
+                            }) === 0
+                    )
+            );
         }
-        const isCreatingNew = !!collectionName;
+        setSearchResult(result);
+        setIsSearching(false);
+    };
 
-        const url = isCreatingNew
-            ? `/api/collections/upload?name=${collectionName}`
-            : `/api/collections/${collectionId}/files/upload`;
-        const response = await upload(files, url, "POST").catch((error) => ({
-            status: "error",
-            error
-        }));
-        if (response.status === "error" || response.error) {
-            toast({
-                description: `Error uploading ${
-                    isCreatingNew ? "collection" : "files"
-                }: ${getErrorMessage(response.error)}`,
-                status: "error"
-            });
-            return;
+    const updateItemsToRender = () => {
+        const itemPool = searchResult || allItems;
+        const nextItems: typeof itemPool = [];
+        if (filters.includes("collections")) {
+            nextItems.push(
+                ...itemPool.filter((item) => item.type === "collection")
+            );
         }
-        const newItems = isCreatingNew ? [response.collection] : response.files;
-        actionDispatcher({ type: "ADD", items: newItems });
-        toast({
-            description: `Successfully uploaded ${
-                isCreatingNew
-                    ? `collection ${response.collection.name}`
-                    : `${response.files.length} files`
-            }`,
-            status: "success"
-        });
-             */
+        if (filters.includes("images")) {
+            nextItems.push(...itemPool.filter((item) => item.type === "image"));
+        }
+        if (filters.includes("videos")) {
+            nextItems.push(...itemPool.filter((item) => item.type === "video"));
+        }
+        setItemsToRender(
+            nextItems.sort(caseInsensitiveSorter(sort.field, sort.asc))
+        );
+    };
+
+    return {
+        isLoading: isFetching || isSearching || isUploading,
+        items: itemsToRender,
+        filters: filters,
+        sort: sort,
+        query: searchQuery,
+        actions: {
+            add: addItem,
+            update: updateItem,
+            delete: deleteItem,
+            sort: sortItems,
+            filter: filterItems,
+            search: searchItems,
+            upload: uploadFiles,
+            listFiles: listFiles
+        }
+    };
+}
