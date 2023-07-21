@@ -32,7 +32,8 @@ interface CollectionGridActionBarProps {
     onSearch: (query: string) => void;
     onUpload: (files: File[], name?: string) => void;
     onCreated: (collection: CollectionGridItem) => void;
-    onListFiles: () => void;
+    isFileOnly: boolean;
+    toggleIsFileOnly: () => void;
 }
 
 export default function CollectionGridActionBar({
@@ -46,7 +47,8 @@ export default function CollectionGridActionBar({
     onSearch,
     onUpload,
     onCreated,
-    onListFiles
+    isFileOnly,
+    toggleIsFileOnly
 }: CollectionGridActionBarProps) {
     const canFilter = collectionId === "root";
     const canListFiles = collectionId === "root";
@@ -76,7 +78,8 @@ export default function CollectionGridActionBar({
                     <SortBtn sort={sort} onSort={onSort} disabled={isLoading} />
                     {canListFiles && (
                         <ListAllFilesBtn
-                            onClick={onListFiles}
+                            isFileOnly={isFileOnly}
+                            onToggle={toggleIsFileOnly}
                             disabled={isLoading}
                         />
                     )}
@@ -105,19 +108,21 @@ export default function CollectionGridActionBar({
 }
 
 const ListAllFilesBtn = ({
-    onClick,
+    isFileOnly,
+    onToggle,
     disabled
 }: {
-    onClick: () => void;
+    isFileOnly: boolean;
+    onToggle: () => void;
     disabled: boolean;
 }) => {
     return (
         <Button
             variant="ghost"
-            onClick={onClick}
+            onClick={onToggle}
             title="List all files"
             isDisabled={disabled}>
-            List files
+            {isFileOnly ? "List collections" : "List files"}
         </Button>
     );
 };

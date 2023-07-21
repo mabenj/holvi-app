@@ -33,6 +33,20 @@ interface GetStreamResult {
 export class CollectionService {
     constructor(private readonly userId: string) {}
 
+    async getAllFiles(): Promise<CollectionFileDto[]> {
+        const db = await Database.getInstance();
+        const files = await db.models.CollectionFile.findAll({
+            include: {
+                model: db.models.Collection,
+                required: true,
+                where: {
+                    UserId: this.userId
+                }
+            }
+        });
+        return files.map((file) => file.toDto());
+    }
+
     async updateFile(
         collectionId: string,
         data: UpdateCollectionFileData

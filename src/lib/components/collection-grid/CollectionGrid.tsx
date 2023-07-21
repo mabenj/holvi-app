@@ -10,7 +10,7 @@ interface CollectionGridProps {
 }
 
 export default function CollectionGrid({ collectionId }: CollectionGridProps) {
-    const { isLoading, items, filters, sort, query, actions } =
+    const { isLoading, items, filters, sort, query, isFileOnly, actions } =
         useCollectionGrid(collectionId);
 
     return (
@@ -26,7 +26,8 @@ export default function CollectionGrid({ collectionId }: CollectionGridProps) {
                 onSearch={actions.search}
                 onUpload={actions.upload}
                 onCreated={actions.add}
-                onListFiles={actions.listFiles}
+                isFileOnly={isFileOnly}
+                toggleIsFileOnly={actions.toggleIsFileOnly}
             />
             <IfNotLoading isLoading={isLoading}>
                 <SimpleGrid columns={[3, 3, 3, 4]} spacing={[1, 1, 1, 2]}>

@@ -24,9 +24,11 @@ export function useCollectionGrid(collectionId: string) {
     const [itemsToRender, setItemsToRender] = useState<CollectionGridItem[]>(
         []
     );
+    const [allFiles, setAllFiles] = useState<CollectionGridItem[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [filters, setFilters] = useState(["collections", "images", "videos"]);
     const [sort, setSort] = useState<GridSort>({ field: "name", asc: true });
+    const [isFileOnly, setIsFileOnly] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const debouncedSearchQuery = useDebounce(searchQuery);
 
@@ -81,7 +83,7 @@ export function useCollectionGrid(collectionId: string) {
         if (!isSameContents) {
             mutate(allItems);
         }
-        resetSearch()
+        resetSearch();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [allItems]);
 
@@ -89,7 +91,7 @@ export function useCollectionGrid(collectionId: string) {
     useEffect(() => {
         updateItemsToRender();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [allItems, sort, filters, searchResult]);
+    }, [allItems, sort, filters, searchResult, isFileOnly]);
 
     useEffect(() => {
         search(debouncedSearchQuery);
@@ -163,8 +165,30 @@ export function useCollectionGrid(collectionId: string) {
         });
     };
 
-    const listFiles = () => {
-        // TODO
+    const toggleIsFileOnly = async () => {
+        if (isFileOnly) {
+            setIsFileOnly(false);
+        } else {
+            const { data, error } = await http.get<
+                ApiData<{ files: CollectionFileDto[] }>
+            >("/api/files/all");
+            if (!data || data.status === "error" || error) {
+                toast({
+                    description: `Error fetching files: ${getErrorMessage(
+                        error
+                    )}`,
+                    status: "error"
+                });
+                return;
+            }
+            setAllFiles(
+                data.files.map((file) => ({
+                    ...file,
+                    type: file.mimeType.includes("image") ? "image" : "video"
+                }))
+            );
+            setIsFileOnly(true);
+        }
     };
 
     const search = async (query: string) => {
@@ -218,28 +242,31 @@ export function useCollectionGrid(collectionId: string) {
     };
 
     const updateItemsToRender = () => {
-        const itemPool = searchResult || allItems;
+        const includeCollections = filters.includes("collections");
+        const includeImages = filters.includes("images");
+        const includeVideos = filters.includes("videos");
+
+        const itemPool = searchResult || (isFileOnly ? allFiles : allItems);
         const nextItems: typeof itemPool = [];
-        if (filters.includes("collections")) {
-            nextItems.push(
-                ...itemPool.filter((item) => item.type === "collection")
-            );
-        }
-        if (filters.includes("images")) {
-            nextItems.push(...itemPool.filter((item) => item.type === "image"));
-        }
-        if (filters.includes("videos")) {
-            nextItems.push(...itemPool.filter((item) => item.type === "video"));
-        }
+        itemPool.forEach((item) => {
+            if (includeCollections && item.type === "collection") {
+                nextItems.push(item);
+            } else if (includeImages && item.type === "image") {
+                nextItems.push(item);
+            } else if (includeVideos && item.type === "video") {
+                nextItems.push(item);
+            }
+        });
+
         setItemsToRender(
             nextItems.sort(caseInsensitiveSorter(sort.field, sort.asc))
         );
     };
 
     const resetSearch = () => {
-        setSearchQuery("")
-        setSearchResult(null)
-    }
+        setSearchQuery("");
+        setSearchResult(null);
+    };
 
     return {
         isLoading: isFetching || isSearching || isUploading,
@@ -247,6 +274,7 @@ export function useCollectionGrid(collectionId: string) {
         filters: filters,
         sort: sort,
         query: searchQuery,
+        isFileOnly: isFileOnly,
         actions: {
             add: addItem,
             update: updateItem,
@@ -255,7 +283,7 @@ export function useCollectionGrid(collectionId: string) {
             filter: filterItems,
             search: searchItems,
             upload: uploadFiles,
-            listFiles: listFiles
+            toggleIsFileOnly: toggleIsFileOnly
         }
     };
 }

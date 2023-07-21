@@ -72,7 +72,7 @@ export default class SearchService {
     }
 
     private async getMatchingCollectionTags(query: string): Promise<string[]> {
-        const sql = `SELECT ct."TagName" as tag 
+        const sql = `SELECT DISTINCT ct."TagName" as tag 
                     FROM "Collections" c
                     JOIN "CollectionTags" ct ON ct."CollectionId" = c.id
                     WHERE c."UserId"::text = :userId AND ct."TagName" LIKE :likeQuery`;
@@ -86,7 +86,7 @@ export default class SearchService {
     }
 
     private async getMatchingFileTags(query: string): Promise<string[]> {
-        const sql = `SELECT cft."TagName" as tag
+        const sql = `SELECT DISTINCT cft."TagName" as tag
                     FROM "CollectionFiles" cf
                     JOIN "Collections" c ON c.id = cf."CollectionId"
                     JOIN "CollectionFileTags" cft ON cft."CollectionFileId" = cf.id

@@ -52,25 +52,25 @@ export default function PhotoViewer({ items }: PhotoViewerProps) {
     }, [activeItemId]);
 
     const handleIndexChange = (index: number) => {
-        pauseActiveVideo()
+        pauseActiveVideo();
         const itemId = photos[index]?.key?.toString() || null;
         setActiveItemId(itemId);
         setIndex(index);
     };
 
     const handleClose = () => {
-        pauseActiveVideo()
+        pauseActiveVideo();
         setIsVisible(false);
         setActiveItemId(null);
     };
 
     const pauseActiveVideo = () => {
         if (!activeItemId) {
-            return
+            return;
         }
         const videoRef = videoRefMap.get(activeItemId);
         videoRef?.current?.pause();
-    }
+    };
 
     return (
         <PhotoSlider
@@ -123,7 +123,6 @@ const VideoPlayer = ({
         if (item.id !== activeItemId) {
             return;
         }
-        console.log("playing", item.name);
         ref.current?.play();
     }, [item.id, activeItemId]);
 
