@@ -138,7 +138,22 @@ export function useCollectionGrid(collectionId: string) {
         const isCreatingNew = !!collectionName;
         let successMessage = "";
         if (isCreatingNew) {
-            const collection = await uploadCollection(files, collectionName);
+            let deduplicatedName = collectionName;
+            let isDuplicate = allItems.some(
+                (item) =>
+                    item.type === "collection" && item.name === deduplicatedName
+            );
+            let duplicateCount = 1;
+            while (isDuplicate) {
+                deduplicatedName = `${collectionName} (${++duplicateCount})`;
+                isDuplicate = allItems.some(
+                    (item) =>
+                        item.type === "collection" &&
+                        item.name === deduplicatedName
+                );
+            }
+
+            const collection = await uploadCollection(files, deduplicatedName);
             addItem({ ...collection, type: "collection" });
             successMessage = `Collection '${collection.name}' uploaded`;
         } else {
