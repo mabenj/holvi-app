@@ -1,11 +1,5 @@
-import { ApiData } from "@/lib/common/api-route";
-import { getErrorMessage } from "@/lib/common/utilities";
-import useDebounce from "@/lib/hooks/useDebounce";
-import { useHttp } from "@/lib/hooks/useHttp";
-import { useUpload } from "@/lib/hooks/useUpload";
-import { CollectionDto } from "@/lib/interfaces/collection-dto";
+import { GridSort } from "@/lib/hooks/useCollectionGrid";
 import { CollectionGridItem } from "@/lib/interfaces/collection-grid-item";
-import { SearchResult } from "@/lib/interfaces/search-result";
 import { AddIcon, SearchIcon } from "@chakra-ui/icons";
 import {
     Box,
@@ -20,159 +14,45 @@ import {
     MenuItemOption,
     MenuList,
     MenuOptionGroup,
-    useDisclosure,
-    useToast
+    useDisclosure
 } from "@chakra-ui/react";
 import { mdiFilterVariant, mdiFolderUpload, mdiSort, mdiUpload } from "@mdi/js";
 import Icon from "@mdi/react";
-import { ChangeEvent, Dispatch, useEffect, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
 import CollectionModal from "../modals/CollectionModal";
-import { CollectionGridAction } from "./CollectionGrid";
 
 interface CollectionGridActionBarProps {
     isLoading: boolean;
-    actionDispatcher: Dispatch<CollectionGridAction>;
-    collectionId?: string;
+    collectionId: string;
+    sort: GridSort;
+    onSort: (sort: GridSort) => void;
+    filters: string[];
+    onFilter: (filters: string[]) => void;
+    searchQuery: string;
+    onSearch: (query: string) => void;
+    onUpload: (files: File[], name?: string) => void;
+    onCreated: (collection: CollectionGridItem) => void;
+    onListFiles: () => void;
 }
 
 export default function CollectionGridActionBar({
     isLoading,
-    actionDispatcher,
-    collectionId
+    collectionId,
+    sort,
+    onSort,
+    filters,
+    onFilter,
+    searchQuery,
+    onSearch,
+    onUpload,
+    onCreated,
+    onListFiles
 }: CollectionGridActionBarProps) {
-    const [currentFilters, setCurrentFilters] = useState<string[]>([
-        "collections",
-        "videos",
-        "images"
-    ]);
-    const [currentSort, setCurrentSort] = useState<{
-        field: string;
-        asc: boolean;
-    } | null>(null);
-    const { upload, isUploading } = useUpload();
-    const http = useHttp();
-
-    const toast = useToast();
-
     const canFilter = collectionId === "root";
     const canListFiles = collectionId === "root";
-    const canUploadFiles = collectionId && collectionId !== "root";
+    const canUploadFiles = collectionId !== "root";
     const canUploadCollection = collectionId === "root";
     const canCreateCollection = collectionId === "root";
-
-    const handleSearch = async (query: string) => {
-        if (!collectionId) {
-            return;
-        }
-        if (!query) {
-            actionDispatcher({
-                type: "SEARCH_END",
-                result: null
-            });
-            return;
-        }
-        if (collectionId === "root") {
-            actionDispatcher({ type: "SEARCH_START" });
-            const { data, error } = await http.get<ApiData<SearchResult>>(
-                `/api/search?query=${query}`
-            );
-            let result: CollectionGridItem[] | null = [];
-            if (!data || error) {
-                toast({
-                    description: `Could not search: '${getErrorMessage(
-                        error
-                    )}'`,
-                    status: "error"
-                });
-                result = null;
-            } else {
-                const collectionItems: CollectionGridItem[] =
-                    data.collections.map((collection) => ({
-                        type: "collection",
-                        ...collection
-                    }));
-                const fileItems: CollectionGridItem[] = data.files.map(
-                    (file) => ({
-                        type: file.mimeType.includes("image")
-                            ? "image"
-                            : "video",
-                        ...file
-                    })
-                );
-                result.push(...[...collectionItems, ...fileItems]);
-            }
-            actionDispatcher({
-                type: "SEARCH_END",
-                result
-            });
-            return;
-        }
-        // necessary data already at client, filter grid items based on query
-        actionDispatcher({ type: "FILTER", filters: currentFilters, query });
-    };
-
-    const handleListFiles = () => {
-        actionDispatcher({ type: "SEARCH_START" });
-        //TODO: make request to server
-        actionDispatcher({
-            type: "SEARCH_END",
-            result: []
-        });
-    };
-
-    const handleUploadFiles = async (
-        files: File[],
-        collectionName?: string
-    ) => {
-        if (files.length === 0) {
-            return;
-        }
-        const isCreatingNew = !!collectionName;
-
-        const url = isCreatingNew
-            ? `/api/collections/upload?name=${collectionName}`
-            : `/api/collections/${collectionId}/files/upload`;
-        const response = await upload(files, url, "POST").catch((error) => ({
-            status: "error",
-            error
-        }));
-        if (response.status === "error" || response.error) {
-            toast({
-                description: `Error uploading ${
-                    isCreatingNew ? "collection" : "files"
-                }: ${getErrorMessage(response.error)}`,
-                status: "error"
-            });
-            return;
-        }
-        const newItems = isCreatingNew ? [response.collection] : response.files;
-        actionDispatcher({ type: "ADD", items: newItems });
-        toast({
-            description: `Successfully uploaded ${
-                isCreatingNew
-                    ? `collection ${response.collection.name}`
-                    : `${response.files.length} files`
-            }`,
-            status: "success"
-        });
-    };
-
-    const handleFilter = (filters: string[]) => {
-        setCurrentFilters(filters);
-        actionDispatcher({ type: "FILTER", filters });
-    };
-
-    const handleSort = (field: string, asc: boolean) => {
-        setCurrentSort({ field, asc });
-        actionDispatcher({ type: "SORT", field, asc });
-    };
-
-    const handleCreated = (collection: CollectionDto) => {
-        actionDispatcher({
-            type: "ADD",
-            items: [{ ...collection, type: "collection" }]
-        });
-    };
 
     return (
         <>
@@ -183,39 +63,39 @@ export default function CollectionGridActionBar({
                 gap={2}
                 px={2}>
                 <Box flexGrow={1} w="100%">
-                    <SearchBar onSearch={handleSearch} />
+                    <SearchBar query={searchQuery} onSearch={onSearch} />
                 </Box>
                 <Flex alignItems="center" gap={2}>
                     {canFilter && (
                         <FilterBtn
-                            filters={currentFilters}
-                            onFilter={handleFilter}
+                            filters={filters}
+                            onFilter={onFilter}
                             disabled={isLoading}
                         />
                     )}
-                    <SortBtn onSort={handleSort} disabled={isLoading} />
+                    <SortBtn sort={sort} onSort={onSort} disabled={isLoading} />
                     {canListFiles && (
                         <ListAllFilesBtn
-                            onClick={handleListFiles}
+                            onClick={onListFiles}
                             disabled={isLoading}
                         />
                     )}
                     {canUploadFiles && (
                         <UploadFilesBtn
-                            onUpload={handleUploadFiles}
-                            disabled={isLoading || isUploading}
+                            onUpload={onUpload}
+                            disabled={isLoading}
                         />
                     )}
                     {canUploadCollection && (
                         <UploadCollectionBtn
-                            onUpload={handleUploadFiles}
-                            disabled={isLoading || isUploading}
+                            onUpload={onUpload}
+                            disabled={isLoading}
                         />
                     )}
                     {canCreateCollection && (
                         <CreateCollectionBtn
-                            onCreated={handleCreated}
-                            disabled={isLoading || isUploading}
+                            onCreated={onCreated}
+                            disabled={isLoading}
                         />
                     )}
                 </Flex>
@@ -282,13 +162,20 @@ const FilterBtn = ({
 };
 
 const SortBtn = ({
+    sort,
     onSort,
     disabled
 }: {
-    onSort: (field: "name" | "timestamp", asc: boolean) => void;
+    sort: GridSort;
+    onSort: (sort: GridSort) => void;
     disabled: boolean;
 }) => {
-    const [sortField, setSortField] = useState("");
+    const [sortValue, setSortValue] = useState("");
+
+    useEffect(() => {
+        setSortValue(`${sort.asc ? "+" : "-"}${sort.field}`);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sort]);
 
     const handleSort = (e: string | string[]) => {
         const sortField = Array.isArray(e) ? e[0] : e;
@@ -296,8 +183,11 @@ const SortBtn = ({
         if (field !== "name" && field !== "timestamp") {
             return;
         }
-        setSortField(sortField);
-        onSort(field, sortField.startsWith("+"));
+        setSortValue(sortField);
+        onSort({
+            field: field,
+            asc: sortField.startsWith("+")
+        });
     };
 
     return (
@@ -313,7 +203,7 @@ const SortBtn = ({
                 <MenuOptionGroup
                     type="radio"
                     onChange={handleSort}
-                    value={sortField}>
+                    value={sortValue}>
                     <MenuItemOption value="+name">Name (A-Z)</MenuItemOption>
                     <MenuItemOption value="-name">Name (Z-A)</MenuItemOption>
                     <MenuItemOption value="-timestamp">
@@ -413,7 +303,7 @@ const CreateCollectionBtn = ({
     onCreated,
     disabled
 }: {
-    onCreated: (collection: CollectionDto) => void;
+    onCreated: (collection: CollectionGridItem) => void;
     disabled: boolean;
 }) => {
     const { isOpen, onOpen, onClose } = useDisclosure();
@@ -430,26 +320,22 @@ const CreateCollectionBtn = ({
             <CollectionModal
                 isOpen={isOpen}
                 onClose={onClose}
-                onSave={onCreated}
+                onSave={(collection) =>
+                    onCreated({ ...collection, type: "collection" })
+                }
                 mode="create"
             />
         </>
     );
 };
 
-const SearchBar = ({ onSearch }: { onSearch: (query: string) => void }) => {
-    const DEBOUNCE_MS = 500;
-    const [query, setQuery] = useState<string | null>(null);
-    const debouncedQuery = useDebounce(query, DEBOUNCE_MS);
-
-    useEffect(() => {
-        if (debouncedQuery == null) {
-            return;
-        }
-        onSearch(debouncedQuery);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [debouncedQuery]);
-
+const SearchBar = ({
+    query,
+    onSearch
+}: {
+    query: string;
+    onSearch: (query: string) => void;
+}) => {
     return (
         <InputGroup>
             <InputLeftElement pointerEvents="none">
@@ -459,7 +345,7 @@ const SearchBar = ({ onSearch }: { onSearch: (query: string) => void }) => {
                 type="search"
                 placeholder="Search..."
                 value={query || ""}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => onSearch(e.target.value)}
             />
         </InputGroup>
     );
