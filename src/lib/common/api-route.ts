@@ -83,41 +83,35 @@ export class ApiRoute {
         const handle: NextApiHandler = async (req, res) => {
             ApiRoute.logger.info(`${req.method}: ${req.url}`);
 
-            let authenticate = true;
-            let handler: ApiHandler | undefined;
-            let validator: z.ZodType | undefined;
-
+            let methodOptions: ApiHandlerOptions | undefined;
             switch (req.method) {
                 case HttpMethod.GET:
-                    authenticate = getOptions?.authenticate ?? true;
-                    handler = getOptions?.handler;
-                    validator = getOptions?.validator;
+                    methodOptions = getOptions;
                     break;
                 case HttpMethod.POST:
-                    authenticate = postOptions?.authenticate ?? true;
-                    handler = postOptions?.handler;
-                    validator = postOptions?.validator;
+                    methodOptions = postOptions;
                     break;
                 case HttpMethod.DELETE:
-                    authenticate = deleteOptions?.authenticate ?? true;
-                    handler = deleteOptions?.handler;
-                    validator = deleteOptions?.validator;
+                    methodOptions = deleteOptions;
                     break;
                 case HttpMethod.PUT:
-                    authenticate = putOptions?.authenticate ?? true;
-                    handler = putOptions?.handler;
-                    validator = putOptions?.validator;
+                    methodOptions = putOptions;
                     break;
                 default:
                 // nothing
             }
+
+            let { authenticate, handler, validator } = methodOptions || {};
 
             if (typeof handler !== "function") {
                 res.status(405).end();
                 return;
             }
 
-            handler = authenticate ? withUser(handler) : withoutUser(handler);
+            handler =
+                authenticate === false
+                    ? withoutUser(handler)
+                    : withUser(handler);
 
             if (validator) {
                 const parsed = validator.safeParse(JSON.parse(req.body));
