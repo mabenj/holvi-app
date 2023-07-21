@@ -265,6 +265,7 @@ const CollectionThumbnail = ({
     item: CollectionDto;
     isHovering: boolean;
 }) => {
+    const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
 
     const thumbnails = item.thumbnails || [];
@@ -274,6 +275,12 @@ const CollectionThumbnail = ({
         }
     }
 
+    const handleClick = async () => {
+        setIsLoading(true);
+        await router.push(`/collections/${item.id}`);
+        setIsLoading(false);
+    };
+
     return (
         <>
             <Flex
@@ -281,7 +288,7 @@ const CollectionThumbnail = ({
                 alignItems="center"
                 w="100%"
                 h="100%"
-                onClick={() => router.push(`/collections/${item.id}`)}>
+                onClick={handleClick}>
                 {thumbnails.length > 1 && (
                     <figure className="stack-sidegrid">
                         {thumbnails.map((src, i) => (
@@ -360,6 +367,14 @@ const CollectionThumbnail = ({
                     {item.name}
                 </span>
             </Flex>
+            {isLoading && (
+                <Spinner
+                    position="absolute"
+                    top="50%"
+                    left="50%"
+                    color="whiteAlpha.800"
+                />
+            )}
         </>
     );
 };
