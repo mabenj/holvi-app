@@ -101,7 +101,7 @@ export default class SearchService {
     }
 
     private async getMatchingCollectionIds(query: string): Promise<string[]> {
-        const sql = `SELECT c.id 
+        const sql = `SELECT DISTINCT c.id 
                     FROM "Collections" c
                     LEFT JOIN "CollectionTags" ct ON ct."CollectionId" = c.id
                     WHERE c."UserId"::text = :userId AND 
@@ -117,12 +117,13 @@ export default class SearchService {
     }
 
     private async getMatchingFileIds(query: string): Promise<string[]> {
-        const sql = `SELECT cf.id
+        const sql = `SELECT DISTINCT cf.id
                     FROM "CollectionFiles" cf
                     JOIN "Collections" c ON c.id = cf."CollectionId"
                     LEFT JOIN "CollectionFileTags" cft ON cft."CollectionFileId" = cf.id
+                    LEFT JOIN "CollectionTags" ct ON ct."CollectionId" = c.id
                     WHERE c."UserId"::text = :userId AND 
-                        (cf.label LIKE :likeQuery OR cft."TagName" = :eqQuery)`;
+                        (cf.label LIKE :likeQuery OR cft."TagName" = :eqQuery OR ct."TagName" = :eqQuery)`;
         const values = {
             userId: this.userId,
             likeQuery: `%${query}%`,
