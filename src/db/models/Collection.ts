@@ -54,13 +54,14 @@ export class Collection extends Model<
     }
 
     toDto(): CollectionDto {
+        const THUMBNAILS_LIMIT = 10;
         return {
             id: this.id,
             name: this.name,
             description: this.description,
             tags: this.Tags?.map((tag) => tag.name) || [],
             thumbnails:
-                this.CollectionFiles?.map((file) =>
+                this.CollectionFiles?.slice(0, THUMBNAILS_LIMIT).map((file) =>
                     getFileSrc({
                         collectionId: this.id,
                         fileId: file.id,

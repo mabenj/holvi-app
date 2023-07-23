@@ -1,5 +1,6 @@
 import Database from "@/db/Database";
 import { Op } from "sequelize";
+import appConfig from "../common/app-config";
 import { CollectionDto } from "../interfaces/collection-dto";
 import { CollectionFileDto } from "../interfaces/collection-file-dto";
 import { SearchResult } from "../interfaces/search-result";
@@ -52,7 +53,10 @@ export default class SearchService {
             },
             include: [
                 db.models.Tag,
-                db.models.CollectionFile
+                {
+                    model: db.models.CollectionFile,
+                    limit: appConfig.collectionThumbnailLimit
+                }
             ]
         });
         return collections.map((collection) => collection.toDto());
