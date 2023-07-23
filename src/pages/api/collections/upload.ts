@@ -5,6 +5,7 @@ import { CollectionService } from "@/lib/services/collection.service";
 
 interface UploadCollectionResponse {
     collection?: CollectionDto;
+    errors?: string[];
 }
 
 async function uploadCollection(
@@ -16,19 +17,18 @@ async function uploadCollection(
         throw new InvalidArgumentError("Invalid collection name");
     }
     const collectionService = new CollectionService(req.session.user.id);
-    const { collection, nameError } = await collectionService.uploadCollection(
-        name,
-        req
-    );
+    const { collection, nameError, errors } =
+        await collectionService.uploadCollection(name, req);
     if (!collection || nameError) {
         res.status(400).json({
             status: "error",
-            error: nameError || "Error uploading collection"
+            error: nameError || "Error uploading collection",
+            errors: errors
         });
         return;
     }
 
-    res.status(200).json({ status: "ok", collection });
+    res.status(200).json({ status: "ok", collection, errors });
 }
 
 export const config = {

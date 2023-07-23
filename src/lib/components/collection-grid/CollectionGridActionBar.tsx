@@ -23,6 +23,7 @@ import CollectionModal from "../modals/CollectionModal";
 
 interface CollectionGridActionBarProps {
     isLoading: boolean;
+    isUploading: boolean;
     collectionId: string;
     sort: GridSort;
     onSort: (sort: GridSort) => void;
@@ -38,6 +39,7 @@ interface CollectionGridActionBarProps {
 
 export default function CollectionGridActionBar({
     isLoading,
+    isUploading,
     collectionId,
     sort,
     onSort,
@@ -86,19 +88,19 @@ export default function CollectionGridActionBar({
                     {canUploadFiles && (
                         <UploadFilesBtn
                             onUpload={onUpload}
-                            disabled={isLoading}
+                            disabled={isLoading || isUploading}
                         />
                     )}
                     {canUploadCollection && (
                         <UploadCollectionBtn
                             onUpload={onUpload}
-                            disabled={isLoading}
+                            disabled={isLoading || isUploading}
                         />
                     )}
                     {canCreateCollection && (
                         <CreateCollectionBtn
                             onCreated={onCreated}
-                            disabled={isLoading}
+                            disabled={isLoading || isUploading}
                         />
                     )}
                 </Flex>

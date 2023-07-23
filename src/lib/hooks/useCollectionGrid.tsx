@@ -136,7 +136,6 @@ export function useCollectionGrid(collectionId: string) {
             return;
         }
         const isCreatingNew = !!collectionName;
-        let successMessage = "";
         if (isCreatingNew) {
             let deduplicatedName = collectionName;
             let isDuplicate = allItems.some(
@@ -155,7 +154,6 @@ export function useCollectionGrid(collectionId: string) {
 
             const collection = await uploadCollection(files, deduplicatedName);
             addItem({ ...collection, type: "collection" });
-            successMessage = `Collection '${collection.name}' uploaded`;
         } else {
             const collectionFiles = await uploadCollectionFiles(
                 files,
@@ -172,12 +170,7 @@ export function useCollectionGrid(collectionId: string) {
                         } as CollectionGridItem)
                 )
             );
-            successMessage = `${collectionFiles.length} files uploaded`;
         }
-        toast({
-            description: successMessage,
-            status: "success"
-        });
     };
 
     const toggleIsFileOnly = async () => {
@@ -284,7 +277,8 @@ export function useCollectionGrid(collectionId: string) {
     };
 
     return {
-        isLoading: isFetching || isSearching || isUploading,
+        isLoading: isFetching || isSearching,
+        isUploading: isUploading,
         items: itemsToRender,
         filters: filters,
         sort: sort,

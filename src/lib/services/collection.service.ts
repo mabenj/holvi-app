@@ -14,6 +14,7 @@ import { UpdateCollectionData } from "../validators/update-collection-validator"
 interface CreateResult {
     collection?: CollectionDto;
     nameError?: string;
+    errors?: string[]
 }
 
 interface GetBufferResult {
@@ -244,12 +245,16 @@ export class CollectionService {
             return { nameError };
         }
         try {
-            const files = await this.uploadFiles(collection.id, req);
+            const { files, errors } = await this.uploadFiles(
+                collection.id,
+                req
+            );
             collection.thumbnails = files
                 .map((file) => file.thumbnailSrc)
                 .slice(0, 4);
             return {
-                collection
+                collection,
+                errors
             };
         } catch (error) {
             await this.deleteCollection(collection.id);
@@ -260,13 +265,15 @@ export class CollectionService {
     async uploadFiles(
         collectionId: string,
         req: IncomingMessage
-    ): Promise<CollectionFileDto[]> {
+    ): Promise<{ files: CollectionFileDto[]; errors: string[] }> {
         const db = await Database.getInstance();
         const transaction = await db.transaction();
         await this.throwIfNotUserCollection(collectionId);
         const fileSystem = new UserFileSystem(this.userId);
         try {
-            const files = await fileSystem.uploadFilesToTempDir(req);
+            const { files, errors } = await fileSystem.uploadFilesToTempDir(
+                req
+            );
             const insertedRows = await db.models.CollectionFile.bulkCreate(
                 files.map((file) => ({
                     id: file.id,
@@ -289,7 +296,10 @@ export class CollectionService {
             );
             await fileSystem.mergeTempDirToCollectionDir(collectionId);
             await transaction.commit();
-            return insertedRows.map((row) => row.toDto());
+            return {
+                files: insertedRows.map((row) => row.toDto()),
+                errors: errors
+            };
         } catch (error) {
             transaction.rollback();
             throw new HolviError(

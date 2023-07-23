@@ -160,58 +160,44 @@ export class UserFileSystem {
         }
     }
 
-    async uploadFilesToTempDir(req: IncomingMessage): Promise<UploadedFile[]> {
+    async uploadFilesToTempDir(
+        req: IncomingMessage
+    ): Promise<{ files: UploadedFile[]; errors: string[] }> {
         const timestamp = Date.now().toString();
-        this.logger.info(`Uploading files to temp dir '${this.tempDir}'`);
+        this.logger.info(`Uploading files to '${this.tempDir}'`);
 
+        let files: ParsedFile[];
         try {
-            const files = await parseForm(req, this.tempDir);
-            const result: UploadedFile[] = [];
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                if (!file.newFilename) {
-                    throw new HolviError("Uploaded file missing new filename");
-                }
-                const isImage = file.mimeType?.includes("image") || false;
-                const isVideo = file.mimeType?.includes("video") || false;
-                if (!isImage && !isVideo) {
-                    throw new Error("Unsupported file type");
-                }
-
-                const fallbackName = `${timestamp}_${i}`;
-                const filename = file.newFilename;
-                const originalFilename =
-                    file.originalFilename?.split("/").at(-1) ||
-                    file.originalFilename ||
-                    fallbackName;
-
-                const { width, height, thumbnailWidth, thumbnailHeight } =
-                    await generateThumbnail(
-                        isImage ? "image" : "video",
-                        path.join(this.tempDir, filename),
-                        path.join(this.tempDir, "tn", filename)
-                    );
-                const exif = isImage
-                    ? await this.getExif(path.join(this.tempDir, filename))
-                    : undefined;
-
-                result.push({
-                    id: filename,
-                    originalFilename,
-                    mimeType: file.mimeType || "unknown",
-                    width,
-                    height,
-                    thumbnailWidth,
-                    thumbnailHeight,
-                    gps: exif?.gps,
-                    takenAt: exif?.takenAt || file.lastModified || undefined
-                });
-            }
-            return result;
+            files = await parseForm(req, this.tempDir);
         } catch (error) {
-            this.logger.error("Error uploading files to temp dir", error);
-            throw error;
+            throw new HolviError(
+                "Error parsing files from incoming message",
+                error
+            );
         }
+
+        const result: UploadedFile[] = [];
+        const errors: string[] = [];
+        for (let i = 0; i < files.length; i++) {
+            const { processed, error } = await this.tryProcessFile(
+                files[i],
+                `${timestamp}_${i}`
+            );
+            if (!processed || error) {
+                this.logger.warn(
+                    `Could not process file '${files[i].originalFilename}' (${error})`
+                );
+                errors.push(
+                    `Could not process file '${files[i].originalFilename}'`
+                );
+                continue;
+            }
+            result.push(processed);
+        }
+        return {
+            files: result,
+            errors: errors
+        };
     }
 
     async clearTempDir() {
@@ -321,6 +307,54 @@ export class UserFileSystem {
                     error
                 )})`
             );
+        }
+    }
+
+    private async tryProcessFile(
+        file: ParsedFile,
+        fallbackName: string
+    ): Promise<{ processed?: UploadedFile; error?: string }> {
+        try {
+            if (!file.newFilename) {
+                throw new Error("Uploaded file missing new filename");
+            }
+            const isImage = file.mimeType?.includes("image") || false;
+            const isVideo = file.mimeType?.includes("video") || false;
+            if (!isImage && !isVideo) {
+                throw new Error("Unsupported file type");
+            }
+
+            const filename = file.newFilename;
+            const originalFilename =
+                file.originalFilename?.split("/").at(-1) ||
+                file.originalFilename ||
+                fallbackName;
+
+            const { width, height, thumbnailWidth, thumbnailHeight } =
+                await generateThumbnail(
+                    isImage ? "image" : "video",
+                    path.join(this.tempDir, filename),
+                    path.join(this.tempDir, "tn", filename)
+                );
+            const exif = isImage
+                ? await this.getExif(path.join(this.tempDir, filename))
+                : undefined;
+
+            return {
+                processed: {
+                    id: filename,
+                    originalFilename,
+                    mimeType: file.mimeType || "unknown",
+                    width,
+                    height,
+                    thumbnailWidth,
+                    thumbnailHeight,
+                    gps: exif?.gps,
+                    takenAt: exif?.takenAt || file.lastModified || undefined
+                }
+            };
+        } catch (error) {
+            return { error: getErrorMessage(error) };
         }
     }
 }
@@ -462,59 +496,71 @@ async function generateThumbnail(
     ffmpeg.setFfprobePath(ffprobeStatic!);
     return new Promise((resolve, reject) =>
         ffmpeg.ffprobe(sourceFile, (error, metadata) => {
-            if (error) {
-                reject(error);
-                return;
-            }
-
-            const videoStream = metadata.streams.find(
-                (stream) => stream.codec_type === "video"
-            );
-            let rotation = 0;
-            if (videoStream?.rotation) {
-                if (typeof videoStream.rotation === "number") {
-                    rotation = Math.abs(videoStream.rotation);
-                } else {
-                    rotation = Math.abs(
-                        Number(videoStream.rotation.replace(/\D/g, ""))
-                    );
+            try {
+                if (error) {
+                    throw error;
                 }
-            }
-            const videoWidth = videoStream?.width || 0;
-            const videoHeight = videoStream?.height || 0;
-            const { width: thumbnailWidth, height: thumbnailHeight } =
-                calculateResolution({
-                    originalWidth: rotation === 90 ? videoHeight : videoWidth,
-                    originalHeight: rotation === 90 ? videoWidth : videoHeight,
-                    maxWidth,
-                    maxHeight
-                });
 
-            const thumbnailTime =
-                (metadata.format.duration || 1) *
-                (thumbnailTimePercentage / 100);
-            ffmpeg(sourceFile)
-                .on("end", async () => {
-                    // takeScreenshots() will add a .png extension
-                    await rename(targetPath + ".png", targetPath);
-                    resolve({
-                        width: videoWidth,
-                        height: videoHeight,
-                        thumbnailWidth,
-                        thumbnailHeight
-                    });
-                })
-                .on("error", (error) => reject(error))
-                .takeScreenshots(
-                    {
-                        count: 1,
-                        fastSeek: true,
-                        timestamps: [thumbnailTime],
-                        size: `${thumbnailWidth}x${thumbnailHeight}`,
-                        filename: path.basename(targetPath)
-                    },
-                    dirname
+                const videoStream = metadata.streams.find(
+                    (stream) => stream.codec_type === "video"
                 );
+                if (!videoStream) {
+                    throw new Error("Could not find video stream");
+                }
+                let rotation = 0;
+                if (videoStream.rotation) {
+                    if (typeof videoStream.rotation === "number") {
+                        rotation = Math.abs(videoStream.rotation);
+                    } else {
+                        rotation = Math.abs(
+                            Number(videoStream.rotation.replace(/\D/g, ""))
+                        );
+                    }
+                }
+                const videoWidth = videoStream.width || 0;
+                const videoHeight = videoStream.height || 0;
+                const { width: thumbnailWidth, height: thumbnailHeight } =
+                    calculateResolution({
+                        originalWidth:
+                            rotation === 90 ? videoHeight : videoWidth,
+                        originalHeight:
+                            rotation === 90 ? videoWidth : videoHeight,
+                        maxWidth,
+                        maxHeight
+                    });
+
+                const thumbnailTime =
+                    (metadata.format.duration || 1) *
+                    (thumbnailTimePercentage / 100);
+                ffmpeg(sourceFile)
+                    .on("end", async () => {
+                        // takeScreenshots() will add an unwanted .png extension
+                        await rename(targetPath + ".png", targetPath);
+                        resolve({
+                            width: videoWidth,
+                            height: videoHeight,
+                            thumbnailWidth,
+                            thumbnailHeight
+                        });
+                    })
+                    .on("error", (error) => {
+                        throw error;
+                    })
+                    .takeScreenshots(
+                        {
+                            count: 1,
+                            fastSeek: true,
+                            timestamps: [thumbnailTime],
+                            size: `${thumbnailWidth}x${thumbnailHeight}`,
+                            filename: path.basename(targetPath)
+                        },
+                        dirname
+                    );
+            } catch (error) {
+                reject(
+                    new HolviError("Error generating video thumbnail", error)
+                );
+            }
         })
     );
 }
@@ -529,6 +575,9 @@ function calculateResolution(options: {
     const ratioW = originalWidth / maxWidth;
     const ratioH = originalHeight / maxHeight;
     const factor = ratioW > ratioH ? ratioW : ratioH;
+    if (factor === 0) {
+        return { width: originalWidth, height: originalHeight };
+    }
     return {
         width: Math.floor(originalWidth / factor),
         height: Math.floor(originalHeight / factor)

@@ -10,14 +10,23 @@ interface CollectionGridProps {
 }
 
 export default function CollectionGrid({ collectionId }: CollectionGridProps) {
-    const { isLoading, items, filters, sort, query, isFileOnly, actions } =
-        useCollectionGrid(collectionId);
+    const {
+        isLoading,
+        isUploading,
+        items,
+        filters,
+        sort,
+        query,
+        isFileOnly,
+        actions
+    } = useCollectionGrid(collectionId);
 
     return (
         <Flex direction="column" gap={5}>
             <CollectionGridActionBar
                 collectionId={collectionId}
                 isLoading={isLoading}
+                isUploading={isUploading}
                 filters={filters}
                 onFilter={actions.filter}
                 sort={sort}

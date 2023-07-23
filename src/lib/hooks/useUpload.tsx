@@ -1,4 +1,3 @@
-import { CollectionFile } from "@/db/models/CollectionFile";
 import { Flex, Spinner, ToastId, useToast } from "@chakra-ui/react";
 import { useRef, useState } from "react";
 import { getErrorMessage } from "../common/utilities";
@@ -23,7 +22,34 @@ export function useUpload() {
             if (response.status === "error" || response.error) {
                 throw new Error(response.error);
             }
-            const { collection } = response;
+            const { collection, errors } = response as {
+                collection: CollectionDto;
+                errors?: string[];
+            };
+            if (errors && errors.length > 0) {
+                toast({
+                    description: (
+                        <Flex direction="column">
+                            <span>
+                                Collection &apos;{collection.name}&apos;
+                                uploaded with errors
+                            </span>
+                            <ul>
+                                {errors.map((error, i) => (
+                                    <li key={i}>{error}</li>
+                                ))}
+                            </ul>
+                        </Flex>
+                    ),
+                    status: "warning"
+                });
+            } else {
+                toast({
+                    description: `Collection '${collection.name}' uploaded`,
+                    status: "success"
+                });
+            }
+
             return collection;
         } catch (error) {
             toast({
@@ -32,7 +58,7 @@ export function useUpload() {
                 )}`,
                 status: "error"
             });
-            throw error
+            throw error;
         }
     };
 
@@ -49,7 +75,30 @@ export function useUpload() {
             if (response.status === "error" || response.error) {
                 throw new Error(response.error);
             }
-            const { files: collectionFiles } = response;
+            const { files: collectionFiles, errors } = response as {
+                files: CollectionFileDto[];
+                errors?: string[];
+            };
+            if (errors && errors.length > 0) {
+                toast({
+                    description: (
+                        <Flex direction="column">
+                            <span>Files uploaded with errors</span>
+                            <ul>
+                                {errors.map((error, i) => (
+                                    <li key={i}>{error}</li>
+                                ))}
+                            </ul>
+                        </Flex>
+                    ),
+                    status: "warning"
+                });
+            } else {
+                toast({
+                    description: `${collectionFiles.length} files uploaded`,
+                    status: "success"
+                });
+            }
             return collectionFiles;
         } catch (error) {
             toast({
@@ -58,7 +107,7 @@ export function useUpload() {
                 )}`,
                 status: "error"
             });
-            throw error
+            throw error;
         }
     };
 
