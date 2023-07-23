@@ -41,6 +41,15 @@ export default function CollectionCardThumbnail({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isHovering, isLoading, item.thumbnails]);
 
+    useEffect(() => {
+        if (isHovering) {
+            return;
+        }
+        setThumbnailIndex(0);
+        window.clearInterval(intervalRef.current);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [thumbnailStoreRef.current]);
+
     const incrementThumbnailIndex = () => {
         setThumbnailIndex((prev) =>
             prev + 1 >= thumbnailStoreRef.current.length ? 0 : prev + 1
