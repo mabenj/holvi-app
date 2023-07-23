@@ -5,4 +5,6 @@ export interface CollectionDto {
     tags: string[];
     thumbnails: string[];
     timestamp: number;
+    videoCount: number;
+    imageCount: number;
 }

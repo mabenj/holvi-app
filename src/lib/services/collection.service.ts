@@ -5,7 +5,7 @@ import { Op } from "sequelize";
 import appConfig from "../common/app-config";
 import { HolviError, NotFoundError } from "../common/errors";
 import { UserFileSystem } from "../common/user-file-system";
-import { EMPTY_UUIDV4, getFileSrc } from "../common/utilities";
+import { EMPTY_UUIDV4 } from "../common/utilities";
 import { CollectionDto } from "../interfaces/collection-dto";
 import { CollectionFileDto } from "../interfaces/collection-file-dto";
 import { UpdateCollectionFileData } from "../validators/update-collection-file-validator";
@@ -316,10 +316,7 @@ export class CollectionService {
             const collectionInDb = await db.models.Collection.findByPk(
                 collection.id,
                 {
-                    include: {
-                        model: db.models.CollectionFile,
-                        limit: 4
-                    }
+                    include: db.models.CollectionFile
                 }
             );
             if (!collectionInDb) {
@@ -374,16 +371,7 @@ export class CollectionService {
             return {
                 collection: {
                     ...collectionInDb.toDto(),
-                    tags: collectionTags.map((tag) => tag.TagName),
-                    thumbnails:
-                        collectionInDb.CollectionFiles?.map((file) =>
-                            getFileSrc({
-                                collectionId: collectionInDb.id,
-                                fileId: file.id,
-                                mimeType: file.mimeType,
-                                thumbnail: true
-                            })
-                        ) || []
+                    tags: collectionTags.map((tag) => tag.TagName)
                 }
             };
         } catch (error) {
@@ -471,15 +459,7 @@ export class CollectionService {
             where: {
                 UserId: this.userId
             },
-            include: [
-                {
-                    model: db.models.Tag
-                },
-                {
-                    model: db.models.CollectionFile,
-                    limit: 4
-                }
-            ]
+            include: [db.models.Tag, db.models.CollectionFile]
         });
         return collections.map((collection) => collection.toDto());
     }

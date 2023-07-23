@@ -22,17 +22,18 @@ import {
     useToast
 } from "@chakra-ui/react";
 import {
+    mdiCamera,
     mdiDelete,
     mdiDotsVertical,
-    mdiFolderMultipleImage,
     mdiImageOutline,
     mdiPlayCircle,
-    mdiSquareEditOutline
+    mdiSquareEditOutline,
+    mdiVideo
 } from "@mdi/js";
 import Icon from "@mdi/react";
 import Image from "next/image";
 import { useRouter } from "next/router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import CollectionFileModal from "../modals/CollectionFileModal";
 import CollectionModal from "../modals/CollectionModal";
 import { Photo } from "../photo-viewer/PhotoViewer";
@@ -109,11 +110,7 @@ export default function CollectionGridCard({
 
     return (
         <>
-            <Flex
-                direction="column"
-                alignItems="center"
-                gap={2}
-                title={item.name}>
+            <Flex direction="column" alignItems="center" gap={2}>
                 <Box
                     w="100%"
                     h={["8rem", "8rem", "8rem", "14rem"]}
@@ -266,14 +263,24 @@ const CollectionThumbnail = ({
     isHovering: boolean;
 }) => {
     const [isLoading, setIsLoading] = useState(false);
+    const [activeThumbnailIndex, setActiveThumbnailIndex] = useState(0);
+    const intervalRef = useRef(0);
     const router = useRouter();
 
-    const thumbnails = item.thumbnails || [];
-    if (thumbnails.length > 1 && thumbnails.length < 4) {
-        for (let i = thumbnails.length; i < 4; i++) {
-            thumbnails.push(thumbnails[(i * 20) % thumbnails.length]);
+    const INTERVAL_MS = 500;
+
+    useEffect(() => {
+        if (isHovering && !isLoading) {
+            intervalRef.current = window.setInterval(() => {
+                setActiveThumbnailIndex((prev) =>
+                    prev + 1 >= item.thumbnails.length ? 0 : prev + 1
+                );
+            }, INTERVAL_MS);
+        } else {
+            setActiveThumbnailIndex(0);
+            window.clearInterval(intervalRef.current);
         }
-    }
+    }, [isHovering, isLoading, item.thumbnails.length]);
 
     const handleClick = async () => {
         setIsLoading(true);
@@ -289,25 +296,10 @@ const CollectionThumbnail = ({
                 w="100%"
                 h="100%"
                 onClick={handleClick}>
-                {thumbnails.length > 1 && (
-                    <figure className="stack-sidegrid">
-                        {thumbnails.map((src, i) => (
-                            <Image
-                                key={i}
-                                src={src}
-                                alt={item.name}
-                                fill
-                                style={{
-                                    objectFit: "cover"
-                                }}
-                            />
-                        ))}
-                    </figure>
-                )}
-                {thumbnails.length === 1 && (
+                {item.thumbnails.length > 1 && (
                     <Box w="100%" h="100%" position="relative">
                         <Image
-                            src={thumbnails[0]}
+                            src={item.thumbnails[activeThumbnailIndex]}
                             alt={item.name}
                             fill
                             style={{
@@ -317,55 +309,68 @@ const CollectionThumbnail = ({
                         />
                     </Box>
                 )}
-                {thumbnails.length === 0 && (
+                {item.thumbnails.length === 0 && (
                     <Icon path={mdiImageOutline} size={4} />
                 )}
-                <Box
+                <Flex
+                    fontSize={["xs", "xs", "sm", "md"]}
+                    w="100%"
+                    h="100%"
+                    justifyContent="space-between"
+                    alignItems="flex-end"
+                    gap={2}
                     position="absolute"
                     pointerEvents="none"
-                    p={1}
-                    top={0}
+                    py={1}
+                    px={2}
+                    bottom={0}
                     left={0}
-                    color="whiteAlpha.800">
-                    <Icon
-                        path={mdiFolderMultipleImage}
-                        size={1}
-                        style={{
-                            filter: "drop-shadow(0 0 2px black)"
-                        }}
-                    />
-                </Box>
-            </Flex>
-            <Flex
-                justifyContent="center"
-                alignItems="flex-end"
-                position="absolute"
-                bottom={0}
-                width="100%"
-                height="100%"
-                p={2}
-                whiteSpace="nowrap"
-                overflow="hidden"
-                textOverflow="ellipsis"
-                cursor="text"
-                title={item.name}
-                color="whiteAlpha.800"
-                backgroundImage={`linear-gradient(
-                    rgba(0, 0, 0, 0.0) 50%,
-                    rgba(0, 0, 0, 0.9) 100%
-                )`}
-                pointerEvents="none"
-                transition="all 0.3s"
-                opacity={isHovering ? 0 : 1}>
-                <span
+                    color="#fff"
+                    backgroundImage={`linear-gradient(
+                        rgba(0, 0, 0, 0.0) 80%,
+                        rgba(0, 0, 0, 0.9) 100%
+                    )`}
                     style={{
                         textShadow: `-1px -1px 0 rgba(0, 0, 0, 0.4), 
                                         1px -1px 0 rgba(0, 0, 0, 0.4), 
                                         -1px 1px 0 rgba(0, 0, 0, 0.4), 
                                         1px 1px 0 rgba(0, 0, 0, 0.4)`
-                    }}>
-                    {item.name}
-                </span>
+                    }}
+                    opacity={isHovering ? 0 : 0.9}
+                    transition="all 0.3s">
+                    <Box
+                        whiteSpace="nowrap"
+                        overflow="hidden"
+                        textOverflow="ellipsis">
+                        {item.name}
+                    </Box>
+                    <Flex alignItems="center" gap={2}>
+                        {item.imageCount > 0 && (
+                            <Flex alignItems="center" gap={1}>
+                                <Icon
+                                    path={mdiCamera}
+                                    size={0.7}
+                                    style={{
+                                        filter: "drop-shadow(0 0 2px black)"
+                                    }}
+                                />
+                                <span>{item.imageCount}</span>
+                            </Flex>
+                        )}
+                        {item.videoCount > 0 && (
+                            <Flex alignItems="center" gap={1}>
+                                <Icon
+                                    path={mdiVideo}
+                                    size={0.7}
+                                    style={{
+                                        filter: "drop-shadow(0 0 2px black)"
+                                    }}
+                                />
+                                <span>{item.videoCount}</span>
+                            </Flex>
+                        )}
+                    </Flex>
+                </Flex>
             </Flex>
             {isLoading && (
                 <Spinner

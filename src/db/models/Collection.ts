@@ -68,7 +68,15 @@ export class Collection extends Model<
                         thumbnail: true
                     })
                 ) || [],
-            timestamp: this.createdAt.getTime()
+            timestamp: this.createdAt.getTime(),
+            videoCount:
+                this.CollectionFiles?.filter((file) =>
+                    file.mimeType.includes("video")
+                ).length || 0,
+            imageCount:
+                this.CollectionFiles?.filter((file) =>
+                    file.mimeType.includes("image")
+                ).length || 0
         };
     }
 }

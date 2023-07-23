@@ -52,7 +52,7 @@ export default class SearchService {
             },
             include: [
                 db.models.Tag,
-                { model: db.models.CollectionFile, limit: 4 }
+                db.models.CollectionFile
             ]
         });
         return collections.map((collection) => collection.toDto());

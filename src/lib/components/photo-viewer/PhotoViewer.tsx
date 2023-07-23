@@ -46,7 +46,7 @@ export default function PhotoViewer({ items }: PhotoViewerProps) {
             (photo) => photo.key === activeItemId
         );
         setIndex(Math.max(itemIndex, 0));
-        setIsVisible(activeItemId ? true : false);
+        setIsVisible(!!activeItemId);
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeItemId]);
