@@ -38,7 +38,7 @@ export class Collection extends Model<
                     defaultValue: DataTypes.UUIDV4
                 },
                 name: {
-                    type: DataTypes.STRING,
+                    type: DataTypes.CITEXT,
                     allowNull: false
                 },
                 description: {
