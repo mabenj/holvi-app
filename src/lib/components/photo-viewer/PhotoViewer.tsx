@@ -111,6 +111,8 @@ const VideoPlayer = ({
     const [, setPhotoViewerVideoRefMap] = useAtom(photoViewerVideoRefMap);
     const ref = useRef<HTMLVideoElement | null>(null);
 
+    const CONTROL_SETTINGS_KEY = "holvi.videoControls";
+
     useEffect(() => {
         setPhotoViewerVideoRefMap((prev) => {
             prev.set(item.id, ref);
@@ -120,11 +122,30 @@ const VideoPlayer = ({
     }, [item.id, ref]);
 
     useEffect(() => {
-        if (item.id !== activeItemId) {
+        if (item.id !== activeItemId || !ref.current) {
             return;
         }
-        ref.current?.play();
+        ref.current.play();
+
+        const json = localStorage.getItem(CONTROL_SETTINGS_KEY);
+        if (!json) {
+            return;
+        }
+        const { volume, isMuted } = JSON.parse(json);
+        ref.current.volume = volume;
+        ref.current.muted = isMuted;
     }, [item.id, activeItemId]);
+
+    const handleVolumeChange = (
+        e: React.SyntheticEvent<HTMLVideoElement, Event>
+    ) => {
+        const volume = (e.target as HTMLVideoElement).volume;
+        const isMuted = (e.target as HTMLVideoElement).muted;
+        localStorage.setItem(
+            CONTROL_SETTINGS_KEY,
+            JSON.stringify({ volume, isMuted })
+        );
+    };
 
     if (item.type !== "video") {
         return (
@@ -157,6 +178,8 @@ const VideoPlayer = ({
                     height: "90dvh"
                 }}
                 controls
+                loop
+                onVolumeChange={handleVolumeChange}
             />
         </div>
     );
