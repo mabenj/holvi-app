@@ -105,7 +105,7 @@ export default function CollectionGridCard({
             <Flex direction="column" alignItems="center" gap={2}>
                 <Box
                     w="100%"
-                    h={["8rem", "8rem", "8rem", "14rem"]}
+                    h={["10rem", "16rem", "19rem", "20rem"]}
                     position="relative"
                     cursor="pointer"
                     onMouseEnter={() => setIsHovering(true)}

@@ -138,6 +138,7 @@ const LoginCard = () => {
 };
 
 const SignUpModal = () => {
+    const [isBusy, setIsBusy] = useState(false);
     const { isOpen, onOpen, onClose } = useDisclosure();
     const {
         register,
@@ -152,6 +153,7 @@ const SignUpModal = () => {
     const router = useRouter();
 
     const onSubmit = async (formData: SignUpFormData) => {
+        setIsBusy(true);
         const { data, error } = await http.post<ApiData<SignUpResponse>>(
             "/api/auth/signup",
             formData
@@ -162,6 +164,7 @@ const SignUpModal = () => {
                 description: "Successfully singed up",
                 status: "success"
             });
+            setIsBusy(false);
             return;
         }
         data?.usernameError &&
@@ -242,7 +245,7 @@ const SignUpModal = () => {
                         <Button
                             type="submit"
                             form="sign-up-form"
-                            isLoading={http.isLoading}>
+                            isLoading={http.isLoading || isBusy}>
                             Sign up
                         </Button>
                     </ModalFooter>

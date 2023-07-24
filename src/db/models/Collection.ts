@@ -41,9 +41,7 @@ export class Collection extends Model<
                     type: DataTypes.CITEXT,
                     allowNull: false
                 },
-                description: {
-                    type: DataTypes.STRING
-                },
+                description: DataTypes.STRING,
                 createdAt: DataTypes.DATE,
                 updatedAt: DataTypes.DATE
             },

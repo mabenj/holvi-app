@@ -17,4 +17,5 @@ export interface CollectionFileDto {
         alt?: number;
         label?: string;
     };
+    durationInSeconds?: number;
 }

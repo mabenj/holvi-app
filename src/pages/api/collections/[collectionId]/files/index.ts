@@ -74,7 +74,7 @@ async function handleGetThumbnail(
     res.setHeader("Cache-Control", "public, max-age=86400"); // 24h
     res.setHeader(
         "Content-Disposition",
-        `inline; filename=thumbnail_${filename}`
+        `inline; filename="thumbnail_${filename}"`
     );
     res.status(200).end(file);
 }
@@ -92,7 +92,7 @@ async function handleGetCollectionImage(
     );
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Cache-Control", "public, max-age=86400"); // 24h
-    res.setHeader("Content-Disposition", `inline; filename=${filename}`);
+    res.setHeader("Content-Disposition", `inline; "filename=${filename}"`);
     res.status(200).end(file);
 }
 
@@ -104,17 +104,12 @@ async function handleGetCollectionVideo(
 ) {
     const range = req.headers.range;
     if (!range) {
-        throw new InvalidArgumentError("Missing range header")
+        throw new InvalidArgumentError("Missing range header");
     }
     const chunkStart = Number(range.replace(/\D/g, ""));
     const service = new CollectionService(req.session.user.id);
-    const {
-        stream,
-        chunkStartEnd,
-        totalLengthBytes,
-        mimeType,
-        filename
-    } = await service.getVideoStream(collectionId, videoId, chunkStart);
+    const { stream, chunkStartEnd, totalLengthBytes, mimeType, filename } =
+        await service.getVideoStream(collectionId, videoId, chunkStart);
 
     const contentLength = chunkStartEnd[1] - chunkStartEnd[0] + 1;
     res.writeHead(206, {
@@ -122,7 +117,7 @@ async function handleGetCollectionVideo(
         "Accept-Ranges": "bytes",
         "Content-Length": contentLength,
         "Content-Type": mimeType,
-        "Content-Disposition": `inline; filename=${filename}`
+        "Content-Disposition": `inline; "filename=${filename}"`
     });
 
     stream.pipe(res);

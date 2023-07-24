@@ -18,7 +18,7 @@ export class CollectionFile extends Model<
     InferCreationAttributes<CollectionFile>
 > {
     declare id: CreationOptional<string>;
-    declare label: string;
+    declare name: string;
     declare mimeType: string;
     declare width?: number;
     declare height?: number;
@@ -29,6 +29,7 @@ export class CollectionFile extends Model<
     declare gpsAltitude?: CreationOptional<number>;
     declare gpsLabel?: CreationOptional<string>;
     declare takenAt?: CreationOptional<Date>;
+    declare durationInSeconds?: CreationOptional<number>;
 
     declare createdAt: CreationOptional<Date>;
     declare updatedAt: CreationOptional<Date>;
@@ -45,7 +46,7 @@ export class CollectionFile extends Model<
                     primaryKey: true,
                     defaultValue: DataTypes.UUIDV4
                 },
-                label: {
+                name: {
                     type: DataTypes.CITEXT,
                     allowNull: false
                 },
@@ -53,33 +54,16 @@ export class CollectionFile extends Model<
                     type: DataTypes.STRING,
                     allowNull: false
                 },
-                width: {
-                    type: DataTypes.INTEGER
-                },
-                height: {
-                    type: DataTypes.INTEGER
-                },
-                thumbnailWidth: {
-                    type: DataTypes.INTEGER
-                },
-                thumbnailHeight: {
-                    type: DataTypes.INTEGER
-                },
-                takenAt: {
-                    type: DataTypes.DATE
-                },
-                gpsLatitude: {
-                    type: DataTypes.DECIMAL
-                },
-                gpsLongitude: {
-                    type: DataTypes.DECIMAL
-                },
-                gpsAltitude: {
-                    type: DataTypes.DECIMAL
-                },
-                gpsLabel: {
-                    type: DataTypes.STRING
-                },
+                width: DataTypes.INTEGER,
+                height: DataTypes.INTEGER,
+                thumbnailWidth: DataTypes.INTEGER,
+                thumbnailHeight: DataTypes.INTEGER,
+                takenAt: DataTypes.DATE,
+                durationInSeconds: DataTypes.INTEGER,
+                gpsLatitude: DataTypes.DECIMAL,
+                gpsLongitude: DataTypes.DECIMAL,
+                gpsAltitude: DataTypes.DECIMAL,
+                gpsLabel: DataTypes.STRING,
                 createdAt: DataTypes.DATE,
                 updatedAt: DataTypes.DATE
             },
@@ -102,7 +86,7 @@ export class CollectionFile extends Model<
         return {
             id: this.id,
             collectionId: this.CollectionId,
-            name: this.label,
+            name: this.name,
             mimeType: this.mimeType,
             src: getFileSrc({
                 collectionId: this.CollectionId,
@@ -121,7 +105,8 @@ export class CollectionFile extends Model<
             thumbnailHeight: this.thumbnailHeight,
             tags: this.Tags?.map((tag) => tag.name) || [],
             timestamp: (this.takenAt || this.createdAt).getTime(),
-            gps: gps
+            gps: gps,
+            durationInSeconds: this.durationInSeconds
         };
     }
 }

@@ -53,6 +53,7 @@ interface UploadedFile {
         altitude?: number;
         label?: string;
     };
+    durationInSeconds?: number;
 }
 
 export class UserFileSystem {
@@ -330,12 +331,17 @@ export class UserFileSystem {
                 file.originalFilename ||
                 fallbackName;
 
-            const { width, height, thumbnailWidth, thumbnailHeight } =
-                await generateThumbnail(
-                    isImage ? "image" : "video",
-                    path.join(this.tempDir, filename),
-                    path.join(this.tempDir, "tn", filename)
-                );
+            const {
+                width,
+                height,
+                thumbnailWidth,
+                thumbnailHeight,
+                durationInSeconds
+            } = await generateThumbnail(
+                isImage ? "image" : "video",
+                path.join(this.tempDir, filename),
+                path.join(this.tempDir, "tn", filename)
+            );
             const exif = isImage
                 ? await this.getExif(path.join(this.tempDir, filename))
                 : undefined;
@@ -350,7 +356,8 @@ export class UserFileSystem {
                     thumbnailWidth,
                     thumbnailHeight,
                     gps: exif?.gps,
-                    takenAt: exif?.takenAt || file.lastModified || undefined
+                    takenAt: exif?.takenAt || file.lastModified || undefined,
+                    durationInSeconds
                 }
             };
         } catch (error) {
@@ -457,6 +464,7 @@ async function generateThumbnail(
     height: number;
     thumbnailWidth: number;
     thumbnailHeight: number;
+    durationInSeconds?: number;
 }> {
     const maxWidth = 600;
     const maxHeight = 600;
@@ -540,7 +548,8 @@ async function generateThumbnail(
                             width: videoWidth,
                             height: videoHeight,
                             thumbnailWidth,
-                            thumbnailHeight
+                            thumbnailHeight,
+                            durationInSeconds: metadata.format.duration
                         });
                     })
                     .on("error", (error) => {

@@ -1,5 +1,5 @@
 import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
-import { Box } from "@chakra-ui/react";
+import { Box, Flex } from "@chakra-ui/react";
 import { mdiPlayCircle } from "@mdi/js";
 import Icon from "@mdi/react";
 import Image from "next/image";
@@ -20,7 +20,9 @@ export default function VideoCardThumbnail({
                     objectFit: "cover"
                 }}
             />
-            <Box
+            <Flex
+                alignItems="center"
+                gap={2}
                 position="absolute"
                 pointerEvents="none"
                 p={1}
@@ -32,7 +34,28 @@ export default function VideoCardThumbnail({
                         filter: "drop-shadow(0 0 2px black)"
                     }}
                 />
-            </Box>
+                {item.durationInSeconds && (
+                    <Box
+                        fontSize="sm"
+                        style={{
+                            textShadow: `-1px -1px 0 rgba(0, 0, 0, 0.4), 
+                                        1px -1px 0 rgba(0, 0, 0, 0.4), 
+                                        -1px 1px 0 rgba(0, 0, 0, 0.4), 
+                                        1px 1px 0 rgba(0, 0, 0, 0.4)`
+                        }}>
+                        {secondsToDuration(item.durationInSeconds)}
+                    </Box>
+                )}
+            </Flex>
         </Photo>
     );
+}
+
+function secondsToDuration(seconds: number) {
+    const ONE_HOUR = 3600;
+    const startIndex = seconds < ONE_HOUR ? 14 : 11;
+    const endIndex = seconds < ONE_HOUR ? 19 : 16;
+    return new Date(seconds * 1000)
+        .toISOString()
+        .substring(startIndex, endIndex);
 }

@@ -69,9 +69,15 @@ export default function CollectionCardThumbnail({
                 .then((blob) =>
                     (window.URL || window.webkitURL).createObjectURL(blob)
                 )
+                .catch((error) =>
+                    console.error(`Could not fetch thumbnail '${url}'`, error)
+                )
         );
         const blobs = await Promise.all(promises);
-        thumbnailStoreRef.current = [...thumbnailStoreRef.current, ...blobs];
+        thumbnailStoreRef.current = [
+            ...thumbnailStoreRef.current,
+            ...blobs.filter((blob) => !!blob).map((blob) => blob as string)
+        ];
     };
 
     const handleClick = async () => {

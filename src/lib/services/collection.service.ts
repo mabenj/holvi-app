@@ -14,7 +14,7 @@ import { UpdateCollectionData } from "../validators/update-collection-validator"
 interface CreateResult {
     collection?: CollectionDto;
     nameError?: string;
-    errors?: string[]
+    errors?: string[];
 }
 
 interface GetBufferResult {
@@ -62,7 +62,7 @@ export class CollectionService {
         const transaction = await db.transaction();
         try {
             // update file
-            fileInDb.label = data.name;
+            fileInDb.name = data.name;
             await fileInDb.save({ transaction });
 
             // create new tags
@@ -277,7 +277,7 @@ export class CollectionService {
             const insertedRows = await db.models.CollectionFile.bulkCreate(
                 files.map((file) => ({
                     id: file.id,
-                    label: file.originalFilename,
+                    name: file.originalFilename,
                     mimeType: file.mimeType,
                     width: file.width,
                     height: file.height,
@@ -288,7 +288,8 @@ export class CollectionService {
                     gpsLongitude: file.gps?.longitude,
                     gpsAltitude: file.gps?.altitude,
                     gpsLabel: file.gps?.label,
-                    takenAt: file.takenAt
+                    takenAt: file.takenAt,
+                    durationInSeconds: file.durationInSeconds
                 })),
                 {
                     transaction
@@ -481,7 +482,7 @@ export class CollectionService {
                 CollectionId: collectionId,
                 id: fileId
             },
-            attributes: ["mimeType", "id", "label"],
+            attributes: ["mimeType", "id", "name"],
             include: {
                 model: db.models.Collection,
                 required: true,
@@ -496,7 +497,7 @@ export class CollectionService {
         }
         return {
             id: collectionFile.id,
-            label: collectionFile.label,
+            label: collectionFile.name,
             mimeType: collectionFile.mimeType
         };
     }
