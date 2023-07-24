@@ -271,9 +271,37 @@ export class CollectionService {
         await this.throwIfNotUserCollection(collectionId);
         const fileSystem = new UserFileSystem(this.userId);
         try {
-            const { files, errors } = await fileSystem.uploadFilesToTempDir(
-                req
-            );
+            let { files, errors } = await fileSystem.uploadFilesToTempDir(req);
+
+            const duplicateNames = await db.models.CollectionFile.findAll({
+                where: {
+                    CollectionId: collectionId,
+                    name: {
+                        [Op.in]: files.map((file) => file.originalFilename)
+                    }
+                },
+                raw: true
+            });
+            const duplicates = files.filter((newFile) => {
+                const match = duplicateNames.find(
+                    (oldFile) => oldFile.name === newFile.originalFilename
+                );
+                return (
+                    !!match &&
+                    match.takenAt?.getTime() === newFile.takenAt?.getTime()
+                );
+            });
+
+            files = files.filter((file) => !duplicates.includes(file));
+            if (duplicates.length > 0) {
+                errors.push(
+                    ...duplicates.map(
+                        (duplicate) =>
+                            `Skipped uploading file '${duplicate.originalFilename}' because a file with the same name and timestamp already exists in the collection`
+                    )
+                );
+            }
+
             const insertedRows = await db.models.CollectionFile.bulkCreate(
                 files.map((file) => ({
                     id: file.id,
