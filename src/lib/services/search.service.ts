@@ -120,7 +120,7 @@ export default class SearchService {
                     LEFT JOIN "CollectionFileTags" cft ON cft."CollectionFileId" = cf.id
                     LEFT JOIN "CollectionTags" ct ON ct."CollectionId" = c.id
                     WHERE c."UserId"::text = :userId AND 
-                        (cf.label LIKE :likeQuery OR cft."TagName" = :eqQuery OR ct."TagName" = :eqQuery)`;
+                        (cf.name LIKE :likeQuery OR cft."TagName" = :eqQuery OR ct."TagName" = :eqQuery)`;
         const values = {
             userId: this.userId,
             likeQuery: `%${query}%`,
