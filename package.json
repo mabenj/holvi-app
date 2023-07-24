@@ -40,6 +40,7 @@
         "react": "18.2.0",
         "react-dom": "18.2.0",
         "react-hook-form": "^7.45.1",
+        "react-linkify": "^1.0.0-alpha",
         "react-photo-view": "^1.2.3",
         "sequelize": "^6.32.1",
         "sharp": "^0.32.1",
@@ -52,6 +53,7 @@
         "@types/ffprobe-static": "^2.0.1",
         "@types/fluent-ffmpeg": "^2.1.21",
         "@types/formidable": "^3.4.0",
+        "@types/react-linkify": "^1.0.1",
         "sass": "^1.63.6"
     }
 }

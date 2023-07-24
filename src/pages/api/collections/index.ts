@@ -38,11 +38,12 @@ async function createCollection(
     req: ApiRequest<CreateCollectionFormData>,
     res: ApiResponse<CreateCollectionResponse>
 ) {
-    const { name, tags } = req.body;
+    const { name, tags, description } = req.body;
     const collectionService = new CollectionService(req.session.user.id);
     const { collection, nameError } = await collectionService.createCollection(
         name,
-        tags
+        tags,
+        description
     );
     if (!collection || nameError) {
         res.status(400).json({

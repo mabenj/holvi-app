@@ -14,6 +14,7 @@ import {
     ModalFooter,
     ModalHeader,
     ModalOverlay,
+    Textarea,
     useToast
 } from "@chakra-ui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -50,7 +51,8 @@ export default function CollectionModal({
     } = useForm<CreateCollectionFormData>({
         defaultValues: {
             name: initialCollection?.name,
-            tags: initialCollection?.tags || []
+            tags: initialCollection?.tags || [],
+            description: initialCollection?.description
         },
         resolver: zodResolver(CreateCollectionValidator)
     });
@@ -105,6 +107,7 @@ export default function CollectionModal({
         onClose();
         setValue("name", initialCollection?.name || "");
         setValue("tags", initialCollection?.tags || []);
+        setValue("description", initialCollection?.description);
     };
 
     return (
@@ -131,6 +134,16 @@ export default function CollectionModal({
                                 />
                                 <FormErrorMessage>
                                     {errors.name?.message}
+                                </FormErrorMessage>
+                            </FormControl>
+                            <FormControl isInvalid={!!errors.description}>
+                                <FormLabel>Description</FormLabel>
+                                <Textarea
+                                    placeholder="Description..."
+                                    {...register("description")}
+                                />
+                                <FormErrorMessage>
+                                    {errors.description?.message}
                                 </FormErrorMessage>
                             </FormControl>
                             <FormControl isInvalid={!!errors.tags}>

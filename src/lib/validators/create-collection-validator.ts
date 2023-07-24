@@ -5,6 +5,13 @@ export const CreateCollectionValidator = z.object({
         .string()
         .min(1, "Collection name must be at least 1 character long")
         .max(20, "Collection name must be less than 20 characters long"),
+    description: z
+        .string()
+        .max(
+            255,
+            "Collection description must be less than 255 characters long"
+        )
+        .optional(),
     tags: z
         .array(z.string())
         .refine((values) => values.every((value) => value.length > 0), {

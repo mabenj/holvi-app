@@ -192,7 +192,8 @@ export default function CollectionGridCard({
                     initialCollection={{
                         id: item.id,
                         name: item.name,
-                        tags: item.tags
+                        tags: item.tags,
+                        description: item.description
                     }}
                 />
             )}

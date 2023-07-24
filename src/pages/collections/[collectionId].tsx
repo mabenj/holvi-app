@@ -17,6 +17,7 @@ import {
 } from "@chakra-ui/react";
 import Head from "next/head";
 import { useEffect, useState } from "react";
+import Linkify from "react-linkify";
 
 export const getServerSideProps = withSessionSsr(
     async function getServerSideProps({ req, query }) {
@@ -58,6 +59,23 @@ export default function CollectionPage({
                 <Breadcrumbs collectionName={collection.name} />
                 <Flex direction="column" gap={3} px={4} pt={8}>
                     <Heading>{collection.name}</Heading>
+                    <Box color="gray.500">
+                        <Linkify
+                            componentDecorator={(
+                                decoratedHref,
+                                decoratedText,
+                                key
+                            ) => (
+                                <Link
+                                    key={key}
+                                    href={decoratedHref}
+                                    target="_blank">
+                                    {decoratedText}
+                                </Link>
+                            )}>
+                            {collection.description}
+                        </Linkify>
+                    </Box>
                     <Flex gap={2}>
                         {collection.tags.map((tag) => (
                             <CollectionTag key={tag} tag={tag} />

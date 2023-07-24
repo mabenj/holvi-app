@@ -365,6 +365,7 @@ export class CollectionService {
             }
             // update file
             collectionInDb.name = collection.name;
+            collectionInDb.description = collection.description;
             await collectionInDb.save({ transaction });
 
             // create new tags
@@ -448,7 +449,8 @@ export class CollectionService {
 
     async createCollection(
         name: string,
-        tags: string[]
+        tags: string[],
+        description?: string
     ): Promise<CreateResult> {
         if (await this.nameTaken(name)) {
             return { nameError: "Collection name already exists" };
@@ -459,7 +461,8 @@ export class CollectionService {
             const collection = await db.models.Collection.create(
                 {
                     name,
-                    UserId: this.userId
+                    UserId: this.userId,
+                    description
                 },
                 { transaction }
             );
