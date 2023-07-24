@@ -1,7 +1,7 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
 import { InvalidArgumentError } from "@/lib/common/errors";
-import { CollectionDto } from "@/lib/interfaces/collection-dto";
 import { CollectionService } from "@/lib/services/collection.service";
+import { CollectionDto } from "@/lib/types/collection-dto";
 
 interface UploadCollectionResponse {
     collection?: CollectionDto;

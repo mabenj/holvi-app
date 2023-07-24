@@ -1,5 +1,5 @@
 import { getFileSrc } from "@/lib/common/utilities";
-import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
+import { CollectionFileDto } from "@/lib/types/collection-file-dto";
 import {
     CreationOptional,
     DataTypes,

@@ -1,4 +1,4 @@
-import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
+import { CollectionFileDto } from "@/lib/types/collection-file-dto";
 import { Box, Flex } from "@chakra-ui/react";
 import { mdiPlayCircle } from "@mdi/js";
 import Icon from "@mdi/react";
@@ -22,6 +22,7 @@ export default function VideoCardThumbnail({
             />
             <Flex
                 alignItems="center"
+                fontSize={["xs", "xs", "sm", "md"]}
                 gap={2}
                 position="absolute"
                 pointerEvents="none"
@@ -29,19 +30,18 @@ export default function VideoCardThumbnail({
                 color="whiteAlpha.800">
                 <Icon
                     path={mdiPlayCircle}
-                    size={1}
+                    size={0.7}
                     style={{
                         filter: "drop-shadow(0 0 2px black)"
                     }}
                 />
                 {item.durationInSeconds && (
                     <Box
-                        fontSize="sm"
                         style={{
-                            textShadow: `-1px -1px 0 rgba(0, 0, 0, 0.6), 
-                                        1px -1px 0 rgba(0, 0, 0, 0.6), 
-                                        -1px 1px 0 rgba(0, 0, 0, 0.6), 
-                                        1px 1px 0 rgba(0, 0, 0, 0.6)`
+                            textShadow: `-1px -1px 0 rgba(0, 0, 0, 0.4), 
+                                        1px -1px 0 rgba(0, 0, 0, 0.4), 
+                                        -1px 1px 0 rgba(0, 0, 0, 0.4), 
+                                        1px 1px 0 rgba(0, 0, 0, 0.4)`
                         }}>
                         {secondsToDuration(item.durationInSeconds)}
                     </Box>

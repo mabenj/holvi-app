@@ -1,8 +1,8 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
-import { CreateCollectionResponse } from "@/lib/interfaces/create-collection-response";
-import { GetCollectionsResponse } from "@/lib/interfaces/get-collections-results";
-import { UpdateCollectionResponse } from "@/lib/interfaces/update-collection-result";
 import { CollectionService } from "@/lib/services/collection.service";
+import { CreateCollectionResponse } from "@/lib/types/create-collection-response";
+import { GetCollectionsResponse } from "@/lib/types/get-collections-results";
+import { UpdateCollectionResponse } from "@/lib/types/update-collection-result";
 import {
     CreateCollectionFormData,
     CreateCollectionValidator

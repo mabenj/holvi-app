@@ -4,7 +4,7 @@ import {
     GetServerSidePropsResult,
     NextApiHandler
 } from "next";
-import { UserDto } from "../interfaces/user-dto";
+import { UserDto } from "../types/user-dto";
 import appConfig from "./app-config";
 
 export function withSessionRoute(handler: NextApiHandler) {

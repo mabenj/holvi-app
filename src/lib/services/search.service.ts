@@ -1,9 +1,9 @@
 import Database from "@/db/Database";
 import { Op } from "sequelize";
 import appConfig from "../common/app-config";
-import { CollectionDto } from "../interfaces/collection-dto";
-import { CollectionFileDto } from "../interfaces/collection-file-dto";
-import { SearchResult } from "../interfaces/search-result";
+import { CollectionDto } from "../types/collection-dto";
+import { CollectionFileDto } from "../types/collection-file-dto";
+import { SearchResult } from "../types/search-result";
 
 export default class SearchService {
     constructor(private readonly userId: string) {}

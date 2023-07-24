@@ -1,4 +1,4 @@
-import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
+import { CollectionFileDto } from "@/lib/types/collection-file-dto";
 import { Box } from "@chakra-ui/react";
 import Image from "next/image";
 import { Photo } from "../photo-viewer/PhotoViewer";

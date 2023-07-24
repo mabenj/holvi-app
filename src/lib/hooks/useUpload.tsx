@@ -1,8 +1,8 @@
 import { Flex, Spinner, ToastId, useToast } from "@chakra-ui/react";
 import { useRef, useState } from "react";
 import { getErrorMessage } from "../common/utilities";
-import { CollectionDto } from "../interfaces/collection-dto";
-import { CollectionFileDto } from "../interfaces/collection-file-dto";
+import { CollectionDto } from "../types/collection-dto";
+import { CollectionFileDto } from "../types/collection-file-dto";
 
 export function useUpload() {
     const [isUploading, setIsUploading] = useState(false);

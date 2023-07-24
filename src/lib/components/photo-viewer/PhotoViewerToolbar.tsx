@@ -1,5 +1,5 @@
 import { formatDate } from "@/lib/common/utilities";
-import { CollectionGridItem } from "@/lib/interfaces/collection-grid-item";
+import { CollectionGridItem } from "@/lib/types/collection-grid-item";
 import { Link } from "@chakra-ui/next-js";
 import { Box, Flex } from "@chakra-ui/react";
 import { mdiMapMarker } from "@mdi/js";

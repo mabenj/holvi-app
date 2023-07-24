@@ -15,7 +15,7 @@ import { useRouter } from "next/router";
 import brandImage from "../../../../public/favicon-32x32.png";
 import { getErrorMessage } from "../../common/utilities";
 import { useHttp } from "../../hooks/useHttp";
-import { UserDto } from "../../interfaces/user-dto";
+import { UserDto } from "../../types/user-dto";
 
 interface LayoutProps {
     children: React.ReactNode;

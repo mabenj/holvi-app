@@ -1,4 +1,4 @@
-import { CollectionGridItem } from "@/lib/interfaces/collection-grid-item";
+import { CollectionGridItem } from "@/lib/types/collection-grid-item";
 import { Alert, AlertIcon } from "@chakra-ui/react";
 import { atom, useAtom } from "jotai";
 import React, { HTMLAttributes, useEffect, useRef, useState } from "react";

@@ -1,4 +1,4 @@
-import { CollectionDto } from "@/lib/interfaces/collection-dto";
+import { CollectionDto } from "@/lib/types/collection-dto";
 import {
     Button,
     Flex,

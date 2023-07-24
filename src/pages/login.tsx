@@ -1,7 +1,7 @@
 import { ApiData } from "@/lib/common/api-route";
 import { getErrorMessage } from "@/lib/common/utilities";
 import { useHttp } from "@/lib/hooks/useHttp";
-import { SignUpResponse } from "@/lib/interfaces/sign-up-response";
+import { SignUpResponse } from "@/lib/types/sign-up-response";
 import {
     LoginFormData,
     LoginValidator

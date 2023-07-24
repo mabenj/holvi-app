@@ -1,6 +1,6 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
-import { SignUpResponse } from "@/lib/interfaces/sign-up-response";
 import AuthService from "@/lib/services/auth.service";
+import { SignUpResponse } from "@/lib/types/sign-up-response";
 import {
     SignUpFormData,
     SignUpValidator

@@ -2,9 +2,9 @@ import { NotFoundError } from "@/lib/common/errors";
 import { withSessionSsr } from "@/lib/common/iron-session";
 import CollectionGrid from "@/lib/components/collection-grid/CollectionGrid";
 import Layout from "@/lib/components/ui/Layout";
-import { CollectionDto } from "@/lib/interfaces/collection-dto";
-import { UserDto } from "@/lib/interfaces/user-dto";
 import { CollectionService } from "@/lib/services/collection.service";
+import { CollectionDto } from "@/lib/types/collection-dto";
+import { UserDto } from "@/lib/types/user-dto";
 import { Link } from "@chakra-ui/next-js";
 import {
     Box,

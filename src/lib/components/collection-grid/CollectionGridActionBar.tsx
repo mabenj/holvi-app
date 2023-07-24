@@ -1,5 +1,5 @@
 import { GridSort } from "@/lib/hooks/useCollectionGrid";
-import { CollectionGridItem } from "@/lib/interfaces/collection-grid-item";
+import { CollectionGridItem } from "@/lib/types/collection-grid-item";
 import { AddIcon, SearchIcon } from "@chakra-ui/icons";
 import {
     Box,

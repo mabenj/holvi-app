@@ -6,8 +6,8 @@ import appConfig from "../common/app-config";
 import { HolviError, NotFoundError } from "../common/errors";
 import { UserFileSystem } from "../common/user-file-system";
 import { EMPTY_UUIDV4 } from "../common/utilities";
-import { CollectionDto } from "../interfaces/collection-dto";
-import { CollectionFileDto } from "../interfaces/collection-file-dto";
+import { CollectionDto } from "../types/collection-dto";
+import { CollectionFileDto } from "../types/collection-file-dto";
 import { UpdateCollectionFileData } from "../validators/update-collection-file-validator";
 import { UpdateCollectionData } from "../validators/update-collection-validator";
 

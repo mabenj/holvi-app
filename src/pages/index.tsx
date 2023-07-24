@@ -1,7 +1,7 @@
 import { withUserSsr } from "@/lib/common/route-helpers";
 import CollectionGrid from "@/lib/components/collection-grid/CollectionGrid";
 import Layout from "@/lib/components/ui/Layout";
-import { UserDto } from "@/lib/interfaces/user-dto";
+import { UserDto } from "@/lib/types/user-dto";
 import Head from "next/head";
 
 export const getServerSideProps = withUserSsr(

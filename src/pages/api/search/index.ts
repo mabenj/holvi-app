@@ -1,6 +1,6 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
-import { SearchResult } from "@/lib/interfaces/search-result";
 import SearchService from "@/lib/services/search.service";
+import { SearchResult } from "@/lib/types/search-result";
 
 async function search(req: ApiRequest, res: ApiResponse<SearchResult>) {
     const { query } = req.query as { query: string };

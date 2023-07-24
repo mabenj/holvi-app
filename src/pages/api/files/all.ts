@@ -1,6 +1,6 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
-import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
 import { CollectionService } from "@/lib/services/collection.service";
+import { CollectionFileDto } from "@/lib/types/collection-file-dto";
 
 async function getAllFiles(
     req: ApiRequest,

@@ -1,8 +1,8 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
 import { InvalidArgumentError } from "@/lib/common/errors";
-import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
-import { GetCollectionFilesResponse } from "@/lib/interfaces/get-collection-files-response";
 import { CollectionService } from "@/lib/services/collection.service";
+import { CollectionFileDto } from "@/lib/types/collection-file-dto";
+import { GetCollectionFilesResponse } from "@/lib/types/get-collection-files-response";
 import {
     UpdateCollectionFileData,
     UpdateCollectionFileValidator

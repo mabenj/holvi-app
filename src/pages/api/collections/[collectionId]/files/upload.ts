@@ -1,6 +1,6 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
-import { UploadFilesResponse } from "@/lib/interfaces/upload-files-response";
 import { CollectionService } from "@/lib/services/collection.service";
+import { UploadFilesResponse } from "@/lib/types/upload-files-response";
 
 async function uploadFiles(
     req: ApiRequest,

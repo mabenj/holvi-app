@@ -1,9 +1,8 @@
 import Database from "@/db/Database";
 import { IronSession } from "iron-session";
 import Cryptography from "../common/cryptography";
-import Log from "../common/log";
-import { UserDto } from "../interfaces/user-dto";
 import { HolviError } from "../common/errors";
+import { UserDto } from "../types/user-dto";
 
 interface RegisterUserResult {
     usernameError?: string;
@@ -47,7 +46,7 @@ export default class AuthService {
             };
         } catch (error) {
             transaction.rollback();
-            throw new HolviError("Error registering user", error)
+            throw new HolviError("Error registering user", error);
         }
     }
 

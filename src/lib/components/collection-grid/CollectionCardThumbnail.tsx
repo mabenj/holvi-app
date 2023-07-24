@@ -1,4 +1,4 @@
-import { CollectionDto } from "@/lib/interfaces/collection-dto";
+import { CollectionDto } from "@/lib/types/collection-dto";
 import { Box, Flex, Spinner } from "@chakra-ui/react";
 import { mdiCamera, mdiImageOutline, mdiVideo } from "@mdi/js";
 import Icon from "@mdi/react";

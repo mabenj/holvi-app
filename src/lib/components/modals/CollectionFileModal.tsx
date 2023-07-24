@@ -20,7 +20,7 @@ import { Controller, useForm } from "react-hook-form";
 import { ApiData } from "../../common/api-route";
 import { getErrorMessage } from "../../common/utilities";
 import { useHttp } from "../../hooks/useHttp";
-import { CollectionFileDto } from "../../interfaces/collection-file-dto";
+import { CollectionFileDto } from "../../types/collection-file-dto";
 import {
     UpdateCollectionFileData,
     UpdateCollectionFileValidator

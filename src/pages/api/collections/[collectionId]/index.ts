@@ -1,6 +1,6 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
-import { GetCollectionResponse } from "@/lib/interfaces/get-collection-response";
 import { CollectionService } from "@/lib/services/collection.service";
+import { GetCollectionResponse } from "@/lib/types/get-collection-response";
 
 async function getCollection(
     req: ApiRequest,

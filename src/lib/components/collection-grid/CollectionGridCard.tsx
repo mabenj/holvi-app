@@ -1,7 +1,7 @@
 import { useHttp } from "@/lib/hooks/useHttp";
-import { CollectionDto } from "@/lib/interfaces/collection-dto";
-import { CollectionFileDto } from "@/lib/interfaces/collection-file-dto";
-import { CollectionGridItem } from "@/lib/interfaces/collection-grid-item";
+import { CollectionDto } from "@/lib/types/collection-dto";
+import { CollectionFileDto } from "@/lib/types/collection-file-dto";
+import { CollectionGridItem } from "@/lib/types/collection-grid-item";
 import {
     AlertDialog,
     AlertDialogBody,
