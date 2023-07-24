@@ -38,10 +38,10 @@ export default function VideoCardThumbnail({
                     <Box
                         fontSize="sm"
                         style={{
-                            textShadow: `-1px -1px 0 rgba(0, 0, 0, 0.4), 
-                                        1px -1px 0 rgba(0, 0, 0, 0.4), 
-                                        -1px 1px 0 rgba(0, 0, 0, 0.4), 
-                                        1px 1px 0 rgba(0, 0, 0, 0.4)`
+                            textShadow: `-1px -1px 0 rgba(0, 0, 0, 0.6), 
+                                        1px -1px 0 rgba(0, 0, 0, 0.6), 
+                                        -1px 1px 0 rgba(0, 0, 0, 0.6), 
+                                        1px 1px 0 rgba(0, 0, 0, 0.6)`
                         }}>
                         {secondsToDuration(item.durationInSeconds)}
                     </Box>
