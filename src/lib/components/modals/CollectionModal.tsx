@@ -52,7 +52,7 @@ export default function CollectionModal({
         defaultValues: {
             name: initialCollection?.name,
             tags: initialCollection?.tags || [],
-            description: initialCollection?.description
+            description: initialCollection?.description || ""
         },
         resolver: zodResolver(CreateCollectionValidator)
     });
