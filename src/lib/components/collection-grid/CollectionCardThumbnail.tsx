@@ -1,10 +1,11 @@
+import { useRotatingThumbnail } from "@/lib/hooks/useRotatingThumbnail";
 import { CollectionDto } from "@/lib/types/collection-dto";
-import { Box, Flex, Spinner } from "@chakra-ui/react";
+import { Link } from "@chakra-ui/next-js";
+import { Box, Flex } from "@chakra-ui/react";
 import { mdiCamera, mdiImageOutline, mdiVideo } from "@mdi/js";
 import Icon from "@mdi/react";
 import Image from "next/image";
-import { useRouter } from "next/router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 
 export default function CollectionCardThumbnail({
     item,
@@ -13,84 +14,29 @@ export default function CollectionCardThumbnail({
     item: CollectionDto;
     isHovering: boolean;
 }) {
-    const [isLoading, setIsLoading] = useState(false);
-
-    const thumbnailStoreRef = useRef(
-        item.thumbnails[0] ? [item.thumbnails[0]] : []
+    const { thumbnail, startRotating, stopRotating } = useRotatingThumbnail(
+        item.thumbnails
     );
-    const [thumbnailIndex, setThumbnailIndex] = useState(0);
-
-    const timerRef = useRef(-1);
-    const INTERVAL_MS = 500;
-
-    const router = useRouter();
 
     useEffect(() => {
-        if (!isHovering || isLoading) {
-            window.clearTimeout(timerRef.current)
-            setThumbnailIndex(0)
+        if (!isHovering) {
+            stopRotating();
             return;
-        } 
-        updateThumbnailStore().then(() => thumbnailTick());
+        }
+        startRotating();
+
+        return () => stopRotating();
+
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isHovering, isLoading, item.thumbnails]);
-
-    const thumbnailTick = () => {
-        if(!isHovering || isLoading){
-            window.clearTimeout(timerRef.current)
-            setThumbnailIndex(0)
-            return;
-        }
-        timerRef.current = window.setTimeout(() => {
-            setThumbnailIndex((prev) =>
-                prev + 1 >= thumbnailStoreRef.current.length ? 0 : prev + 1
-            );
-            thumbnailTick()
-        }, INTERVAL_MS);
-    };
-
-    const updateThumbnailStore = async () => {
-        if (
-            thumbnailStoreRef.current.length > 1 ||
-            item.thumbnails.length <= 1
-        ) {
-            return;
-        }
-        const promises = item.thumbnails.slice(1).map((url) =>
-            fetch(url)
-                .then((res) => res.blob())
-                .then((blob) =>
-                    (window.URL || window.webkitURL).createObjectURL(blob)
-                )
-                .catch((error) =>
-                    console.error(`Could not fetch thumbnail '${url}'`, error)
-                )
-        );
-        const blobs = await Promise.all(promises);
-        thumbnailStoreRef.current = [
-            ...thumbnailStoreRef.current,
-            ...blobs.filter((blob) => !!blob).map((blob) => blob as string)
-        ];
-    };
-
-    const handleClick = async () => {
-        setIsLoading(true);
-        await router.push(`/collections/${item.id}`);
-        setIsLoading(false);
-    };
+    }, [isHovering, item.thumbnails]);
 
     return (
-        <>
-            <Flex
-                justifyContent="center"
-                alignItems="center"
-                w="100%"
-                h="100%"
-                onClick={handleClick}>
-                {thumbnailStoreRef.current.length > 0 && (
+        <Link href={`/collections/${item.id}`}>
+            <Flex justifyContent="center" alignItems="center" w="100%" h="100%">
+                {item.thumbnails.length > 0 && (
                     <Box w="100%" h="100%" position="relative">
                         <Image
-                            src={thumbnailStoreRef.current[thumbnailIndex]}
+                            src={thumbnail}
                             alt={item.name}
                             fill
                             style={{
@@ -163,14 +109,6 @@ export default function CollectionCardThumbnail({
                     </Flex>
                 </Flex>
             </Flex>
-            {isLoading && (
-                <Spinner
-                    position="absolute"
-                    top="50%"
-                    left="50%"
-                    color="whiteAlpha.800"
-                />
-            )}
-        </>
+        </Link>
     );
 }
