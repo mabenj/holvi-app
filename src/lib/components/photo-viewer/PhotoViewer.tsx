@@ -1,6 +1,7 @@
 import { CollectionGridItem } from "@/lib/types/collection-grid-item";
 import { Alert, AlertIcon } from "@chakra-ui/react";
 import { atom, useAtom } from "jotai";
+import { useRouter } from "next/router";
 import React, { HTMLAttributes, useEffect, useRef, useState } from "react";
 import { PhotoSlider } from "react-photo-view";
 import { DataType } from "react-photo-view/dist/types";
@@ -22,6 +23,20 @@ export default function PhotoViewer({ items }: PhotoViewerProps) {
 
     const [activeItemId, setActiveItemId] = useAtom(photoViewerActiveId);
     const [videoRefMap] = useAtom(photoViewerVideoRefMap);
+
+    const router = useRouter();
+
+    useEffect(() => {
+        const { view: itemId } = router.query as { view: string };
+
+        if (itemId) {
+            setTimeout(() => setActiveItemId(itemId));
+        } else {
+            handleClose();
+        }
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [router.query]);
 
     useEffect(() => {
         const nextPhotos: DataType[] = items
@@ -48,6 +63,20 @@ export default function PhotoViewer({ items }: PhotoViewerProps) {
         setIndex(Math.max(itemIndex, 0));
         setIsVisible(!!activeItemId);
 
+        if (activeItemId) {
+            const method = router.query.view ? "replace" : "push";
+            router[method](
+                {
+                    pathname: window.location.pathname,
+                    query: {
+                        view: activeItemId
+                    }
+                },
+                undefined,
+                { shallow: true }
+            );
+        }
+
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeItemId]);
 
@@ -62,6 +91,10 @@ export default function PhotoViewer({ items }: PhotoViewerProps) {
         pauseActiveVideo();
         setIsVisible(false);
         setActiveItemId(null);
+
+        if (router.query.view) {
+            router.back();
+        }
     };
 
     const pauseActiveVideo = () => {

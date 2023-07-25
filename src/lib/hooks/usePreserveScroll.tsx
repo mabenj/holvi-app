@@ -73,7 +73,7 @@ export const useScrollRestoration = (router: NextRouter) => {
                     timer = setTimeout(() => {
                         shouldScrollRestore.current = false;
                         restoreScrollPos(url);
-                    }, 100);
+                    }, 80);
                 }
             };
 
@@ -103,55 +103,3 @@ export const useScrollRestoration = (router: NextRouter) => {
         []
     );
 };
-
-// import { useRouter } from "next/router";
-// import { useEffect, useRef } from "react";
-
-// export const usePreserveScroll = () => {
-//     const router = useRouter();
-
-//     const scrollPositions = useRef<{ [url: string]: number }>({});
-//     const isBack = useRef(false);
-
-//     useEffect(() => {
-//         router.beforePopState(() => {
-//             console.log("beforePopState");
-//             isBack.current = true;
-//             return true;
-//         });
-
-//         const onRouteChangeStart = () => {
-//             const url = router.pathname;
-//             scrollPositions.current[url] = window.scrollY;
-//             console.log("onRouteChangeStart", { url, scroll: window.scrollY });
-//         };
-
-//         const onRouteChangeComplete = (url: any) => {
-//             console.log("onRouteChangeComplete", {
-//                 url,
-//                 isBack: isBack.current,
-//                 scrollPositions: scrollPositions.current
-//             });
-//             if (isBack.current && scrollPositions.current[url]) {
-//                 setTimeout(
-//                     () =>
-//                         window.scroll({
-//                             top: scrollPositions.current[url],
-//                             behavior: "auto"
-//                         }),
-//                     1000
-//                 );
-//             }
-
-//             isBack.current = false;
-//         };
-
-//         router.events.on("routeChangeStart", onRouteChangeStart);
-//         router.events.on("routeChangeComplete", onRouteChangeComplete);
-
-//         return () => {
-//             router.events.off("routeChangeStart", onRouteChangeStart);
-//             router.events.off("routeChangeComplete", onRouteChangeComplete);
-//         };
-//     }, [router]);
-// };
