@@ -11,8 +11,8 @@ export const UpdateCollectionFileValidator = z.object({
         .refine((values) => values.every((value) => value.length > 1), {
             message: "Tags must be at least 1 characters long"
         })
-        .refine((values) => values.every((value) => value.length < 20), {
-            message: "Tags must be less than 20 characters long"
+        .refine((values) => values.every((value) => value.length < 50), {
+            message: "Tags must be less than 50 characters long"
         })
 });
 

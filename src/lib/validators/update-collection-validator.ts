@@ -5,7 +5,7 @@ export const UpdateCollectionValidator = z.object({
     name: z
         .string()
         .min(1, "Collection name must be at least 1 character long")
-        .max(20, "Collection name must be less than 20 characters long"),
+        .max(100, "Collection name must be less than 100 characters long"),
     description: z
         .string()
         .max(
@@ -17,7 +17,7 @@ export const UpdateCollectionValidator = z.object({
         z
             .string()
             .min(1, "Tag must be at least 1 character long")
-            .max(20, "Tag must be less than 20 characters long")
+            .max(50, "Tag must be less than 50 characters long")
     )
 });
 

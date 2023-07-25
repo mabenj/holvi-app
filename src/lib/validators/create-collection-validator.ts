@@ -4,7 +4,7 @@ export const CreateCollectionValidator = z.object({
     name: z
         .string()
         .min(1, "Collection name must be at least 1 character long")
-        .max(20, "Collection name must be less than 20 characters long"),
+        .max(100, "Collection name must be less than 100 characters long"),
     description: z
         .string()
         .max(
@@ -17,8 +17,8 @@ export const CreateCollectionValidator = z.object({
         .refine((values) => values.every((value) => value.length > 0), {
             message: "Tags must be at least 1 characters long"
         })
-        .refine((values) => values.every((value) => value.length < 20), {
-            message: "Tags must be less than 20 characters long"
+        .refine((values) => values.every((value) => value.length < 50), {
+            message: "Tags must be less than 50 characters long"
         })
 });
 
