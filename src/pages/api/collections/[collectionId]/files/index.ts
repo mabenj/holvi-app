@@ -7,6 +7,7 @@ import {
     UpdateCollectionFileData,
     UpdateCollectionFileValidator
 } from "@/lib/validators/update-collection-file-validator";
+import contentDisposition from "content-disposition";
 
 async function post(
     req: ApiRequest<UpdateCollectionFileData>,
@@ -74,7 +75,7 @@ async function handleGetThumbnail(
     res.setHeader("Cache-Control", "public, max-age=86400"); // 24h
     res.setHeader(
         "Content-Disposition",
-        `inline; filename="thumbnail_${filename}"`
+        contentDisposition(`inline; filename="thumbnail_${filename}"`)
     );
     res.status(200).end(file);
 }
@@ -92,7 +93,7 @@ async function handleGetCollectionImage(
     );
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Cache-Control", "public, max-age=86400"); // 24h
-    res.setHeader("Content-Disposition", `inline; "filename=${filename}"`);
+    res.setHeader("Content-Disposition", contentDisposition(`inline; filename=${filename}`));
     res.status(200).end(file);
 }
 
@@ -117,7 +118,7 @@ async function handleGetCollectionVideo(
         "Accept-Ranges": "bytes",
         "Content-Length": contentLength,
         "Content-Type": mimeType,
-        "Content-Disposition": `inline; "filename=${filename}"`
+        "Content-Disposition": contentDisposition(`inline; "filename=${filename}"`)
     });
 
     stream.pipe(res);
