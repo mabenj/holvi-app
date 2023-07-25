@@ -20,40 +20,33 @@ export default function CollectionCardThumbnail({
     );
     const [thumbnailIndex, setThumbnailIndex] = useState(0);
 
-    const intervalRef = useRef(-1);
+    const timerRef = useRef(-1);
     const INTERVAL_MS = 500;
 
     const router = useRouter();
 
     useEffect(() => {
-        if (isHovering && !isLoading) {
-            updateThumbnailStore().then(() => {
-                incrementThumbnailIndex();
-                intervalRef.current = window.setInterval(
-                    () => incrementThumbnailIndex(),
-                    INTERVAL_MS
-                );
-            });
-        } else {
-            setThumbnailIndex(0);
-            window.clearInterval(intervalRef.current);
-        }
+        if (!isHovering || isLoading) {
+            window.clearTimeout(timerRef.current)
+            setThumbnailIndex(0)
+            return;
+        } 
+        updateThumbnailStore().then(() => thumbnailTick());
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isHovering, isLoading, item.thumbnails]);
 
-    useEffect(() => {
-        if (isHovering) {
+    const thumbnailTick = () => {
+        if(!isHovering || isLoading){
+            window.clearTimeout(timerRef.current)
+            setThumbnailIndex(0)
             return;
         }
-        setThumbnailIndex(0);
-        window.clearInterval(intervalRef.current);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [thumbnailStoreRef.current]);
-
-    const incrementThumbnailIndex = () => {
-        setThumbnailIndex((prev) =>
-            prev + 1 >= thumbnailStoreRef.current.length ? 0 : prev + 1
-        );
+        timerRef.current = window.setTimeout(() => {
+            setThumbnailIndex((prev) =>
+                prev + 1 >= thumbnailStoreRef.current.length ? 0 : prev + 1
+            );
+            thumbnailTick()
+        }, INTERVAL_MS);
     };
 
     const updateThumbnailStore = async () => {
