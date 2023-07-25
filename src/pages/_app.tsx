@@ -1,3 +1,4 @@
+import { useScrollRestoration } from "@/lib/hooks/usePreserveScroll";
 import "@/styles/globals.scss";
 import { ChakraProvider, extendTheme } from "@chakra-ui/react";
 import { mode } from "@chakra-ui/theme-tools";
@@ -17,7 +18,9 @@ const styles = {
 
 const theme = extendTheme({ styles });
 
-export default function App({ Component, pageProps }: AppProps) {
+export default function App({ Component, pageProps, router }: AppProps) {
+    useScrollRestoration(router);
+
     return (
         <ChakraProvider theme={theme}>
             <Component {...pageProps} />
