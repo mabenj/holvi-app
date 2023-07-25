@@ -213,6 +213,7 @@ const VideoPlayer = ({
                 controls
                 loop
                 onVolumeChange={handleVolumeChange}
+                controlsList="nodownload"
             />
         </div>
     );

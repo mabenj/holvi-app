@@ -75,7 +75,7 @@ async function handleGetThumbnail(
     res.setHeader("Cache-Control", "public, max-age=86400"); // 24h
     res.setHeader(
         "Content-Disposition",
-        contentDisposition(`inline; filename="thumbnail_${filename}"`)
+        contentDisposition(`thumbnail_${filename}`, { type: "inline" })
     );
     res.status(200).end(file);
 }
@@ -93,7 +93,10 @@ async function handleGetCollectionImage(
     );
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Cache-Control", "public, max-age=86400"); // 24h
-    res.setHeader("Content-Disposition", contentDisposition(`inline; filename=${filename}`));
+    res.setHeader(
+        "Content-Disposition",
+        contentDisposition(`${filename}`, { type: "inline" })
+    );
     res.status(200).end(file);
 }
 
@@ -118,7 +121,7 @@ async function handleGetCollectionVideo(
         "Accept-Ranges": "bytes",
         "Content-Length": contentLength,
         "Content-Type": mimeType,
-        "Content-Disposition": contentDisposition(`inline; "filename=${filename}"`)
+        "Content-Disposition": contentDisposition(`${filename}`)
     });
 
     stream.pipe(res);
