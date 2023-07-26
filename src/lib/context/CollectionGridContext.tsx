@@ -1,22 +1,62 @@
 import { useToast } from "@chakra-ui/react";
-import { useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import useSWR from "swr";
 import { ApiData } from "../common/api-route";
 import { caseInsensitiveSorter, getErrorMessage } from "../common/utilities";
+import useDebounce from "../hooks/useDebounce";
+import { useHttp } from "../hooks/useHttp";
+import { useUpload } from "../hooks/useUpload";
 import { CollectionDto } from "../types/collection-dto";
 import { CollectionFileDto } from "../types/collection-file-dto";
 import { CollectionGridItem } from "../types/collection-grid-item";
+import { GridSort } from "../types/grid-sort";
 import { SearchResult } from "../types/search-result";
-import useDebounce from "./useDebounce";
-import { useHttp } from "./useHttp";
-import { useUpload } from "./useUpload";
 
-export interface GridSort {
-    field: "name" | "timestamp" | null;
-    asc: boolean;
+interface CollectionGridState {
+    collectionId: string,
+    isLoading: boolean;
+    isUploading: boolean;
+    items: CollectionGridItem[];
+    filters: string[];
+    sort: GridSort;
+    query: string;
+    isFileOnly: boolean;
+    actions: {
+        add: (...newItems: CollectionGridItem[]) => void;
+        update: (newItem: CollectionGridItem) => void;
+        delete: (itemId: string) => void;
+        sort: (sort: GridSort) => void;
+        filter: (filters: string[]) => void;
+        search: (query: string) => void;
+        upload: (
+            files: File[],
+            collectionName?: string
+        ) => void;
+        toggleIsFileOnly: () => void;
+    };
 }
 
-export function useCollectionGrid(collectionId: string) {
+export function useCollectionGrid() {
+    return useContext(CollectionGridContext);
+}
+
+export function CollectionGridProvider({
+    children,
+    collectionId
+}: {
+    children: React.ReactNode;
+    collectionId: string;
+}) {
+    const state = useCollectionGridState(collectionId);
+
+    return (
+        <CollectionGridContext.Provider value={state}>
+            {children}
+        </CollectionGridContext.Provider>
+    );
+}
+
+function useCollectionGridState(collectionId: string): CollectionGridState {
     const [searchResult, setSearchResult] = useState<
         CollectionGridItem[] | null
     >(null);
@@ -277,6 +317,7 @@ export function useCollectionGrid(collectionId: string) {
     };
 
     return {
+        collectionId: collectionId,
         isLoading: isFetching || isSearching,
         isUploading: isUploading,
         items: itemsToRender,
@@ -296,3 +337,24 @@ export function useCollectionGrid(collectionId: string) {
         }
     };
 }
+
+const CollectionGridContext = createContext<CollectionGridState>({
+    collectionId: "root",
+    isLoading: false,
+    isUploading: false,
+    items: [],
+    filters: [],
+    sort: {field: null, asc: true},
+    query: "",
+    isFileOnly: false,
+    actions: {
+        add: () => null,
+        update: () => null,
+        delete: () => null,
+        sort: () => null,
+        filter: () => null,
+        search: () => null,
+        upload: () => null,
+        toggleIsFileOnly: () => null
+    }
+});

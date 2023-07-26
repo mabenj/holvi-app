@@ -1,5 +1,6 @@
-import { GridSort } from "@/lib/hooks/useCollectionGrid";
+import { useCollectionGrid } from "@/lib/context/CollectionGridContext";
 import { CollectionGridItem } from "@/lib/types/collection-grid-item";
+import { GridSort } from "@/lib/types/grid-sort";
 import { AddIcon, SearchIcon } from "@chakra-ui/icons";
 import {
     Box,
@@ -22,36 +23,22 @@ import { ChangeEvent, useEffect, useRef, useState } from "react";
 import CollectionModal from "../modals/CollectionModal";
 
 interface CollectionGridActionBarProps {
-    isLoading: boolean;
-    isUploading: boolean;
     collectionId: string;
-    sort: GridSort;
-    onSort: (sort: GridSort) => void;
-    filters: string[];
-    onFilter: (filters: string[]) => void;
-    searchQuery: string;
-    onSearch: (query: string) => void;
-    onUpload: (files: File[], name?: string) => void;
-    onCreated: (collection: CollectionGridItem) => void;
-    isFileOnly: boolean;
-    toggleIsFileOnly: () => void;
 }
 
 export default function CollectionGridActionBar({
-    isLoading,
-    isUploading,
-    collectionId,
-    sort,
-    onSort,
-    filters,
-    onFilter,
-    searchQuery,
-    onSearch,
-    onUpload,
-    onCreated,
-    isFileOnly,
-    toggleIsFileOnly
+    collectionId
 }: CollectionGridActionBarProps) {
+    const {
+        query,
+        actions,
+        filters,
+        isFileOnly,
+        isLoading,
+        isUploading,
+        sort
+    } = useCollectionGrid();
+
     const canFilter = collectionId === "root";
     const canListFiles = collectionId === "root";
     const canUploadFiles = collectionId !== "root";
@@ -67,39 +54,43 @@ export default function CollectionGridActionBar({
                 gap={2}
                 px={2}>
                 <Box flexGrow={1} w="100%">
-                    <SearchBar query={searchQuery} onSearch={onSearch} />
+                    <SearchBar query={query} onSearch={actions.search} />
                 </Box>
                 <Flex alignItems="center" gap={2}>
                     {canFilter && (
                         <FilterBtn
                             filters={filters}
-                            onFilter={onFilter}
+                            onFilter={actions.filter}
                             disabled={isLoading}
                         />
                     )}
-                    <SortBtn sort={sort} onSort={onSort} disabled={isLoading} />
+                    <SortBtn
+                        sort={sort}
+                        onSort={actions.sort}
+                        disabled={isLoading}
+                    />
                     {canListFiles && (
                         <ListAllFilesBtn
                             isFileOnly={isFileOnly}
-                            onToggle={toggleIsFileOnly}
+                            onToggle={actions.toggleIsFileOnly}
                             disabled={isLoading}
                         />
                     )}
                     {canUploadFiles && (
                         <UploadFilesBtn
-                            onUpload={onUpload}
+                            onUpload={actions.upload}
                             disabled={isLoading || isUploading}
                         />
                     )}
                     {canUploadCollection && (
                         <UploadCollectionBtn
-                            onUpload={onUpload}
+                            onUpload={actions.upload}
                             disabled={isLoading || isUploading}
                         />
                     )}
                     {canCreateCollection && (
                         <CreateCollectionBtn
-                            onCreated={onCreated}
+                            onCreated={actions.add}
                             disabled={isLoading || isUploading}
                         />
                     )}

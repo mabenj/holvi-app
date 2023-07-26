@@ -1,3 +1,4 @@
+import { useCollectionGrid } from "@/lib/context/CollectionGridContext";
 import { useHttp } from "@/lib/hooks/useHttp";
 import { CollectionDto } from "@/lib/types/collection-dto";
 import { CollectionFileDto } from "@/lib/types/collection-file-dto";
@@ -32,15 +33,11 @@ import VideoCardThumbnail from "./VideoCardThumbnail";
 
 interface CollectionGridCardProps {
     item: CollectionGridItem;
-    onDeleted: (id: string) => void;
-    onUpdated: (item: CollectionGridItem) => void;
 }
 
-export default function CollectionGridCard({
-    item,
-    onDeleted,
-    onUpdated
-}: CollectionGridCardProps) {
+export default function CollectionGridCard({ item }: CollectionGridCardProps) {
+    const { actions } = useCollectionGrid();
+
     const [isHovering, setIsHovering] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const {
@@ -67,11 +64,11 @@ export default function CollectionGridCard({
     const isVideo = item.type === "video";
 
     const handleCollectionSaved = (collection: CollectionDto) => {
-        onUpdated({ ...collection, type: "collection" });
+        actions.update({ ...collection, type: "collection" });
     };
 
     const handleFileSaved = (file: CollectionFileDto) => {
-        onUpdated({
+        actions.update({
             ...file,
             type: file.mimeType.includes("image") ? "image" : "video"
         });
@@ -92,7 +89,7 @@ export default function CollectionGridCard({
             });
             return;
         }
-        onDeleted(item.id);
+        actions.delete(item.id);
         onAlertClose();
         toast({
             description: `${isCollection ? "Collection" : "File"} deleted`,
