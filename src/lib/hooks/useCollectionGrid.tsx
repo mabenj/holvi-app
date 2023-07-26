@@ -12,12 +12,11 @@ import { useHttp } from "./useHttp";
 import { useUpload } from "./useUpload";
 
 export interface GridSort {
-    field: "name" | "timestamp";
+    field: "name" | "timestamp" | null;
     asc: boolean;
 }
 
 export function useCollectionGrid(collectionId: string) {
-    const [allItems, setAllItems] = useState<CollectionGridItem[]>([]);
     const [searchResult, setSearchResult] = useState<
         CollectionGridItem[] | null
     >(null);
@@ -27,7 +26,7 @@ export function useCollectionGrid(collectionId: string) {
     const [allFiles, setAllFiles] = useState<CollectionGridItem[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [filters, setFilters] = useState(["collections", "images", "videos"]);
-    const [sort, setSort] = useState<GridSort>({ field: "name", asc: true });
+    const [sort, setSort] = useState<GridSort>({ field: null, asc: true });
     const [isFileOnly, setIsFileOnly] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const debouncedSearchQuery = useDebounce(searchQuery);
@@ -64,30 +63,11 @@ export function useCollectionGrid(collectionId: string) {
     };
 
     const {
-        data,
+        data: allItems = [],
         isLoading: isFetching,
         mutate
     } = useSWR(collectionId, fetcher);
 
-    useEffect(() => {
-        setAllItems(data || []);
-    }, [data]);
-
-    // This useEffect is responsible for mutating the useSWR data if needed
-    useEffect(() => {
-        const stateItemIds = allItems.map((item) => item.id);
-        const dataItemIds = data?.map((item) => item.id) || [];
-        const isSameContents =
-            stateItemIds.length === dataItemIds.length &&
-            stateItemIds.every((id) => dataItemIds.includes(id));
-        if (!isSameContents) {
-            mutate(allItems);
-        }
-        resetSearch();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [allItems]);
-
-    // This useEffect is responsible for keeping items to render updated
     useEffect(() => {
         updateItemsToRender();
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -99,24 +79,40 @@ export function useCollectionGrid(collectionId: string) {
     }, [debouncedSearchQuery]);
 
     const addItem = (...newItems: CollectionGridItem[]) => {
-        setAllItems((prev) => {
-            return [
-                ...prev.filter((prevItem) =>
+        mutate(
+            [
+                ...newItems,
+                ...allItems.filter((prevItem) =>
                     newItems.every((newItem) => newItem.id !== prevItem.id)
-                ),
-                ...newItems
-            ];
-        });
+                )
+            ],
+            {
+                populateCache: true,
+                revalidate: false
+            }
+        );
     };
 
     const updateItem = (item: CollectionGridItem) => {
-        setAllItems((prev) =>
-            prev.map((prevItem) => (prevItem.id === item.id ? item : prevItem))
+        mutate(
+            allItems.map((prevItem) =>
+                prevItem.id === item.id ? item : prevItem
+            ),
+            {
+                populateCache: true,
+                revalidate: false
+            }
         );
     };
 
     const deleteItem = (id: string) => {
-        setAllItems((prev) => prev.filter((prevItem) => prevItem.id !== id));
+        mutate(
+            allItems.filter((prevItem) => prevItem.id !== id),
+            {
+                populateCache: true,
+                revalidate: false
+            }
+        );
     };
 
     const sortItems = (sort: GridSort) => {
@@ -255,7 +251,7 @@ export function useCollectionGrid(collectionId: string) {
         const includeVideos = filters.includes("videos");
 
         const itemPool = searchResult || (isFileOnly ? allFiles : allItems);
-        const nextItems: typeof itemPool = [];
+        let nextItems: typeof itemPool = [];
         itemPool.forEach((item) => {
             if (includeCollections && item.type === "collection") {
                 nextItems.push(item);
@@ -266,9 +262,13 @@ export function useCollectionGrid(collectionId: string) {
             }
         });
 
-        setItemsToRender(
-            nextItems.sort(caseInsensitiveSorter(sort.field, sort.asc))
-        );
+        if (sort.field) {
+            nextItems = nextItems.sort(
+                caseInsensitiveSorter(sort.field, sort.asc)
+            );
+        }
+
+        setItemsToRender(nextItems);
     };
 
     const resetSearch = () => {
