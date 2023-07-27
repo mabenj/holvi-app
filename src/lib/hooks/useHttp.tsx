@@ -6,85 +6,66 @@ interface HttpResponse<T> {
     statusCode?: number;
 }
 
+interface RequestOptions {
+    payload?: any;
+    headers?: Record<string, any>;
+    queryParams?: Record<string, string>;
+}
+
 export function useHttp() {
     const [isLoading, setIsLoading] = useState(false);
 
     const httpGet = <T extends any = any>(
         url: string,
-        headers?: Record<string, any>
+        options?: Omit<RequestOptions, "payload">
     ) => {
-        return request<T>({
-            url,
-            method: "GET",
-            headers
-        });
+        return request<T>({ url, method: "GET", options });
     };
 
     const httpPost = <T extends any = any>(
         url: string,
-        payload?: any,
-        headers?: Record<string, any>
+        options?: RequestOptions
     ) => {
-        return request<T>({
-            url,
-            method: "POST",
-            payload,
-            headers
-        });
+        return request<T>({ url, method: "POST", options });
     };
 
     const httpPut = <T extends any = any>(
         url: string,
-        payload?: any,
-        headers?: Record<string, any>
+        options?: RequestOptions
     ) => {
-        return request<T>({
-            url,
-            method: "PUT",
-            payload,
-            headers
-        });
+        return request<T>({ url, method: "PUT", options });
     };
 
     const httpPatch = <T extends any = any>(
         url: string,
-        payload?: any,
-        headers?: Record<string, any>
+        options?: RequestOptions
     ) => {
-        return request<T>({
-            url,
-            method: "PATCH",
-            payload,
-            headers
-        });
+        return request<T>({ url, method: "PATCH", options });
     };
 
     const httpDelete = <T extends any = any>(
         url: string,
-        headers?: Record<string, any>
+        options?: RequestOptions
     ) => {
-        return request<T>({
-            url,
-            method: "DELETE",
-            headers
-        });
+        return request<T>({ url, method: "DELETE", options });
     };
 
-    const request = async <T extends any = any>(options: {
+    const request = async <T extends any = any>(params: {
         url: string;
         method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-        payload?: any;
-        headers?: Record<string, any>;
+        options?: RequestOptions;
     }): Promise<HttpResponse<T>> => {
+        const { url, method, options } = params;
+
         setIsLoading(true);
         let res: Response | undefined;
         try {
-            res = await fetch(options.url, {
-                method: options.method,
-                body: options.payload
+            res = await fetch(buildUrl(url, options?.queryParams), {
+                method: method,
+                body: options?.payload
                     ? JSON.stringify(options.payload)
                     : undefined,
-                headers: options.headers
+                headers: options?.headers
             });
             const data = await res.json();
             return {
@@ -107,4 +88,25 @@ export function useHttp() {
         delete: httpDelete,
         isLoading: isLoading
     };
+}
+
+function buildUrl(url: string, queryParams?: Record<string, string>) {
+    if (!queryParams) {
+        return url;
+    }
+
+    const paramList: string[] = [];
+    Object.keys(queryParams).forEach((key) => {
+        const value = queryParams[key];
+        if (!value) {
+            return;
+        }
+        paramList.push(`${key}=${encodeURIComponent(value)}`);
+    });
+
+    if (url.at(-1) !== "?" && paramList.length > 0) {
+        url += "?";
+    }
+
+    return url + paramList.join("&");
 }

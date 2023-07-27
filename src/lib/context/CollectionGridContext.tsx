@@ -14,6 +14,7 @@ import { CollectionDto } from "../types/collection-dto";
 import { CollectionFileDto } from "../types/collection-file-dto";
 import { CollectionGridItem } from "../types/collection-grid-item";
 import { GridSort } from "../types/grid-sort";
+import { SearchRequest } from "../types/search-request";
 import { SearchResult } from "../types/search-result";
 import { CollectionFileFormData } from "../validators/collection-file-validator";
 import { CollectionFormData } from "../validators/collection-validator";
@@ -24,9 +25,8 @@ interface CollectionGridState {
     isUploading: boolean;
     items: CollectionGridItem[];
     tags: string[];
-    filterTags: string[];
     sort: GridSort;
-    query: string;
+    searchRequest: SearchRequest;
     isFileOnly: boolean;
     actions: {
         toggleIsFileOnly: () => void;
@@ -76,11 +76,16 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
     );
     const [allFiles, setAllFiles] = useState<CollectionGridItem[]>([]);
     const [isSearching, setIsSearching] = useState(false);
-    const [filters, setFilters] = useState([] as string[]);
-    const [sort, setSort] = useState<GridSort>({ field: null, asc: true });
+    const [sort, setSort] = useState<GridSort>({
+        field: "timestamp",
+        asc: false
+    });
     const [isFileOnly, setIsFileOnly] = useState(false);
-    const [searchQuery, setSearchQuery] = useState("");
-    const debouncedSearchQuery = useDebounce(searchQuery);
+    const [searchRequest, setSearchRequest] = useState<SearchRequest>({
+        query: "",
+        tags: []
+    });
+    const debouncedSearchRequest = useDebounce(searchRequest);
 
     const { uploadCollection, uploadCollectionFiles, isUploading } =
         useUpload();
@@ -135,12 +140,12 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
     useEffect(() => {
         updateItemsToRender();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [allItems, sort, filters, searchResult, isFileOnly]);
+    }, [allItems, sort, searchResult, isFileOnly]);
 
     useEffect(() => {
-        search(debouncedSearchQuery);
+        search(debouncedSearchRequest);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [debouncedSearchQuery]);
+    }, [debouncedSearchRequest]);
 
     const saveCollection = async (
         formData: CollectionFormData,
@@ -152,7 +157,9 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
             collection?: CollectionDto;
             nameError?: string;
         }>;
-        const { data, error } = await http.post<ResponseData>(url, formData);
+        const { data, error } = await http.post<ResponseData>(url, {
+            payload: formData
+        });
         if (data && data.nameError) {
             return {
                 nameError: data.nameError
@@ -187,7 +194,7 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         }>;
         const { data, error } = await http.post<ResponseData>(
             `/api/collections/${collectionId}/files`,
-            formData
+            { payload: formData }
         );
         if (!data?.file || error) {
             toast({
@@ -337,11 +344,17 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
     };
 
     const filterTags = (tags: string[]) => {
-        setFilters([...tags]);
+        setSearchRequest((prev) => ({
+            ...prev,
+            tags: tags
+        }));
     };
 
     const searchItems = (query: string) => {
-        setSearchQuery(query);
+        setSearchRequest((prev) => ({
+            ...prev,
+            query: query
+        }));
     };
 
     const toggleIsFileOnly = async () => {
@@ -370,15 +383,20 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         }
     };
 
-    const search = async (query: string) => {
-        setIsSearching(true);
+    const search = async (searchRequest: SearchRequest) => {
         let result: CollectionGridItem[] | null = [];
-        if (!debouncedSearchQuery) {
+        if (!searchRequest.query && searchRequest.tags.length === 0) {
             result = null;
         } else if (collectionId === "root") {
-            const { data, error } = await http.get<ApiData<SearchResult>>(
-                `/api/search?query=${query}`
-            );
+            setIsSearching(true);
+            const { data, error } = await http
+                .get<ApiData<SearchResult>>(`/api/search`, {
+                    queryParams: {
+                        query: searchRequest.query,
+                        tags: searchRequest.tags.join(",")
+                    }
+                })
+                .finally(() => setIsSearching(false));
             if (!data || error) {
                 toast({
                     description: `Could not search: '${getErrorMessage(
@@ -405,45 +423,36 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
             }
         } else {
             // necessary data already at client, construct search result based on query
-            result = allItems.filter(
-                (item) =>
-                    item.name.toLowerCase().includes(query.toLowerCase()) ||
-                    item.tags.some(
-                        (tag) =>
-                            tag.localeCompare(query, undefined, {
-                                sensitivity: "base"
-                            }) === 0
+
+            const nameMatches = (item: CollectionGridItem) =>
+                item.name
+                    .toLowerCase()
+                    .includes(searchRequest.query.toLowerCase());
+            const tagsMatch = (item: CollectionGridItem) =>
+                searchRequest.tags.some((filterTag) =>
+                    item.tags.some((itemTag) =>
+                        areTagsEqual(filterTag, itemTag)
                     )
+                );
+            const areTagsEqual = (a: string, b: string) =>
+                a.localeCompare(b, undefined, { sensitivity: "base" }) === 0;
+
+            result = allItems.filter(
+                (item) => nameMatches(item) || tagsMatch(item)
             );
         }
         setSearchResult(result);
-        setIsSearching(false);
     };
 
     const updateItemsToRender = () => {
-        const includeCollections = filters.includes("collections") || true;
-        const includeImages = filters.includes("images") || true;
-        const includeVideos = filters.includes("videos") || true;
-
-        const itemPool = searchResult || (isFileOnly ? allFiles : allItems);
-        let nextItems: typeof itemPool = [];
-        itemPool.forEach((item) => {
-            if (includeCollections && item.type === "collection") {
-                nextItems.push(item);
-            } else if (includeImages && item.type === "image") {
-                nextItems.push(item);
-            } else if (includeVideos && item.type === "video") {
-                nextItems.push(item);
-            }
-        });
-
+        let itemPool = searchResult || (isFileOnly ? allFiles : allItems);
         if (sort.field) {
-            nextItems = nextItems.sort(
+            itemPool = itemPool.sort(
                 caseInsensitiveSorter(sort.field, sort.asc)
             );
         }
 
-        setItemsToRender(nextItems);
+        setItemsToRender([...itemPool]);
     };
 
     return {
@@ -452,9 +461,8 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         isUploading: isUploading,
         items: itemsToRender,
         tags: allTags,
-        filterTags: filters,
+        searchRequest: searchRequest,
         sort: sort,
-        query: searchQuery,
         isFileOnly: isFileOnly,
         actions: {
             toggleIsFileOnly: toggleIsFileOnly,
@@ -476,9 +484,11 @@ const CollectionGridContext = createContext<CollectionGridState>({
     isUploading: false,
     items: [],
     tags: [],
-    filterTags: [],
-    sort: { field: null, asc: true },
-    query: "",
+    sort: { field: "timestamp", asc: false },
+    searchRequest: {
+        query: "",
+        tags: []
+    },
     isFileOnly: false,
     actions: {
         sort: () => null,

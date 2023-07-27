@@ -83,7 +83,7 @@ const FilterBtn = () => {
         actions: { filterTags: filter },
         tags,
         isLoading,
-        filterTags: filters
+        searchRequest: { tags: filters }
     } = useCollectionGrid();
 
     const handleFilter = (e: string | string[]) => {
@@ -290,7 +290,7 @@ const CreateCollectionBtn = () => {
 const SearchBar = () => {
     const {
         actions: { search },
-        query
+        searchRequest: { query }
     } = useCollectionGrid();
 
     return (

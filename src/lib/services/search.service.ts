@@ -21,17 +21,17 @@ export default class SearchService {
         );
     }
 
-    async search(query: string): Promise<SearchResult> {
+    async search(query: string, tags: string[]): Promise<SearchResult> {
         query = query.trim();
-        if (!query) {
+        if (!query && tags.length === 0) {
             return {
                 collections: [],
                 files: []
             };
         }
         const [collectionIds, fileIds] = await Promise.all([
-            this.getMatchingCollectionIds(query),
-            this.getMatchingFileIds(query)
+            this.getMatchingCollectionIds(query, tags),
+            this.getMatchingFileIds(query, tags)
         ]);
         const [collections, files] = await Promise.all([
             this.getCollectionDtos(collectionIds),
@@ -68,7 +68,7 @@ export default class SearchService {
         return files.map((file) => file.toDto());
     }
 
-    private async getMatchingCollectionTags(query: string): Promise<string[]> {
+    private getMatchingCollectionTags(query: string): Promise<string[]> {
         const sql = `SELECT DISTINCT ct."TagName" as tag 
                     FROM "Collections" c
                     JOIN "CollectionTags" ct ON ct."CollectionId" = c.id
@@ -82,7 +82,7 @@ export default class SearchService {
             .then((rows) => rows.map((row: any) => row.tag));
     }
 
-    private async getMatchingFileTags(query: string): Promise<string[]> {
+    private getMatchingFileTags(query: string): Promise<string[]> {
         const sql = `SELECT DISTINCT cft."TagName" as tag
                     FROM "CollectionFiles" cf
                     JOIN "Collections" c ON c.id = cf."CollectionId"
@@ -97,34 +97,40 @@ export default class SearchService {
             .then((rows) => rows.map((row: any) => row.tag));
     }
 
-    private async getMatchingCollectionIds(query: string): Promise<string[]> {
+    private getMatchingCollectionIds(
+        query: string,
+        tags: string[]
+    ): Promise<string[]> {
         const sql = `SELECT DISTINCT c.id 
                     FROM "Collections" c
                     LEFT JOIN "CollectionTags" ct ON ct."CollectionId" = c.id
                     WHERE c."UserId"::text = :userId AND 
-                        (c.name LIKE :likeQuery OR ct."TagName" = :eqQuery)`;
+                        (c.name LIKE :likeQuery OR ct."TagName" IN(:tags))`;
         const values = {
             userId: this.userId,
             likeQuery: `%${query}%`,
-            eqQuery: query
+            tags: tags
         };
         return Database.getInstance()
             .then((db) => db.select(sql, values))
             .then((rows) => rows.map((row: any) => row.id));
     }
 
-    private async getMatchingFileIds(query: string): Promise<string[]> {
+    private getMatchingFileIds(
+        query: string,
+        tags: string[]
+    ): Promise<string[]> {
         const sql = `SELECT DISTINCT cf.id
                     FROM "CollectionFiles" cf
                     JOIN "Collections" c ON c.id = cf."CollectionId"
                     LEFT JOIN "CollectionFileTags" cft ON cft."CollectionFileId" = cf.id
                     LEFT JOIN "CollectionTags" ct ON ct."CollectionId" = c.id
                     WHERE c."UserId"::text = :userId AND 
-                        (cf.name LIKE :likeQuery OR cft."TagName" = :eqQuery OR ct."TagName" = :eqQuery)`;
+                        (cf.name LIKE :likeQuery OR cft."TagName" IN(:tags) OR ct."TagName" IN(:tags))`;
         const values = {
             userId: this.userId,
             likeQuery: `%${query}%`,
-            eqQuery: query
+            tags: tags
         };
         return Database.getInstance()
             .then((db) => db.select(sql, values))

@@ -76,7 +76,7 @@ const LoginCard = () => {
     const onSubmit = async (formData: LoginFormData) => {
         setIsBusy(true);
         const { error, statusCode } = await http
-            .post("/api/auth/login", formData)
+            .post("/api/auth/login", { payload: formData })
             .catch((error) => {
                 setIsBusy(false);
                 throw error;
@@ -105,7 +105,7 @@ const LoginCard = () => {
                     HOLVI
                 </Heading>
             </Flex>
-            <Card variant="outline" w="100%">
+            <Card variant="outline" w="100%" shadow="xl">
                 <CardBody>
                     <Flex direction="column" gap={5}>
                         <form id="login-form" onSubmit={handleSubmit(onSubmit)}>
@@ -177,7 +177,9 @@ const SignUpModal = () => {
     const onSubmit = async (formData: SignUpFormData) => {
         setIsBusy(true);
         const { data, error } = await http
-            .post<ApiData<SignUpResponse>>("/api/auth/signup", formData)
+            .post<ApiData<SignUpResponse>>("/api/auth/signup", {
+                payload: formData
+            })
             .catch((error) => {
                 setIsBusy(false);
                 throw error;
