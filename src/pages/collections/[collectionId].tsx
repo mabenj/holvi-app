@@ -2,6 +2,7 @@ import { NotFoundError } from "@/lib/common/errors";
 import { withSessionSsr } from "@/lib/common/iron-session";
 import CollectionGrid from "@/lib/components/collection-grid/CollectionGrid";
 import Layout from "@/lib/components/ui/Layout";
+import TagChip from "@/lib/components/ui/TagChip";
 import { CollectionService } from "@/lib/services/collection.service";
 import { CollectionDto } from "@/lib/types/collection-dto";
 import { UserDto } from "@/lib/types/user-dto";
@@ -13,13 +14,11 @@ import {
     BreadcrumbLink,
     Button,
     Flex,
-    Heading,
-    Tag
+    Heading
 } from "@chakra-ui/react";
 import { mdiDelete, mdiSquareEditOutline } from "@mdi/js";
 import Icon from "@mdi/react";
 import Head from "next/head";
-import { useEffect, useState } from "react";
 import Linkify from "react-linkify";
 
 export const getServerSideProps = withSessionSsr(
@@ -82,7 +81,7 @@ export default function CollectionPage({
                     </Box>
                     <Flex gap={2}>
                         {collection.tags.map((tag) => (
-                            <CollectionTag key={tag} tag={tag} />
+                            <TagChip key={tag} tag={tag} />
                         ))}
                     </Flex>
                 </Flex>
@@ -129,40 +128,3 @@ const Breadcrumbs = ({ collectionName }: { collectionName: string }) => (
         </BreadcrumbItem>
     </Breadcrumb>
 );
-
-const CollectionTag = ({ tag }: { tag: string }) => {
-    const [color, setColor] = useState(COLOR_SCHEMES[0]);
-
-    useEffect(() => {
-        let random = 0;
-        for (let i = 0; i < tag.length; i++) {
-            random += tag.charCodeAt(i);
-        }
-        setColor(COLOR_SCHEMES[random % COLOR_SCHEMES.length]);
-    }, [tag]);
-
-    return (
-        <Tag borderRadius="full" colorScheme={color}>
-            {tag}
-        </Tag>
-    );
-};
-
-const COLOR_SCHEMES = [
-    "gray",
-    "red",
-    "orange",
-    "yellow",
-    "green",
-    "teal",
-    "blue",
-    "cyan",
-    "purple",
-    "pink",
-    "linkedin",
-    "facebook",
-    "messenger",
-    "whatsapp",
-    "twitter",
-    "telegram"
-];

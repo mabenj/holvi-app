@@ -13,12 +13,14 @@ import {
     MenuItemOption,
     MenuList,
     MenuOptionGroup,
+    Tag,
     useDisclosure
 } from "@chakra-ui/react";
 import { mdiFilterVariant, mdiFolderUpload, mdiSort, mdiUpload } from "@mdi/js";
 import Icon from "@mdi/react";
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import CollectionModal from "../modals/CollectionModal";
+import TagChip from "../ui/TagChip";
 
 interface CollectionGridActionBarProps {
     collectionId: string;
@@ -77,9 +79,10 @@ const ListAllFilesBtn = () => {
 
 const FilterBtn = () => {
     const {
-        actions: { filter },
+        actions: { filterTags: filter },
+        tags,
         isLoading,
-        filters
+        filterTags: filters
     } = useCollectionGrid();
 
     const handleFilter = (e: string | string[]) => {
@@ -91,21 +94,36 @@ const FilterBtn = () => {
         <Menu closeOnSelect={false}>
             <MenuButton
                 as={IconButton}
-                icon={<Icon path={mdiFilterVariant} size={1} />}
+                icon={
+                    <Box>
+                        <Icon path={mdiFilterVariant} size={1} />
+                        {filters.length > 0 && (
+                            <Tag
+                                position="absolute"
+                                top={0}
+                                borderRadius="full"
+                                variant="solid"
+                                colorScheme="green"
+                                size="sm">
+                                {filters.length}
+                            </Tag>
+                        )}
+                    </Box>
+                }
                 variant="ghost"
-                title="Filter"
+                title="Filter by tags"
                 isDisabled={isLoading}
             />
-            <MenuList>
+            <MenuList maxH="20rem" overflowY="auto">
                 <MenuOptionGroup
                     type="checkbox"
                     onChange={handleFilter}
                     value={filters}>
-                    <MenuItemOption value="collections">
-                        Collections
-                    </MenuItemOption>
-                    <MenuItemOption value="videos">Videos</MenuItemOption>
-                    <MenuItemOption value="images">Images</MenuItemOption>
+                    {tags.map((tag) => (
+                        <MenuItemOption key={tag} value={tag}>
+                            <TagChip tag={tag} />
+                        </MenuItemOption>
+                    ))}
                 </MenuOptionGroup>
             </MenuList>
         </Menu>

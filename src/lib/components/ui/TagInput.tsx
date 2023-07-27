@@ -1,16 +1,9 @@
-import {
-    Box,
-    Flex,
-    Input,
-    Tag,
-    TagCloseButton,
-    TagLabel,
-    useColorModeValue
-} from "@chakra-ui/react";
+import { Box, Flex, Input, useColorModeValue } from "@chakra-ui/react";
 import { KeyboardEvent, useEffect, useState } from "react";
 import { ApiData } from "../../common/api-route";
 import useDebounce from "../../hooks/useDebounce";
 import { useHttp } from "../../hooks/useHttp";
+import TagChip from "./TagChip";
 
 interface TagInputProps {
     value?: string[];
@@ -115,10 +108,9 @@ export default function TagInput({ value, onChange, onBlur }: TagInputProps) {
                 border="1px solid"
                 borderColor={borderColor}>
                 {value?.map((value, i) => (
-                    <Tag key={value} borderRadius="full" m={1}>
-                        <TagLabel>{value}</TagLabel>
-                        <TagCloseButton onClick={() => removeTag(i)} />
-                    </Tag>
+                    <Box key={value} p={1}>
+                        <TagChip tag={value} onClose={() => removeTag(i)} />
+                    </Box>
                 ))}
                 <Box minW="1rem" flexGrow="1">
                     <Input

@@ -23,14 +23,15 @@ interface CollectionGridState {
     isLoading: boolean;
     isUploading: boolean;
     items: CollectionGridItem[];
-    filters: string[];
+    tags: string[];
+    filterTags: string[];
     sort: GridSort;
     query: string;
     isFileOnly: boolean;
     actions: {
         toggleIsFileOnly: () => void;
         sort: (sort: GridSort) => void;
-        filter: (filters: string[]) => void;
+        filterTags: (tags: string[]) => void;
         search: (query: string) => void;
         upload: (files: File[], collectionName?: string) => Promise<void>;
         saveCollection: (
@@ -75,7 +76,7 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
     );
     const [allFiles, setAllFiles] = useState<CollectionGridItem[]>([]);
     const [isSearching, setIsSearching] = useState(false);
-    const [filters, setFilters] = useState(["collections", "images", "videos"]);
+    const [filters, setFilters] = useState([] as string[]);
     const [sort, setSort] = useState<GridSort>({ field: null, asc: true });
     const [isFileOnly, setIsFileOnly] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
@@ -86,7 +87,7 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
     const http = useHttp();
     const toast = useToast();
 
-    const fetcher = async (
+    const itemFetcher = async (
         collectionId: string
     ): Promise<CollectionGridItem[]> => {
         const url =
@@ -111,12 +112,25 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
             type: file.mimeType.includes("image") ? "image" : "video"
         }));
     };
-
     const {
         data: allItems = [],
-        isLoading: isFetching,
-        mutate
-    } = useSWR(collectionId, fetcher);
+        isLoading: isFetchingItems,
+        mutate: mutateItems
+    } = useSWR(collectionId, itemFetcher);
+
+    const tagFetcher = async (url: string) => {
+        const { data, error } = await http.get<ApiData<{ tags: string[] }>>(
+            url
+        );
+        if (error) {
+            return Promise.reject(error);
+        }
+        return data?.tags;
+    };
+    const { data: allTags = [], mutate: mutateTags } = useSWR(
+        "/api/tags",
+        tagFetcher
+    );
 
     useEffect(() => {
         updateItemsToRender();
@@ -279,7 +293,7 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
     };
 
     const addItem = (...newItems: CollectionGridItem[]) => {
-        mutate(
+        mutateItems(
             [
                 ...newItems,
                 ...allItems.filter((prevItem) =>
@@ -291,10 +305,11 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
                 revalidate: false
             }
         );
+        mutateTags();
     };
 
     const updateItem = (item: CollectionGridItem) => {
-        mutate(
+        mutateItems(
             allItems.map((prevItem) =>
                 prevItem.id === item.id ? item : prevItem
             ),
@@ -303,24 +318,26 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
                 revalidate: false
             }
         );
+        mutateTags();
     };
 
     const deleteItem = (id: string) => {
-        mutate(
+        mutateItems(
             allItems.filter((prevItem) => prevItem.id !== id),
             {
                 populateCache: true,
                 revalidate: false
             }
         );
+        mutateTags();
     };
 
     const sortItems = (sort: GridSort) => {
         setSort({ ...sort });
     };
 
-    const filterItems = (filters: string[]) => {
-        setFilters([...filters]);
+    const filterTags = (tags: string[]) => {
+        setFilters([...tags]);
     };
 
     const searchItems = (query: string) => {
@@ -404,9 +421,9 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
     };
 
     const updateItemsToRender = () => {
-        const includeCollections = filters.includes("collections");
-        const includeImages = filters.includes("images");
-        const includeVideos = filters.includes("videos");
+        const includeCollections = filters.includes("collections") || true;
+        const includeImages = filters.includes("images") || true;
+        const includeVideos = filters.includes("videos") || true;
 
         const itemPool = searchResult || (isFileOnly ? allFiles : allItems);
         let nextItems: typeof itemPool = [];
@@ -429,24 +446,20 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         setItemsToRender(nextItems);
     };
 
-    const resetSearch = () => {
-        setSearchQuery("");
-        setSearchResult(null);
-    };
-
     return {
         collectionId: collectionId,
-        isLoading: isFetching || isSearching,
+        isLoading: isFetchingItems || isSearching,
         isUploading: isUploading,
         items: itemsToRender,
-        filters: filters,
+        tags: allTags.sort(),
+        filterTags: filters,
         sort: sort,
         query: searchQuery,
         isFileOnly: isFileOnly,
         actions: {
             toggleIsFileOnly: toggleIsFileOnly,
             sort: sortItems,
-            filter: filterItems,
+            filterTags: filterTags,
             search: searchItems,
             upload: uploadFiles,
             saveCollection: saveCollection,
@@ -462,13 +475,14 @@ const CollectionGridContext = createContext<CollectionGridState>({
     isLoading: false,
     isUploading: false,
     items: [],
-    filters: [],
+    tags: [],
+    filterTags: [],
     sort: { field: null, asc: true },
     query: "",
     isFileOnly: false,
     actions: {
         sort: () => null,
-        filter: () => null,
+        filterTags: () => null,
         search: () => null,
         upload: () => Promise.resolve(),
         toggleIsFileOnly: () => null,
