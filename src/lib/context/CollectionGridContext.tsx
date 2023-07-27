@@ -193,6 +193,48 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         });
     };
 
+    const uploadFiles = async (files: File[], collectionName?: string) => {
+        if (files.length === 0) {
+            return;
+        }
+        const isCreatingNew = !!collectionName;
+        if (isCreatingNew) {
+            let deduplicatedName = collectionName;
+            let isDuplicate = allItems.some(
+                (item) =>
+                    item.type === "collection" && item.name === deduplicatedName
+            );
+            let duplicateCount = 1;
+            while (isDuplicate) {
+                deduplicatedName = `${collectionName} (${++duplicateCount})`;
+                isDuplicate = allItems.some(
+                    (item) =>
+                        item.type === "collection" &&
+                        item.name === deduplicatedName
+                );
+            }
+
+            const collection = await uploadCollection(files, deduplicatedName);
+            addItem({ ...collection, type: "collection" });
+        } else {
+            const collectionFiles = await uploadCollectionFiles(
+                files,
+                collectionId
+            );
+            addItem(
+                ...collectionFiles.map(
+                    (cf) =>
+                        ({
+                            ...cf,
+                            type: cf.mimeType.includes("image")
+                                ? "image"
+                                : "video"
+                        } as CollectionGridItem)
+                )
+            );
+        }
+    };
+
     const addItem = (...newItems: CollectionGridItem[]) => {
         mutate(
             [
@@ -240,48 +282,6 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
 
     const searchItems = (query: string) => {
         setSearchQuery(query);
-    };
-
-    const uploadFiles = async (files: File[], collectionName?: string) => {
-        if (files.length === 0) {
-            return;
-        }
-        const isCreatingNew = !!collectionName;
-        if (isCreatingNew) {
-            let deduplicatedName = collectionName;
-            let isDuplicate = allItems.some(
-                (item) =>
-                    item.type === "collection" && item.name === deduplicatedName
-            );
-            let duplicateCount = 1;
-            while (isDuplicate) {
-                deduplicatedName = `${collectionName} (${++duplicateCount})`;
-                isDuplicate = allItems.some(
-                    (item) =>
-                        item.type === "collection" &&
-                        item.name === deduplicatedName
-                );
-            }
-
-            const collection = await uploadCollection(files, deduplicatedName);
-            addItem({ ...collection, type: "collection" });
-        } else {
-            const collectionFiles = await uploadCollectionFiles(
-                files,
-                collectionId
-            );
-            addItem(
-                ...collectionFiles.map(
-                    (cf) =>
-                        ({
-                            ...cf,
-                            type: cf.mimeType.includes("image")
-                                ? "image"
-                                : "video"
-                        } as CollectionGridItem)
-                )
-            );
-        }
     };
 
     const toggleIsFileOnly = async () => {

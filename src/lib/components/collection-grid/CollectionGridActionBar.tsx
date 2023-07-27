@@ -1,5 +1,4 @@
 import { useCollectionGrid } from "@/lib/context/CollectionGridContext";
-import { GridSort } from "@/lib/types/grid-sort";
 import { AddIcon, SearchIcon } from "@chakra-ui/icons";
 import {
     Box,
@@ -28,16 +27,6 @@ interface CollectionGridActionBarProps {
 export default function CollectionGridActionBar({
     collectionId
 }: CollectionGridActionBarProps) {
-    const {
-        query,
-        actions,
-        filters,
-        isFileOnly,
-        isLoading,
-        isUploading,
-        sort
-    } = useCollectionGrid();
-
     const canFilter = collectionId === "root";
     const canListFiles = collectionId === "root";
     const canUploadFiles = collectionId !== "root";
@@ -53,83 +42,49 @@ export default function CollectionGridActionBar({
                 gap={2}
                 px={2}>
                 <Box flexGrow={1} w="100%">
-                    <SearchBar query={query} onSearch={actions.search} />
+                    <SearchBar />
                 </Box>
                 <Flex alignItems="center" gap={2}>
-                    {canFilter && (
-                        <FilterBtn
-                            filters={filters}
-                            onFilter={actions.filter}
-                            disabled={isLoading}
-                        />
-                    )}
-                    <SortBtn
-                        sort={sort}
-                        onSort={actions.sort}
-                        disabled={isLoading}
-                    />
-                    {canListFiles && (
-                        <ListAllFilesBtn
-                            isFileOnly={isFileOnly}
-                            onToggle={actions.toggleIsFileOnly}
-                            disabled={isLoading}
-                        />
-                    )}
-                    {canUploadFiles && (
-                        <UploadFilesBtn
-                            onUpload={actions.upload}
-                            disabled={isLoading || isUploading}
-                        />
-                    )}
-                    {canUploadCollection && (
-                        <UploadCollectionBtn
-                            onUpload={actions.upload}
-                            disabled={isLoading || isUploading}
-                        />
-                    )}
-                    {canCreateCollection && (
-                        <CreateCollectionBtn
-                            disabled={isLoading || isUploading}
-                        />
-                    )}
+                    {canFilter && <FilterBtn />}
+                    <SortBtn />
+                    {canListFiles && <ListAllFilesBtn />}
+                    {canUploadFiles && <UploadFilesBtn />}
+                    {canUploadCollection && <UploadCollectionBtn />}
+                    {canCreateCollection && <CreateCollectionBtn />}
                 </Flex>
             </Flex>
         </>
     );
 }
 
-const ListAllFilesBtn = ({
-    isFileOnly,
-    onToggle,
-    disabled
-}: {
-    isFileOnly: boolean;
-    onToggle: () => void;
-    disabled: boolean;
-}) => {
+const ListAllFilesBtn = () => {
+    const {
+        actions: { toggleIsFileOnly },
+        isLoading,
+        isFileOnly
+    } = useCollectionGrid();
+
     return (
         <Button
             variant="ghost"
-            onClick={onToggle}
+            onClick={toggleIsFileOnly}
             title="List all files"
-            isDisabled={disabled}>
+            isDisabled={isLoading}>
             {isFileOnly ? "List collections" : "List files"}
         </Button>
     );
 };
 
-const FilterBtn = ({
-    filters,
-    onFilter,
-    disabled
-}: {
-    filters: string[];
-    onFilter: (filters: string[]) => void;
-    disabled: boolean;
-}) => {
+const FilterBtn = () => {
+    const {
+        actions: { filter },
+        isLoading,
+        filters
+    } = useCollectionGrid();
+
     const handleFilter = (e: string | string[]) => {
         const filters = Array.isArray(e) ? e : [e];
-        onFilter(filters);
+        filter(filters);
     };
 
     return (
@@ -139,7 +94,7 @@ const FilterBtn = ({
                 icon={<Icon path={mdiFilterVariant} size={1} />}
                 variant="ghost"
                 title="Filter"
-                isDisabled={disabled}
+                isDisabled={isLoading}
             />
             <MenuList>
                 <MenuOptionGroup
@@ -157,15 +112,8 @@ const FilterBtn = ({
     );
 };
 
-const SortBtn = ({
-    sort,
-    onSort,
-    disabled
-}: {
-    sort: GridSort;
-    onSort: (sort: GridSort) => void;
-    disabled: boolean;
-}) => {
+const SortBtn = () => {
+    const { actions, sort, isLoading } = useCollectionGrid();
     const [sortValue, setSortValue] = useState("");
 
     useEffect(() => {
@@ -180,7 +128,7 @@ const SortBtn = ({
             return;
         }
         setSortValue(sortField);
-        onSort({
+        actions.sort({
             field: field,
             asc: sortField.startsWith("+")
         });
@@ -193,7 +141,7 @@ const SortBtn = ({
                 icon={<Icon path={mdiSort} size={1} />}
                 variant="ghost"
                 title="Sort"
-                isDisabled={disabled}
+                isDisabled={isLoading}
             />
             <MenuList>
                 <MenuOptionGroup
@@ -214,20 +162,19 @@ const SortBtn = ({
     );
 };
 
-const UploadCollectionBtn = ({
-    onUpload,
-    disabled
-}: {
-    onUpload: (files: File[], folderName: string) => void;
-    disabled: boolean;
-}) => {
+const UploadCollectionBtn = () => {
+    const {
+        actions: { upload },
+        isLoading,
+        isUploading
+    } = useCollectionGrid();
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     const handleUpload = (e: ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files || []);
         const name =
             files[0]?.webkitRelativePath.split("/")[0] || "New collection";
-        onUpload(files, name);
+        upload(files, name);
         if (fileInputRef.current?.value) {
             fileInputRef.current.value = "";
         }
@@ -252,24 +199,23 @@ const UploadCollectionBtn = ({
                 variant="ghost"
                 onClick={() => fileInputRef?.current?.click()}
                 icon={<Icon path={mdiFolderUpload} size={1} />}
-                isDisabled={disabled}
+                isDisabled={isLoading || isUploading}
             />
         </div>
     );
 };
 
-const UploadFilesBtn = ({
-    onUpload,
-    disabled
-}: {
-    onUpload: (files: File[]) => void;
-    disabled: boolean;
-}) => {
+const UploadFilesBtn = () => {
+    const {
+        actions: { upload },
+        isLoading,
+        isUploading
+    } = useCollectionGrid();
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     const handleUpload = (e: ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files || []);
-        onUpload(files);
+        upload(files);
         if (fileInputRef.current?.value) {
             fileInputRef.current.value = "";
         }
@@ -287,7 +233,7 @@ const UploadFilesBtn = ({
             />
             <Button
                 leftIcon={<Icon path={mdiUpload} size={1} />}
-                isDisabled={disabled}
+                isDisabled={isLoading || isUploading}
                 onClick={() => fileInputRef?.current?.click()}>
                 Upload
             </Button>
@@ -295,7 +241,8 @@ const UploadFilesBtn = ({
     );
 };
 
-const CreateCollectionBtn = ({ disabled }: { disabled: boolean }) => {
+const CreateCollectionBtn = () => {
+    const { isLoading, isUploading } = useCollectionGrid();
     const { isOpen, onOpen, onClose } = useDisclosure();
 
     return (
@@ -304,7 +251,7 @@ const CreateCollectionBtn = ({ disabled }: { disabled: boolean }) => {
                 onClick={onOpen}
                 leftIcon={<AddIcon />}
                 title="Create a new collection"
-                isDisabled={disabled}>
+                isDisabled={isLoading || isUploading}>
                 Create
             </Button>
             <CollectionModal isOpen={isOpen} onClose={onClose} mode="create" />
@@ -312,13 +259,12 @@ const CreateCollectionBtn = ({ disabled }: { disabled: boolean }) => {
     );
 };
 
-const SearchBar = ({
-    query,
-    onSearch
-}: {
-    query: string;
-    onSearch: (query: string) => void;
-}) => {
+const SearchBar = () => {
+    const {
+        actions: { search },
+        query
+    } = useCollectionGrid();
+
     return (
         <InputGroup>
             <InputLeftElement pointerEvents="none">
@@ -328,7 +274,7 @@ const SearchBar = ({
                 type="search"
                 placeholder="Search..."
                 value={query || ""}
-                onChange={(e) => onSearch(e.target.value)}
+                onChange={(e) => search(e.target.value)}
             />
         </InputGroup>
     );
