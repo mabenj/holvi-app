@@ -12,13 +12,13 @@ async function uploadCollection(
     req: ApiRequest,
     res: ApiResponse<UploadCollectionResponse>
 ) {
-    const { name } = req.query as { name: string };
-    if (!name) {
+    const collectionName = decodeURIComponent(req.query.name as string);
+    if (!collectionName) {
         throw new InvalidArgumentError("Invalid collection name");
     }
     const collectionService = new CollectionService(req.session.user.id);
     const { collection, nameError, errors } =
-        await collectionService.uploadCollection(name, req);
+        await collectionService.uploadCollection(collectionName, req);
     if (!collection || nameError) {
         res.status(400).json({
             status: "error",

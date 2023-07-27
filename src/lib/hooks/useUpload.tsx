@@ -16,7 +16,7 @@ export function useUpload() {
         try {
             const response = await upload(
                 files,
-                `/api/collections/upload?name=${collectionName}`,
+                `/api/collections/upload?name=${encodeURIComponent(collectionName)}`,
                 "POST"
             );
             if (response.status === "error" || response.error) {
