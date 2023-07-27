@@ -213,6 +213,7 @@ const VideoPlayer = ({
                 controls
                 loop
                 onVolumeChange={handleVolumeChange}
+                onKeyDown={(e) => e.stopPropagation()}
                 controlsList="nodownload"
             />
         </div>
