@@ -1,3 +1,4 @@
+import { UserDto } from "@/lib/types/user-dto";
 import {
     CreationOptional,
     DataTypes,
@@ -48,5 +49,12 @@ export class User extends Model<
                 sequelize
             }
         );
+    }
+
+    toDto(): UserDto {
+        return {
+            id: this.id,
+            username: this.username
+        };
     }
 }

@@ -71,10 +71,12 @@ const LoginCard = () => {
 
     const onSubmit = async (formData: LoginFormData) => {
         setIsBusy(true);
-        const { error, statusCode } = await http.post(
-            "/api/auth/login",
-            formData
-        );
+        const { error, statusCode } = await http
+            .post("/api/auth/login", formData)
+            .catch((error) => {
+                setIsBusy(false);
+                throw error;
+            });
         if (error || statusCode !== 200) {
             setError("username", { message: "" });
             // show the message only below pwd field
@@ -154,10 +156,12 @@ const SignUpModal = () => {
 
     const onSubmit = async (formData: SignUpFormData) => {
         setIsBusy(true);
-        const { data, error } = await http.post<ApiData<SignUpResponse>>(
-            "/api/auth/signup",
-            formData
-        );
+        const { data, error } = await http
+            .post<ApiData<SignUpResponse>>("/api/auth/signup", formData)
+            .catch((error) => {
+                setIsBusy(false);
+                throw error;
+            });
         if (data?.status === "ok" && !error) {
             await router.push("/");
             toast({
@@ -171,6 +175,7 @@ const SignUpModal = () => {
             setError("username", { message: data.usernameError });
         data?.passwordError &&
             setError("password", { message: data.passwordError });
+        setIsBusy(false);
     };
 
     return (

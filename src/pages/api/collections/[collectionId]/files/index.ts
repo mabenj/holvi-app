@@ -2,7 +2,6 @@ import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
 import { InvalidArgumentError } from "@/lib/common/errors";
 import { CollectionService } from "@/lib/services/collection.service";
 import { CollectionFileDto } from "@/lib/types/collection-file-dto";
-import { GetCollectionFilesResponse } from "@/lib/types/get-collection-files-response";
 import {
     CollectionFileFormData,
     CollectionFileValidator
@@ -51,7 +50,7 @@ async function get(req: ApiRequest, res: ApiResponse) {
 
 async function handleGetCollectionFiles(
     req: ApiRequest,
-    res: ApiResponse<GetCollectionFilesResponse>,
+    res: ApiResponse<{ files?: CollectionFileDto[] }>,
     collectionId: string
 ) {
     const service = new CollectionService(req.session.user.id);

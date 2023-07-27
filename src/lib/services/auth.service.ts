@@ -39,10 +39,7 @@ export default class AuthService {
             );
             await transaction.commit();
             return {
-                user: {
-                    id: user.id,
-                    username: user.username
-                }
+                user: user.toDto()
             };
         } catch (error) {
             transaction.rollback();
@@ -56,8 +53,7 @@ export default class AuthService {
     ): Promise<UserDto | null> {
         const db = await Database.getInstance();
         const user = await db.models.User.findOne({
-            where: { username },
-            raw: true
+            where: { username }
         });
         if (!user) {
             return null;
@@ -71,10 +67,7 @@ export default class AuthService {
             return null;
         }
 
-        return {
-            id: user.id,
-            username: user.username
-        };
+        return user.toDto();
     }
 
     static async validateUser(session: IronSession): Promise<UserDto | null> {

@@ -1,10 +1,13 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
 import { CollectionService } from "@/lib/services/collection.service";
-import { UploadFilesResponse } from "@/lib/types/upload-files-response";
+import { CollectionFileDto } from "@/lib/types/collection-file-dto";
 
 async function uploadFiles(
     req: ApiRequest,
-    res: ApiResponse<UploadFilesResponse>
+    res: ApiResponse<{
+        files?: CollectionFileDto[];
+        errors?: string[];
+    }>
 ) {
     const { collectionId } = req.query as { collectionId: string };
     const collectionService = new CollectionService(req.session.user.id);

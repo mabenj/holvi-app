@@ -1,7 +1,6 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
 import { CollectionService } from "@/lib/services/collection.service";
 import { CollectionDto } from "@/lib/types/collection-dto";
-import { GetCollectionResponse } from "@/lib/types/get-collection-response";
 import {
     CollectionFormData,
     CollectionValidator
@@ -9,7 +8,9 @@ import {
 
 async function getCollection(
     req: ApiRequest,
-    res: ApiResponse<GetCollectionResponse>
+    res: ApiResponse<{
+        collection?: CollectionDto;
+    }>
 ) {
     const { collectionId } = req.query as { collectionId: string };
     const collectionService = new CollectionService(req.session.user.id);
