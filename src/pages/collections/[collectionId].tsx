@@ -11,10 +11,13 @@ import {
     Breadcrumb,
     BreadcrumbItem,
     BreadcrumbLink,
+    Button,
     Flex,
     Heading,
     Tag
 } from "@chakra-ui/react";
+import { mdiDelete, mdiSquareEditOutline } from "@mdi/js";
+import Icon from "@mdi/react";
 import Head from "next/head";
 import { useEffect, useState } from "react";
 import Linkify from "react-linkify";
@@ -59,6 +62,7 @@ export default function CollectionPage({
                 <Breadcrumbs collectionName={collection.name} />
                 <Flex direction="column" gap={3} px={4} pt={8}>
                     <Heading>{collection.name}</Heading>
+
                     <Box color="gray.500">
                         <Linkify
                             componentDecorator={(
@@ -83,7 +87,25 @@ export default function CollectionPage({
                     </Flex>
                 </Flex>
 
-                <Box py={5} />
+                <Box py={5}>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        color="gray.500"
+                        leftIcon={
+                            <Icon path={mdiSquareEditOutline} size={0.6} />
+                        }>
+                        Edit collection
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        color="gray.500"
+                        leftIcon={<Icon path={mdiDelete} size={0.6} />}>
+                        Delete collection
+                    </Button>
+                </Box>
+
                 <CollectionGrid collectionId={collection.id} />
             </Layout>
         </>
