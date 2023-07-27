@@ -27,10 +27,7 @@ const Grid = () => {
         <Flex direction="column" gap={5}>
             <CollectionGridActionBar collectionId={collectionId} />
             <IfNotLoading isLoading={isLoading}>
-                <SimpleGrid
-                    columns={[3, 3, 3, 4]}
-                    spacing={[1, 1, 1, 2]}
-                    minH="20rem">
+                <SimpleGrid columns={[3, 3, 4, 6]} spacing={[1, 1, 1, 2]}>
                     {items.map((item) => (
                         <CollectionGridCard key={item.id} item={item} />
                     ))}

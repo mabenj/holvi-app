@@ -81,19 +81,7 @@ export default function CollectionCardThumbnail({
                         textOverflow="ellipsis">
                         {item.name}
                     </Box>
-                    <Flex alignItems="center" gap={2}>
-                        {item.imageCount > 0 && (
-                            <Flex alignItems="center" gap={1}>
-                                <Icon
-                                    path={mdiCamera}
-                                    size={0.7}
-                                    style={{
-                                        filter: "drop-shadow(0 0 2px black)"
-                                    }}
-                                />
-                                <span>{item.imageCount}</span>
-                            </Flex>
-                        )}
+                    <Flex direction="column" alignItems="flex-end" gap={1}>
                         {item.videoCount > 0 && (
                             <Flex alignItems="center" gap={1}>
                                 <Icon
@@ -104,6 +92,18 @@ export default function CollectionCardThumbnail({
                                     }}
                                 />
                                 <span>{item.videoCount}</span>
+                            </Flex>
+                        )}
+                        {item.imageCount > 0 && (
+                            <Flex alignItems="center" gap={1}>
+                                <Icon
+                                    path={mdiCamera}
+                                    size={0.7}
+                                    style={{
+                                        filter: "drop-shadow(0 0 2px black)"
+                                    }}
+                                />
+                                <span>{item.imageCount}</span>
                             </Flex>
                         )}
                     </Flex>

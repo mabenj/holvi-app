@@ -77,7 +77,7 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
             <Flex direction="column" alignItems="center" gap={2}>
                 <Box
                     w="100%"
-                    h={["10rem", "16rem", "19rem", "20rem"]}
+                    h={["8rem", "10rem", "11rem", "11em"]}
                     position="relative"
                     cursor="pointer"
                     onMouseEnter={() => setIsHovering(true)}
