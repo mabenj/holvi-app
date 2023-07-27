@@ -28,14 +28,11 @@ interface CollectionGridState {
     query: string;
     isFileOnly: boolean;
     actions: {
-        add: (...newItems: CollectionGridItem[]) => void;
-        update: (newItem: CollectionGridItem) => void;
-        delete: (itemId: string) => void;
+        toggleIsFileOnly: () => void;
         sort: (sort: GridSort) => void;
         filter: (filters: string[]) => void;
         search: (query: string) => void;
-        upload: (files: File[], collectionName?: string) => void;
-        toggleIsFileOnly: () => void;
+        upload: (files: File[], collectionName?: string) => Promise<void>;
         saveCollection: (
             formData: CollectionFormData,
             id?: string
@@ -44,6 +41,8 @@ interface CollectionGridState {
             formData: CollectionFileFormData,
             id: string
         ) => Promise<void>;
+        deleteCollection: (id: string) => Promise<void>;
+        deleteFile: (id: string) => Promise<void>;
     };
 }
 
@@ -191,6 +190,50 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
             ...data.file,
             type: data.file.mimeType.includes("image") ? "image" : "video"
         });
+    };
+
+    const deleteCollection = async (id: string) => {
+        const { name } = allItems.find((item) => item.id === id) || {};
+        const { error } = await http.delete(`/api/collections/${id}`);
+        if (error) {
+            toast({
+                description: `Error deleting collection '${name}' (${getErrorMessage(
+                    error
+                )})`,
+                status: "error"
+            });
+            return Promise.reject();
+        }
+        toast({
+            description: `Collection '${name}' deleted`,
+            status: "info"
+        });
+        deleteItem(id);
+    };
+
+    const deleteFile = async (id: string) => {
+        const fileItem = allItems.find((item) => item.id === id);
+        if (!fileItem || !("collectionId" in fileItem)) {
+            return;
+        }
+
+        const { error } = await http.delete(
+            `/api/collections/${fileItem.collectionId}/files/${id}`
+        );
+        if (error) {
+            toast({
+                description: `Error deleting file '${
+                    fileItem.name
+                }' (${getErrorMessage(error)})`,
+                status: "error"
+            });
+            return Promise.reject();
+        }
+        toast({
+            description: `File '${fileItem.name}' deleted`,
+            status: "info"
+        });
+        deleteItem(id);
     };
 
     const uploadFiles = async (files: File[], collectionName?: string) => {
@@ -401,16 +444,15 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         query: searchQuery,
         isFileOnly: isFileOnly,
         actions: {
-            add: addItem,
-            update: updateItem,
-            delete: deleteItem,
+            toggleIsFileOnly: toggleIsFileOnly,
             sort: sortItems,
             filter: filterItems,
             search: searchItems,
             upload: uploadFiles,
-            toggleIsFileOnly: toggleIsFileOnly,
             saveCollection: saveCollection,
-            editFile: editFile
+            editFile: editFile,
+            deleteCollection: deleteCollection,
+            deleteFile: deleteFile
         }
     };
 }
@@ -425,15 +467,14 @@ const CollectionGridContext = createContext<CollectionGridState>({
     query: "",
     isFileOnly: false,
     actions: {
-        add: () => null,
-        update: () => null,
-        delete: () => null,
         sort: () => null,
         filter: () => null,
         search: () => null,
-        upload: () => null,
+        upload: () => Promise.resolve(),
         toggleIsFileOnly: () => null,
         saveCollection: () => Promise.resolve(),
-        editFile: () => Promise.resolve()
+        editFile: () => Promise.resolve(),
+        deleteCollection: () => Promise.resolve(),
+        deleteFile: () => Promise.resolve()
     }
 });

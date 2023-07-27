@@ -1,5 +1,4 @@
 import { useCollectionGrid } from "@/lib/context/CollectionGridContext";
-import { useHttp } from "@/lib/hooks/useHttp";
 import { CollectionDto } from "@/lib/types/collection-dto";
 import { CollectionFileDto } from "@/lib/types/collection-file-dto";
 import { CollectionGridItem } from "@/lib/types/collection-grid-item";
@@ -19,8 +18,7 @@ import {
     MenuItem,
     MenuList,
     Spinner,
-    useDisclosure,
-    useToast
+    useDisclosure
 } from "@chakra-ui/react";
 import { mdiDelete, mdiDotsVertical, mdiSquareEditOutline } from "@mdi/js";
 import Icon from "@mdi/react";
@@ -36,10 +34,13 @@ interface CollectionGridCardProps {
 }
 
 export default function CollectionGridCard({ item }: CollectionGridCardProps) {
-    const { actions } = useCollectionGrid();
+    const {
+        actions: { deleteCollection, deleteFile }
+    } = useCollectionGrid();
 
     const [isHovering, setIsHovering] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const {
         isOpen: isCollectionModalOpen,
         onOpen: onCollectionModalOpen,
@@ -55,46 +56,20 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
         onOpen: onAlertOpen,
         onClose: onAlertClose
     } = useDisclosure();
-    const http = useHttp();
     const cancelDeleteRef = useRef(null);
-    const toast = useToast();
 
     const isCollection = item.type === "collection";
     const isImage = item.type === "image";
     const isVideo = item.type === "video";
 
-    const handleCollectionSaved = (collection: CollectionDto) => {
-        actions.update({ ...collection, type: "collection" });
-    };
-
-    const handleFileSaved = (file: CollectionFileDto) => {
-        actions.update({
-            ...file,
-            type: file.mimeType.includes("image") ? "image" : "video"
-        });
-    };
-
     const handleDelete = async () => {
-        const { error } = await http.delete(
-            "collectionId" in item
-                ? `/api/collections/${item.collectionId}/files/${item.id}`
-                : `/api/collections/${item.id}`
-        );
-        if (error) {
-            toast({
-                description: `Error deleting ${
-                    isCollection ? "collection" : "file"
-                }`,
-                status: "error"
-            });
-            return;
+        setIsDeleting(true);
+        if (isCollection) {
+            await deleteCollection(item.id).finally(() => setIsDeleting(false));
+        } else {
+            await deleteFile(item.id).finally(() => setIsDeleting(false));
         }
-        actions.delete(item.id);
         onAlertClose();
-        toast({
-            description: `${isCollection ? "Collection" : "File"} deleted`,
-            status: "info"
-        });
     };
 
     return (
@@ -169,7 +144,7 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
                             </MenuList>
                         </Menu>
                     )}
-                    {http.isLoading && (
+                    {isDeleting && (
                         <Spinner
                             position="absolute"
                             top="50%"
@@ -231,7 +206,7 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
                             <Button
                                 colorScheme="red"
                                 onClick={handleDelete}
-                                isLoading={http.isLoading}
+                                isLoading={isDeleting}
                                 ml={3}>
                                 Delete
                             </Button>
