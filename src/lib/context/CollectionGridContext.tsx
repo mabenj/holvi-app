@@ -15,6 +15,7 @@ import { CollectionFileDto } from "../types/collection-file-dto";
 import { CollectionGridItem } from "../types/collection-grid-item";
 import { GridSort } from "../types/grid-sort";
 import { SearchResult } from "../types/search-result";
+import { CollectionFileFormData } from "../validators/collection-file-validator";
 import { CollectionFormData } from "../validators/collection-validator";
 
 interface CollectionGridState {
@@ -39,6 +40,10 @@ interface CollectionGridState {
             formData: CollectionFormData,
             id?: string
         ) => Promise<{ nameError: string } | void>;
+        editFile: (
+            formData: CollectionFileFormData,
+            id: string
+        ) => Promise<void>;
     };
 }
 
@@ -147,7 +152,7 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
                 } collection (${getErrorMessage(error)})`,
                 status: "error"
             });
-            return;
+            return Promise.reject();
         }
 
         toast({
@@ -157,6 +162,34 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         addItem({
             ...data.collection,
             type: "collection"
+        });
+    };
+
+    const editFile = async (
+        formData: CollectionFileFormData,
+        collectionId: string
+    ) => {
+        type ResponseData = ApiData<{
+            file?: CollectionFileDto;
+        }>;
+        const { data, error } = await http.post<ResponseData>(
+            `/api/collections/${collectionId}/files`,
+            formData
+        );
+        if (!data?.file || error) {
+            toast({
+                description: `Could not edit file: ${getErrorMessage(error)}`,
+                status: "error"
+            });
+            return Promise.reject();
+        }
+        toast({
+            description: `Collection '${data.file.name}' modified`,
+            status: "success"
+        });
+        updateItem({
+            ...data.file,
+            type: data.file.mimeType.includes("image") ? "image" : "video"
         });
     };
 
@@ -376,7 +409,8 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
             search: searchItems,
             upload: uploadFiles,
             toggleIsFileOnly: toggleIsFileOnly,
-            saveCollection: saveCollection
+            saveCollection: saveCollection,
+            editFile: editFile
         }
     };
 }
@@ -399,6 +433,7 @@ const CollectionGridContext = createContext<CollectionGridState>({
         search: () => null,
         upload: () => null,
         toggleIsFileOnly: () => null,
-        saveCollection: () => Promise.resolve()
+        saveCollection: () => Promise.resolve(),
+        editFile: () => Promise.resolve()
     }
 });

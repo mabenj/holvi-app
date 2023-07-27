@@ -77,7 +77,6 @@ const Navbar = ({ username }: { username?: string }) => {
                         <Image
                             src={brandImage}
                             alt="Holvi"
-                            placeholder="blur"
                         />
 
                         <Heading size="md" fontWeight="light">

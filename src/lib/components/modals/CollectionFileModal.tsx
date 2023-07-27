@@ -1,3 +1,4 @@
+import { useCollectionGrid } from "@/lib/context/CollectionGridContext";
 import {
     Button,
     Flex,
@@ -12,14 +13,11 @@ import {
     ModalContent,
     ModalFooter,
     ModalHeader,
-    ModalOverlay,
-    useToast
+    ModalOverlay
 } from "@chakra-ui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { ApiData } from "../../common/api-route";
-import { getErrorMessage } from "../../common/utilities";
-import { useHttp } from "../../hooks/useHttp";
 import { CollectionFileDto } from "../../types/collection-file-dto";
 import {
     CollectionFileFormData,
@@ -30,17 +28,14 @@ import TagInput from "../ui/TagInput";
 interface CollectionFileModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (collection: CollectionFileDto) => void;
     initialFile: Partial<CollectionFileDto>;
 }
 
 export default function CollectionFileModal({
     isOpen,
     onClose,
-    onSave,
     initialFile
 }: CollectionFileModalProps) {
-    const http = useHttp();
     const {
         register,
         handleSubmit,
@@ -55,25 +50,23 @@ export default function CollectionFileModal({
         },
         resolver: zodResolver(CollectionFileValidator)
     });
-    const toast = useToast();
+
+    const [isSaving, setIsSaving] = useState(false);
+    const {
+        actions: { editFile }
+    } = useCollectionGrid();
 
     const onSubmit = async (formData: CollectionFileFormData) => {
-        const { data, error } = await http.post<
-            ApiData<{ file?: CollectionFileDto }>
-        >(`/api/collections/${initialFile.collectionId}/files`, formData);
-        if (error || !data?.file) {
-            toast({
-                description: `Could not edit file: ${getErrorMessage(error)}`,
-                status: "error"
-            });
+        if (!initialFile.collectionId) {
             return;
         }
-        onSave(data.file);
+        setIsSaving(true);
+        await editFile(formData, initialFile.collectionId).finally(() =>
+            setIsSaving(false)
+        );
         onClose();
-        toast({
-            description: `Collection modified`,
-            status: "success"
-        });
+        setValue("name", formData.name);
+        setValue("tags", formData.tags);
     };
 
     const handleCancel = () => {
@@ -142,7 +135,7 @@ export default function CollectionFileModal({
                     <Button
                         type="submit"
                         form="collection-file-form"
-                        isLoading={http.isLoading}>
+                        isLoading={isSaving}>
                         Save
                     </Button>
                 </ModalFooter>

@@ -198,7 +198,6 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
                 <CollectionFileModal
                     isOpen={isFileModalOpen}
                     onClose={onFileModalClose}
-                    onSave={handleFileSaved}
                     initialFile={{
                         collectionId: (item as CollectionFileDto).collectionId,
                         id: item.id,
