@@ -1,4 +1,5 @@
 import Database from "@/db/Database";
+import { Collection } from "@/db/models/Collection";
 import { ReadStream } from "fs";
 import { IncomingMessage } from "http";
 import { Op } from "sequelize";
@@ -250,8 +251,14 @@ export class CollectionService {
                 req
             );
             collection.thumbnails = files
-                .map((file) => file.thumbnailSrc)
-                .slice(0, 4);
+                .slice(0, Collection.thumbnailsLimit)
+                .map((file) => file.thumbnailSrc);
+            collection.imageCount = files.filter((file) =>
+                file.mimeType.includes("image")
+            ).length;
+            collection.videoCount = files.filter((file) =>
+                file.mimeType.includes("video")
+            ).length;
             return {
                 collection,
                 errors
