@@ -4,13 +4,13 @@ import { CollectionService } from "@/lib/services/collection.service";
 import { CollectionFileDto } from "@/lib/types/collection-file-dto";
 import { GetCollectionFilesResponse } from "@/lib/types/get-collection-files-response";
 import {
-    UpdateCollectionFileData,
-    UpdateCollectionFileValidator
-} from "@/lib/validators/update-collection-file-validator";
+    CollectionFileFormData,
+    CollectionFileValidator
+} from "@/lib/validators/collection-file-validator";
 import contentDisposition from "content-disposition";
 
 async function post(
-    req: ApiRequest<UpdateCollectionFileData>,
+    req: ApiRequest<CollectionFileFormData>,
     res: ApiResponse<{ file?: CollectionFileDto }>
 ) {
     const { collectionId } = req.query as {
@@ -137,6 +137,6 @@ export default ApiRoute.create({
     get,
     post: {
         handler: post,
-        validator: UpdateCollectionFileValidator
+        validator: CollectionFileValidator
     }
 });

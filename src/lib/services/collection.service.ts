@@ -8,8 +8,8 @@ import { UserFileSystem } from "../common/user-file-system";
 import { EMPTY_UUIDV4 } from "../common/utilities";
 import { CollectionDto } from "../types/collection-dto";
 import { CollectionFileDto } from "../types/collection-file-dto";
-import { UpdateCollectionFileData } from "../validators/update-collection-file-validator";
-import { UpdateCollectionData } from "../validators/update-collection-validator";
+import { CollectionFileFormData } from "../validators/collection-file-validator";
+import { CollectionFormData } from "../validators/collection-validator";
 
 interface CreateResult {
     collection?: CollectionDto;
@@ -50,7 +50,7 @@ export class CollectionService {
 
     async updateFile(
         collectionId: string,
-        data: UpdateCollectionFileData
+        data: CollectionFileFormData
     ): Promise<CollectionFileDto> {
         const db = await Database.getInstance();
         await this.throwIfNotUserCollection(collectionId);
@@ -341,36 +341,37 @@ export class CollectionService {
     }
 
     async updateCollection(
-        collection: UpdateCollectionData
+        collectionId: string,
+        collectionData: CollectionFormData
     ): Promise<CreateResult> {
         const db = await Database.getInstance();
         const transaction = await db.transaction();
-        await this.throwIfNotUserCollection(collection.id);
+        await this.throwIfNotUserCollection(collectionId);
 
-        if (await this.nameTaken(collection.name, collection.id)) {
+        if (await this.nameTaken(collectionData.name, collectionId)) {
             return { nameError: "Collection name already exists" };
         }
 
         try {
             const collectionInDb = await db.models.Collection.findByPk(
-                collection.id,
+                collectionId,
                 {
                     include: db.models.CollectionFile
                 }
             );
             if (!collectionInDb) {
                 throw new NotFoundError(
-                    `Collection not found '${collection.id}'`
+                    `Collection not found '${collectionId}'`
                 );
             }
             // update file
-            collectionInDb.name = collection.name;
-            collectionInDb.description = collection.description;
+            collectionInDb.name = collectionData.name;
+            collectionInDb.description = collectionData.description;
             await collectionInDb.save({ transaction });
 
             // create new tags
             await db.models.Tag.bulkCreate(
-                collection.tags.map((tag) => ({ name: tag })),
+                collectionData.tags.map((tag) => ({ name: tag })),
                 {
                     ignoreDuplicates: true,
                     returning: false,
@@ -383,12 +384,12 @@ export class CollectionService {
                 where: {
                     CollectionId: collectionInDb.id,
                     TagName: {
-                        [Op.notIn]: collection.tags
+                        [Op.notIn]: collectionData.tags
                     }
                 }
             });
             await db.models.CollectionTag.bulkCreate(
-                collection.tags.map((tag) => ({
+                collectionData.tags.map((tag) => ({
                     TagName: tag,
                     CollectionId: collectionInDb.id
                 })),
@@ -417,7 +418,7 @@ export class CollectionService {
         } catch (error) {
             transaction.rollback();
             throw new HolviError(
-                `Error updating collection '${collection.name}'`,
+                `Error updating collection '${collectionData.name}'`,
                 error
             );
         }

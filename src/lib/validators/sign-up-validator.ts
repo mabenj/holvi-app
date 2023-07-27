@@ -1,28 +1,44 @@
 import { z } from "zod";
 
+const USER_MIN = 3;
+const USER_MAX = 20;
+const USER_REGEX = /^[a-zA-Z0-9_]+$/;
+const PWD_MIN = 8;
+const PWD_MAX = 100;
+
 export const SignUpValidator = z
     .object({
         username: z
             .string()
-            .min(3, { message: "Username must be at least 3 characters long" })
-            .max(20, {
-                message: "Username must be less than 20 characters long"
-            })
-            .regex(/^[a-zA-Z0-9_]+$/, {
-                message: "Username must contain only allowed characters"
-            }),
+            .min(
+                USER_MIN,
+                `Username must be at least ${USER_MIN} characters long`
+            )
+            .max(
+                USER_MAX,
+                `Username must be less than ${USER_MAX} characters long`
+            )
+            .regex(USER_REGEX, "Username must contain only allowed characters"),
         password: z
             .string()
-            .min(8, { message: "Password must be at least 8 characters long" })
-            .max(100, {
-                message: "Password must be less than 100 characters long"
-            }),
+            .min(
+                PWD_MIN,
+                `Password must be at least ${PWD_MIN} characters long`
+            )
+            .max(
+                PWD_MAX,
+                `Password must be less than ${PWD_MAX} characters long`
+            ),
         confirmPassword: z
             .string()
-            .min(8, { message: "Password must be at least 8 characters long" })
-            .max(100, {
-                message: "Password must be less than 100 characters long"
-            })
+            .min(
+                PWD_MIN,
+                `Password must be at least ${PWD_MIN} characters long`
+            )
+            .max(
+                PWD_MAX,
+                `Password must be less than ${PWD_MAX} characters long`
+            )
     })
     .refine(({ password, confirmPassword }) => password === confirmPassword, {
         message: "Passwords do not match",

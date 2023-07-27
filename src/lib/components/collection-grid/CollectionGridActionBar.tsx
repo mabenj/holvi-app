@@ -1,5 +1,4 @@
 import { useCollectionGrid } from "@/lib/context/CollectionGridContext";
-import { CollectionGridItem } from "@/lib/types/collection-grid-item";
 import { GridSort } from "@/lib/types/grid-sort";
 import { AddIcon, SearchIcon } from "@chakra-ui/icons";
 import {
@@ -90,7 +89,6 @@ export default function CollectionGridActionBar({
                     )}
                     {canCreateCollection && (
                         <CreateCollectionBtn
-                            onCreated={actions.add}
                             disabled={isLoading || isUploading}
                         />
                     )}
@@ -297,13 +295,7 @@ const UploadFilesBtn = ({
     );
 };
 
-const CreateCollectionBtn = ({
-    onCreated,
-    disabled
-}: {
-    onCreated: (collection: CollectionGridItem) => void;
-    disabled: boolean;
-}) => {
+const CreateCollectionBtn = ({ disabled }: { disabled: boolean }) => {
     const { isOpen, onOpen, onClose } = useDisclosure();
 
     return (
@@ -315,14 +307,7 @@ const CreateCollectionBtn = ({
                 isDisabled={disabled}>
                 Create
             </Button>
-            <CollectionModal
-                isOpen={isOpen}
-                onClose={onClose}
-                onSave={(collection) =>
-                    onCreated({ ...collection, type: "collection" })
-                }
-                mode="create"
-            />
+            <CollectionModal isOpen={isOpen} onClose={onClose} mode="create" />
         </>
     );
 };

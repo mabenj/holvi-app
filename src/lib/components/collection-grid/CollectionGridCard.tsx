@@ -184,7 +184,6 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
                 <CollectionModal
                     isOpen={isCollectionModalOpen}
                     onClose={onCollectionModalClose}
-                    onSave={handleCollectionSaved}
                     mode="edit"
                     initialCollection={{
                         id: item.id,

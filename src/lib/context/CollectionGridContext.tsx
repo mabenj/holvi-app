@@ -2,7 +2,11 @@ import { useToast } from "@chakra-ui/react";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import useSWR from "swr";
 import { ApiData } from "../common/api-route";
-import { caseInsensitiveSorter, getErrorMessage } from "../common/utilities";
+import {
+    caseInsensitiveSorter,
+    getErrorMessage,
+    isUuidv4
+} from "../common/utilities";
 import useDebounce from "../hooks/useDebounce";
 import { useHttp } from "../hooks/useHttp";
 import { useUpload } from "../hooks/useUpload";
@@ -11,9 +15,10 @@ import { CollectionFileDto } from "../types/collection-file-dto";
 import { CollectionGridItem } from "../types/collection-grid-item";
 import { GridSort } from "../types/grid-sort";
 import { SearchResult } from "../types/search-result";
+import { CollectionFormData } from "../validators/collection-validator";
 
 interface CollectionGridState {
-    collectionId: string,
+    collectionId: string;
     isLoading: boolean;
     isUploading: boolean;
     items: CollectionGridItem[];
@@ -28,11 +33,12 @@ interface CollectionGridState {
         sort: (sort: GridSort) => void;
         filter: (filters: string[]) => void;
         search: (query: string) => void;
-        upload: (
-            files: File[],
-            collectionName?: string
-        ) => void;
+        upload: (files: File[], collectionName?: string) => void;
         toggleIsFileOnly: () => void;
+        saveCollection: (
+            formData: CollectionFormData,
+            id?: string
+        ) => Promise<{ nameError: string } | void>;
     };
 }
 
@@ -117,6 +123,42 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         search(debouncedSearchQuery);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [debouncedSearchQuery]);
+
+    const saveCollection = async (
+        formData: CollectionFormData,
+        id?: string
+    ): Promise<{ nameError: string } | void> => {
+        const isNew = !isUuidv4(id);
+        const url = isNew ? "/api/collections" : `/api/collections/${id}`;
+        type ResponseData = ApiData<{
+            collection?: CollectionDto;
+            nameError?: string;
+        }>;
+        const { data, error } = await http.post<ResponseData>(url, formData);
+        if (data && data.nameError) {
+            return {
+                nameError: data.nameError
+            };
+        }
+        if (!data || !data.collection || error) {
+            toast({
+                description: `Error ${
+                    isNew ? "creating" : "editing"
+                } collection (${getErrorMessage(error)})`,
+                status: "error"
+            });
+            return;
+        }
+
+        toast({
+            description: `Collection ${isNew ? "created" : "modified"}`,
+            status: "success"
+        });
+        addItem({
+            ...data.collection,
+            type: "collection"
+        });
+    };
 
     const addItem = (...newItems: CollectionGridItem[]) => {
         mutate(
@@ -333,7 +375,8 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
             filter: filterItems,
             search: searchItems,
             upload: uploadFiles,
-            toggleIsFileOnly: toggleIsFileOnly
+            toggleIsFileOnly: toggleIsFileOnly,
+            saveCollection: saveCollection
         }
     };
 }
@@ -344,7 +387,7 @@ const CollectionGridContext = createContext<CollectionGridState>({
     isUploading: false,
     items: [],
     filters: [],
-    sort: {field: null, asc: true},
+    sort: { field: null, asc: true },
     query: "",
     isFileOnly: false,
     actions: {
@@ -355,6 +398,7 @@ const CollectionGridContext = createContext<CollectionGridState>({
         filter: () => null,
         search: () => null,
         upload: () => null,
-        toggleIsFileOnly: () => null
+        toggleIsFileOnly: () => null,
+        saveCollection: () => Promise.resolve()
     }
 });

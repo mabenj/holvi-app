@@ -22,9 +22,9 @@ import { getErrorMessage } from "../../common/utilities";
 import { useHttp } from "../../hooks/useHttp";
 import { CollectionFileDto } from "../../types/collection-file-dto";
 import {
-    UpdateCollectionFileData,
-    UpdateCollectionFileValidator
-} from "../../validators/update-collection-file-validator";
+    CollectionFileFormData,
+    CollectionFileValidator
+} from "../../validators/collection-file-validator";
 import TagInput from "../ui/TagInput";
 
 interface CollectionFileModalProps {
@@ -47,17 +47,17 @@ export default function CollectionFileModal({
         formState: { errors },
         setValue,
         control
-    } = useForm<UpdateCollectionFileData>({
+    } = useForm<CollectionFileFormData>({
         defaultValues: {
             id: initialFile.id,
             name: initialFile.name,
             tags: initialFile.tags || []
         },
-        resolver: zodResolver(UpdateCollectionFileValidator)
+        resolver: zodResolver(CollectionFileValidator)
     });
     const toast = useToast();
 
-    const onSubmit = async (formData: UpdateCollectionFileData) => {
+    const onSubmit = async (formData: CollectionFileFormData) => {
         const { data, error } = await http.post<
             ApiData<{ file?: CollectionFileDto }>
         >(`/api/collections/${initialFile.collectionId}/files`, formData);

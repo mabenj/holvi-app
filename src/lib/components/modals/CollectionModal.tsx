@@ -1,3 +1,4 @@
+import { useCollectionGrid } from "@/lib/context/CollectionGridContext";
 import { CollectionDto } from "@/lib/types/collection-dto";
 import {
     Button,
@@ -14,30 +15,27 @@ import {
     ModalFooter,
     ModalHeader,
     ModalOverlay,
-    Textarea,
-    useToast
+    Textarea
 } from "@chakra-ui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { useHttp } from "../../hooks/useHttp";
 import {
-    CreateCollectionFormData,
-    CreateCollectionValidator
-} from "../../validators/create-collection-validator";
+    CollectionFormData,
+    CollectionValidator
+} from "../../validators/collection-validator";
 import TagInput from "../ui/TagInput";
 
 interface CollectionModalProps {
     isOpen: boolean;
     mode: "edit" | "create";
     onClose: () => void;
-    onSave: (collection: CollectionDto) => void;
     initialCollection?: Partial<CollectionDto>;
 }
 
 export default function CollectionModal({
     isOpen,
     onClose,
-    onSave,
     mode,
     initialCollection
 }: CollectionModalProps) {
@@ -48,58 +46,46 @@ export default function CollectionModal({
         setError,
         setValue,
         control
-    } = useForm<CreateCollectionFormData>({
+    } = useForm<CollectionFormData>({
         defaultValues: {
             name: initialCollection?.name,
             tags: initialCollection?.tags || [],
             description: initialCollection?.description || ""
         },
-        resolver: zodResolver(CreateCollectionValidator)
+        resolver: zodResolver(CollectionValidator)
     });
-    const http = useHttp();
-    const toast = useToast();
+    const {
+        actions: { saveCollection }
+    } = useCollectionGrid();
+    const [isSaving, setIsSaving] = useState(false);
 
-    const onSubmit = async (formData: CreateCollectionFormData) => {
-        const method = mode === "edit" ? http.put : http.post;
-        const { data, error } = await method("/api/collections", {
-            id: mode === "edit" ? initialCollection?.id : undefined,
-            ...formData
-        });
+    const onSubmit = async (formData: CollectionFormData) => {
+        setIsSaving(true);
+        const { nameError } =
+            (await saveCollection(formData, initialCollection?.id).finally(() =>
+                setIsSaving(false)
+            )) || {};
 
-        if (data?.nameError) {
+        if (nameError) {
             setError("name", {
-                message: data.nameError
+                message: nameError
             });
             return;
         }
-        if (error) {
-            toast({
-                description: `Error ${
-                    mode === "edit" ? "editing" : "creating"
-                } collection`,
-                status: "error"
-            });
-            return;
-        }
-        onSave(data.collection);
-        toast({
-            description: `Collection ${
-                mode === "edit" ? "modified" : "created"
-            }`,
-            status: "success"
-        });
         onClose();
         setValue(
             "name",
+            mode === "edit" ? formData.name : initialCollection?.name || ""
+        );
+        setValue(
+            "description",
             mode === "edit"
-                ? data.collection.name
-                : initialCollection?.name || ""
+                ? formData.description
+                : initialCollection?.description
         );
         setValue(
             "tags",
-            mode === "edit"
-                ? data.collection.tags
-                : initialCollection?.tags || []
+            mode === "edit" ? formData.tags : initialCollection?.tags || []
         );
     };
 
@@ -181,7 +167,7 @@ export default function CollectionModal({
                     <Button
                         type="submit"
                         form="create-collection-form"
-                        isLoading={http.isLoading}>
+                        isLoading={isSaving}>
                         {mode === "edit" ? "Save" : "Create"}
                     </Button>
                 </ModalFooter>
