@@ -14,7 +14,8 @@ enum HttpMethod {
     GET = "GET",
     POST = "POST",
     DELETE = "DELETE",
-    PUT = "PUT"
+    PUT = "PUT",
+    PATCH = "PATCH"
 }
 
 type ApiHandler = (
@@ -51,57 +52,26 @@ interface ApiRouteOptions {
     post?: ApiHandlerOptions | ApiHandler;
     delete?: ApiHandlerOptions | ApiHandler;
     put?: ApiHandlerOptions | ApiHandler;
+    patch?: ApiHandlerOptions | ApiHandler;
 }
 
 export class ApiRoute {
     private static readonly logger = new Log("API", LogColor.MAGENTA);
 
     static create(options: ApiRouteOptions): NextApiHandler {
-        const {
-            get: getParams,
-            post: postParams,
-            delete: deleteParams,
-            put: putParams
-        } = options;
-        const getOptions =
-            typeof getParams === "function"
-                ? { handler: getParams }
-                : getParams;
-        const postOptions =
-            typeof postParams === "function"
-                ? { handler: postParams }
-                : postParams;
-        const deleteOptions =
-            typeof deleteParams === "function"
-                ? { handler: deleteParams }
-                : deleteParams;
-        const putOptions =
-            typeof putParams === "function"
-                ? { handler: putParams }
-                : putParams;
+        const optionsByMethod: Record<string, ApiHandlerOptions | undefined> = {
+            [HttpMethod.GET]: resolveParams(options.get),
+            [HttpMethod.POST]: resolveParams(options.post),
+            [HttpMethod.PUT]: resolveParams(options.put),
+            [HttpMethod.PATCH]: resolveParams(options.patch),
+            [HttpMethod.DELETE]: resolveParams(options.delete)
+        };
 
         const handle: NextApiHandler = async (req, res) => {
             ApiRoute.logger.info(`${req.method}: ${req.url}`);
 
-            let methodOptions: ApiHandlerOptions | undefined;
-            switch (req.method) {
-                case HttpMethod.GET:
-                    methodOptions = getOptions;
-                    break;
-                case HttpMethod.POST:
-                    methodOptions = postOptions;
-                    break;
-                case HttpMethod.DELETE:
-                    methodOptions = deleteOptions;
-                    break;
-                case HttpMethod.PUT:
-                    methodOptions = putOptions;
-                    break;
-                default:
-                // nothing
-            }
-
-            let { authenticate, handler, validator } = methodOptions || {};
+            let { authenticate, handler, validator } =
+                optionsByMethod[req.method || ""] || {};
 
             if (typeof handler !== "function") {
                 res.status(405).end();
@@ -167,4 +137,8 @@ export class ApiRoute {
 
 function getMessage(error: Error, baseMsg: string) {
     return `${baseMsg}${error.message ? ` (${error.message})` : ""}`;
+}
+
+function resolveParams(params?: ApiHandlerOptions | ApiHandler) {
+    return typeof params === "function" ? { handler: params } : params;
 }

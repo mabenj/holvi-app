@@ -46,6 +46,19 @@ export function useHttp() {
         });
     };
 
+    const httpPatch = <T extends any = any>(
+        url: string,
+        payload?: any,
+        headers?: Record<string, any>
+    ) => {
+        return request<T>({
+            url,
+            method: "PATCH",
+            payload,
+            headers
+        });
+    };
+
     const httpDelete = <T extends any = any>(
         url: string,
         headers?: Record<string, any>
@@ -59,7 +72,7 @@ export function useHttp() {
 
     const request = async <T extends any = any>(options: {
         url: string;
-        method: "GET" | "POST" | "PUT" | "DELETE";
+        method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
         payload?: any;
         headers?: Record<string, any>;
     }): Promise<HttpResponse<T>> => {
@@ -90,6 +103,7 @@ export function useHttp() {
         get: httpGet,
         post: httpPost,
         put: httpPut,
+        patch: httpPatch,
         delete: httpDelete,
         isLoading: isLoading
     };
