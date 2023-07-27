@@ -3,6 +3,7 @@ import { AddIcon, SearchIcon } from "@chakra-ui/icons";
 import {
     Box,
     Button,
+    Divider,
     Flex,
     IconButton,
     Input,
@@ -115,6 +116,15 @@ const FilterBtn = () => {
                 isDisabled={isLoading}
             />
             <MenuList maxH="20rem" overflowY="auto">
+                <Flex alignItems="center" justifyContent="center" pb={2}>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => filter([])}>
+                        Clear tags
+                    </Button>
+                </Flex>
+                <Divider />
                 <MenuOptionGroup
                     type="checkbox"
                     onChange={handleFilter}
