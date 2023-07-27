@@ -1,4 +1,3 @@
-import { MoonIcon, SunIcon } from "@chakra-ui/icons";
 import { Image, Link } from "@chakra-ui/next-js";
 import {
     Box,
@@ -6,8 +5,6 @@ import {
     Container,
     Flex,
     Heading,
-    IconButton,
-    useColorMode,
     useToast
 } from "@chakra-ui/react";
 import Head from "next/head";
@@ -16,6 +13,7 @@ import brandImage from "../../../../public/favicon-32x32.png";
 import { getErrorMessage } from "../../common/utilities";
 import { useHttp } from "../../hooks/useHttp";
 import { UserDto } from "../../types/user-dto";
+import ColorModeToggle from "./ColorModeToggle";
 
 interface LayoutProps {
     children: React.ReactNode;
@@ -45,7 +43,6 @@ export default function Layout({ children, user }: LayoutProps) {
 
 const Navbar = ({ username }: { username?: string }) => {
     const http = useHttp();
-    const { colorMode, toggleColorMode } = useColorMode();
     const router = useRouter();
     const toast = useToast();
 
@@ -74,10 +71,7 @@ const Navbar = ({ username }: { username?: string }) => {
                 p={4}>
                 <Link href="/" _hover={{ textDecoration: "none" }}>
                     <Flex alignItems="center" gap={3}>
-                        <Image
-                            src={brandImage}
-                            alt="Holvi"
-                        />
+                        <Image src={brandImage} alt="Holvi" />
 
                         <Heading size="md" fontWeight="light">
                             HOLVI
@@ -93,18 +87,7 @@ const Navbar = ({ username }: { username?: string }) => {
                         isLoading={http.isLoading}>
                         Log out
                     </Button>
-                    <IconButton
-                        size="sm"
-                        variant="ghost"
-                        icon={colorMode === "dark" ? <SunIcon /> : <MoonIcon />}
-                        aria-label={
-                            colorMode === "dark" ? "Light mode" : "Dark mode"
-                        }
-                        title={
-                            colorMode === "dark" ? "Light mode" : "Dark mode"
-                        }
-                        onClick={() => toggleColorMode()}
-                    />
+                    <ColorModeToggle />
                 </Flex>
             </Flex>
         </nav>

@@ -125,7 +125,7 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         if (error) {
             return Promise.reject(error);
         }
-        return data?.tags;
+        return data?.tags.sort() || [];
     };
     const { data: allTags = [], mutate: mutateTags } = useSWR(
         "/api/tags",
@@ -451,7 +451,7 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         isLoading: isFetchingItems || isSearching,
         isUploading: isUploading,
         items: itemsToRender,
-        tags: allTags.sort(),
+        tags: allTags,
         filterTags: filters,
         sort: sort,
         query: searchQuery,

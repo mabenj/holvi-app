@@ -1,5 +1,6 @@
 import { ApiData } from "@/lib/common/api-route";
 import { getErrorMessage } from "@/lib/common/utilities";
+import ColorModeToggle from "@/lib/components/ui/ColorModeToggle";
 import { useHttp } from "@/lib/hooks/useHttp";
 import { SignUpResponse } from "@/lib/types/sign-up-response";
 import {
@@ -10,17 +11,19 @@ import {
     SignUpFormData,
     SignUpValidator
 } from "@/lib/validators/sign-up-validator";
+import { Image } from "@chakra-ui/next-js";
 import {
     Button,
     Card,
     CardBody,
+    CardFooter,
     Center,
     Container,
-    Divider,
     Flex,
     FormControl,
     FormErrorMessage,
     FormLabel,
+    Heading,
     Input,
     Modal,
     ModalBody,
@@ -36,6 +39,7 @@ import Head from "next/head";
 import { useRouter } from "next/router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
+import brandImage from "../../public/favicon-32x32.png";
 
 export default function Login() {
     return (
@@ -93,49 +97,65 @@ const LoginCard = () => {
     };
 
     return (
-        <Card variant="outline" w="100%">
-            <CardBody>
-                <Flex direction="column" gap={5}>
-                    <form id="login-form" onSubmit={handleSubmit(onSubmit)}>
-                        <Flex direction="column" gap={5}>
-                            <FormControl isInvalid={!!errors.username}>
-                                <Input
-                                    isRequired
-                                    type="text"
-                                    placeholder="Username"
-                                    variant="filled"
-                                    {...register("username")}
-                                />
-                                <FormErrorMessage>
-                                    {errors.username?.message}
-                                </FormErrorMessage>
-                            </FormControl>
-                            <FormControl isInvalid={!!errors.password}>
-                                <Input
-                                    isRequired
-                                    type="password"
-                                    placeholder="Password"
-                                    variant="filled"
-                                    {...register("password")}
-                                />
-                                <FormErrorMessage>
-                                    {errors.password?.message}
-                                </FormErrorMessage>
-                            </FormControl>
+        <Flex direction="column" alignItems="center" w="100%" gap={10}>
+            <Flex alignItems="center" gap={3}>
+                <Image src={brandImage} alt="Holvi" />
 
-                            <Button
-                                type="submit"
-                                isLoading={http.isLoading || isBusy}
-                                form="login-form">
-                                Login
-                            </Button>
-                        </Flex>
-                    </form>
-                    <Divider />
-                    <SignUpModal />
-                </Flex>
-            </CardBody>
-        </Card>
+                <Heading size="md" fontWeight="light">
+                    HOLVI
+                </Heading>
+            </Flex>
+            <Card variant="outline" w="100%">
+                <CardBody>
+                    <Flex direction="column" gap={5}>
+                        <form id="login-form" onSubmit={handleSubmit(onSubmit)}>
+                            <Flex direction="column" gap={5}>
+                                <FormControl isInvalid={!!errors.username}>
+                                    <Input
+                                        isRequired
+                                        type="text"
+                                        placeholder="Username"
+                                        variant="filled"
+                                        {...register("username")}
+                                    />
+                                    <FormErrorMessage>
+                                        {errors.username?.message}
+                                    </FormErrorMessage>
+                                </FormControl>
+                                <FormControl isInvalid={!!errors.password}>
+                                    <Input
+                                        isRequired
+                                        type="password"
+                                        placeholder="Password"
+                                        variant="filled"
+                                        {...register("password")}
+                                    />
+                                    <FormErrorMessage>
+                                        {errors.password?.message}
+                                    </FormErrorMessage>
+                                </FormControl>
+
+                                <Button
+                                    type="submit"
+                                    isLoading={http.isLoading || isBusy}
+                                    form="login-form">
+                                    Login
+                                </Button>
+                            </Flex>
+                        </form>
+                    </Flex>
+                </CardBody>
+                <CardFooter>
+                    <Flex
+                        alignItems="center"
+                        justifyContent="space-between"
+                        w="100%">
+                        <ColorModeToggle />
+                        <SignUpModal />
+                    </Flex>
+                </CardFooter>
+            </Card>
+        </Flex>
     );
 };
 
@@ -180,7 +200,7 @@ const SignUpModal = () => {
 
     return (
         <>
-            <Button type="button" onClick={onOpen} variant="ghost">
+            <Button type="button" onClick={onOpen} variant="ghost" size="sm">
                 Sign up
             </Button>
 
