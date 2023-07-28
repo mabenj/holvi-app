@@ -3,7 +3,7 @@ import AuthService from "@/lib/services/auth.service";
 import {
     LoginFormData,
     LoginValidator
-} from "@/lib/validators/login-validator";
+} from "@/lib/validators/login.validator";
 
 async function post(req: ApiRequest<LoginFormData>, res: ApiResponse) {
     const { username, password } = req.body;

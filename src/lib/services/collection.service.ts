@@ -9,8 +9,8 @@ import { UserFileSystem } from "../common/user-file-system";
 import { EMPTY_UUIDV4 } from "../common/utilities";
 import { CollectionDto } from "../types/collection-dto";
 import { CollectionFileDto } from "../types/collection-file-dto";
-import { CollectionFileFormData } from "../validators/collection-file-validator";
-import { CollectionFormData } from "../validators/collection-validator";
+import { CollectionFileFormData } from "../validators/collection-file.validator";
+import { CollectionFormData } from "../validators/collection.validator";
 
 interface CreateResult {
     collection?: CollectionDto;

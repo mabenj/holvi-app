@@ -6,11 +6,11 @@ import { SignUpResponse } from "@/lib/types/sign-up-response";
 import {
     LoginFormData,
     LoginValidator
-} from "@/lib/validators/login-validator";
+} from "@/lib/validators/login.validator";
 import {
     SignUpFormData,
     SignUpValidator
-} from "@/lib/validators/sign-up-validator";
+} from "@/lib/validators/sign-up.validator";
 import { Image } from "@chakra-ui/next-js";
 import {
     Button,

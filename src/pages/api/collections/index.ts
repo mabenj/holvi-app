@@ -4,7 +4,7 @@ import { CollectionDto } from "@/lib/types/collection-dto";
 import {
     CollectionFormData,
     CollectionValidator
-} from "@/lib/validators/collection-validator";
+} from "@/lib/validators/collection.validator";
 
 async function getCollections(
     req: ApiRequest,

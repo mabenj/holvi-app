@@ -14,10 +14,10 @@ import { CollectionDto } from "../types/collection-dto";
 import { CollectionFileDto } from "../types/collection-file-dto";
 import { CollectionGridItem } from "../types/collection-grid-item";
 import { GridSort } from "../types/grid-sort";
-import { SearchRequest } from "../types/search-request";
 import { SearchResult } from "../types/search-result";
-import { CollectionFileFormData } from "../validators/collection-file-validator";
-import { CollectionFormData } from "../validators/collection-validator";
+import { CollectionFileFormData } from "../validators/collection-file.validator";
+import { CollectionFormData } from "../validators/collection.validator";
+import { SearchRequest } from "../validators/search-request.validator";
 
 interface CollectionGridState {
     collectionId: string;
@@ -25,11 +25,8 @@ interface CollectionGridState {
     isUploading: boolean;
     items: CollectionGridItem[];
     tags: string[];
-    sort: GridSort;
     searchRequest: SearchRequest;
-    isFileOnly: boolean;
     actions: {
-        toggleIsFileOnly: () => void;
         sort: (sort: GridSort) => void;
         filterTags: (tags: string[]) => void;
         search: (query: string) => void;
@@ -74,16 +71,14 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
     const [itemsToRender, setItemsToRender] = useState<CollectionGridItem[]>(
         []
     );
-    const [allFiles, setAllFiles] = useState<CollectionGridItem[]>([]);
     const [isSearching, setIsSearching] = useState(false);
-    const [sort, setSort] = useState<GridSort>({
-        field: "timestamp",
-        asc: false
-    });
-    const [isFileOnly, setIsFileOnly] = useState(false);
     const [searchRequest, setSearchRequest] = useState<SearchRequest>({
         query: "",
-        tags: []
+        tags: [],
+        sort: {
+            field: "timestamp",
+            asc: false
+        }
     });
     const debouncedSearchRequest = useDebounce(searchRequest);
 
@@ -104,18 +99,27 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
             throw new Error((error as any) || "Unable to fetch grid data");
         }
 
+        let items: CollectionGridItem[] = [];
         if (collectionId === "root") {
             const { collections } = data as { collections: CollectionDto[] };
-            return collections.map((collection) => ({
+            items = collections.map((collection) => ({
                 ...collection,
                 type: "collection"
             }));
+        } else {
+            const { files } = data as { files: CollectionFileDto[] };
+            items = files.map((file) => ({
+                ...file,
+                type: file.mimeType.includes("image") ? "image" : "video"
+            }));
         }
-        const { files } = data as { files: CollectionFileDto[] };
-        return files.map((file) => ({
-            ...file,
-            type: file.mimeType.includes("image") ? "image" : "video"
-        }));
+
+        return items.sort(
+            caseInsensitiveSorter(
+                searchRequest.sort.field,
+                searchRequest.sort.asc
+            )
+        );
     };
     const {
         data: allItems = [],
@@ -132,15 +136,16 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         }
         return data?.tags.sort() || [];
     };
-    const { data: allTags = [], mutate: mutateTags } = useSWR(
-        "/api/tags",
-        tagFetcher
-    );
+    const {
+        data: allTags = [],
+        isLoading: isFetchingTags,
+        mutate: mutateTags
+    } = useSWR("/api/tags", tagFetcher);
 
     useEffect(() => {
         updateItemsToRender();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [allItems, sort, searchResult, isFileOnly]);
+    }, [allItems, searchResult]);
 
     useEffect(() => {
         search(debouncedSearchRequest);
@@ -340,7 +345,10 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
     };
 
     const sortItems = (sort: GridSort) => {
-        setSort({ ...sort });
+        setSearchRequest((prev) => ({
+            ...prev,
+            sort: sort
+        }));
     };
 
     const filterTags = (tags: string[]) => {
@@ -357,101 +365,44 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         }));
     };
 
-    const toggleIsFileOnly = async () => {
-        if (isFileOnly) {
-            setIsFileOnly(false);
-        } else {
-            const { data, error } = await http.get<
-                ApiData<{ files: CollectionFileDto[] }>
-            >("/api/files/all");
-            if (!data || data.status === "error" || error) {
-                toast({
-                    description: `Error fetching files: ${getErrorMessage(
-                        error
-                    )}`,
-                    status: "error"
-                });
-                return;
-            }
-            setAllFiles(
-                data.files.map((file) => ({
-                    ...file,
-                    type: file.mimeType.includes("image") ? "image" : "video"
-                }))
-            );
-            setIsFileOnly(true);
-        }
-    };
-
     const search = async (searchRequest: SearchRequest) => {
-        let result: CollectionGridItem[] | null = [];
         if (!searchRequest.query && searchRequest.tags.length === 0) {
-            result = null;
-        } else if (collectionId === "root") {
-            setIsSearching(true);
-            const { data, error } = await http
-                .get<ApiData<SearchResult>>(`/api/search`, {
-                    queryParams: {
-                        query: searchRequest.query,
-                        tags: searchRequest.tags.join(",")
-                    }
-                })
-                .finally(() => setIsSearching(false));
-            if (!data || error) {
-                toast({
-                    description: `Could not search: '${getErrorMessage(
-                        error
-                    )}'`,
-                    status: "error"
-                });
-                result = null;
-            } else {
-                const collectionItems: CollectionGridItem[] =
-                    data.collections.map((collection) => ({
-                        type: "collection",
-                        ...collection
-                    }));
-                const fileItems: CollectionGridItem[] = data.files.map(
-                    (file) => ({
-                        type: file.mimeType.includes("image")
-                            ? "image"
-                            : "video",
-                        ...file
-                    })
-                );
-                result.push(...[...collectionItems, ...fileItems]);
-            }
-        } else {
-            // necessary data already at client, construct search result based on query
-
-            const nameMatches = (item: CollectionGridItem) =>
-                item.name
-                    .toLowerCase()
-                    .includes(searchRequest.query.toLowerCase());
-            const tagsMatch = (item: CollectionGridItem) =>
-                searchRequest.tags.some((filterTag) =>
-                    item.tags.some((itemTag) =>
-                        areTagsEqual(filterTag, itemTag)
-                    )
-                );
-            const areTagsEqual = (a: string, b: string) =>
-                a.localeCompare(b, undefined, { sensitivity: "base" }) === 0;
-
-            result = allItems.filter(
-                (item) => nameMatches(item) || tagsMatch(item)
-            );
+            setSearchResult(null);
+            return;
         }
-        setSearchResult(result);
+
+        if (collectionId !== "root") {
+            searchRequest.collectionId = collectionId;
+        }
+
+        setIsSearching(true);
+        const { data, error } = await http
+            .post<ApiData<SearchResult>>(`/api/search`, {
+                payload: searchRequest
+            })
+            .finally(() => setIsSearching(false));
+        if (!data || error) {
+            toast({
+                description: `Could not search: '${getErrorMessage(error)}'`,
+                status: "error"
+            });
+        } else {
+            const collectionItems: CollectionGridItem[] = data.collections.map(
+                (collection) => ({
+                    type: "collection",
+                    ...collection
+                })
+            );
+            const fileItems: CollectionGridItem[] = data.files.map((file) => ({
+                type: file.mimeType.includes("image") ? "image" : "video",
+                ...file
+            }));
+            setSearchResult([...collectionItems, ...fileItems]);
+        }
     };
 
     const updateItemsToRender = () => {
-        let itemPool = searchResult || (isFileOnly ? allFiles : allItems);
-        if (sort.field) {
-            itemPool = itemPool.sort(
-                caseInsensitiveSorter(sort.field, sort.asc)
-            );
-        }
-
+        const itemPool = searchResult || allItems;
         setItemsToRender([...itemPool]);
     };
 
@@ -462,10 +413,7 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         items: itemsToRender,
         tags: allTags,
         searchRequest: searchRequest,
-        sort: sort,
-        isFileOnly: isFileOnly,
         actions: {
-            toggleIsFileOnly: toggleIsFileOnly,
             sort: sortItems,
             filterTags: filterTags,
             search: searchItems,
@@ -484,18 +432,16 @@ const CollectionGridContext = createContext<CollectionGridState>({
     isUploading: false,
     items: [],
     tags: [],
-    sort: { field: "timestamp", asc: false },
     searchRequest: {
         query: "",
-        tags: []
+        tags: [],
+        sort: { field: "timestamp", asc: false }
     },
-    isFileOnly: false,
     actions: {
         sort: () => null,
         filterTags: () => null,
         search: () => null,
         upload: () => Promise.resolve(),
-        toggleIsFileOnly: () => null,
         saveCollection: () => Promise.resolve(),
         editFile: () => Promise.resolve(),
         deleteCollection: () => Promise.resolve(),

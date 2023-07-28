@@ -38,8 +38,9 @@ export default class Database {
     public select(sql: string, replacements?: Record<string, any>){
         return this.sequelize.query(sql, {
             replacements: replacements,
-            type: QueryTypes.SELECT
-        })
+            type: QueryTypes.SELECT,
+            raw: true
+        });
     }
 
     public transaction() {

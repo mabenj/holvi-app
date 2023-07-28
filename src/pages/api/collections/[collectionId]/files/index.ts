@@ -5,7 +5,7 @@ import { CollectionFileDto } from "@/lib/types/collection-file-dto";
 import {
     CollectionFileFormData,
     CollectionFileValidator
-} from "@/lib/validators/collection-file-validator";
+} from "@/lib/validators/collection-file.validator";
 import contentDisposition from "content-disposition";
 
 async function post(

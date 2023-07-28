@@ -4,7 +4,7 @@ import { SignUpResponse } from "@/lib/types/sign-up-response";
 import {
     SignUpFormData,
     SignUpValidator
-} from "@/lib/validators/sign-up-validator";
+} from "@/lib/validators/sign-up.validator";
 
 async function post(
     req: ApiRequest<SignUpFormData>,

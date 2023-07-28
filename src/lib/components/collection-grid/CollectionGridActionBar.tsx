@@ -61,21 +61,21 @@ export default function CollectionGridActionBar({
 }
 
 const ListAllFilesBtn = () => {
-    const {
-        actions: { toggleIsFileOnly },
-        isLoading,
-        isFileOnly
-    } = useCollectionGrid();
+    return <></>;
+    // TODO: maybe some day?
+    // const {
+    //     isLoading,
+    // } = useCollectionGrid();
 
-    return (
-        <Button
-            variant="ghost"
-            onClick={toggleIsFileOnly}
-            title="List all files"
-            isDisabled={isLoading}>
-            {isFileOnly ? "List collections" : "List files"}
-        </Button>
-    );
+    // return (
+    //     <Button
+    //         variant="ghost"
+    //         onClick={toggleIsFileOnly}
+    //         title="List all files"
+    //         isDisabled={isLoading}>
+    //         {isFileOnly ? "List collections" : "List files"}
+    //     </Button>
+    // );
 };
 
 const FilterBtn = () => {
@@ -141,7 +141,11 @@ const FilterBtn = () => {
 };
 
 const SortBtn = () => {
-    const { actions, sort, isLoading } = useCollectionGrid();
+    const {
+        actions,
+        searchRequest: { sort },
+        isLoading
+    } = useCollectionGrid();
     const [sortValue, setSortValue] = useState("");
 
     useEffect(() => {
@@ -176,14 +180,14 @@ const SortBtn = () => {
                     type="radio"
                     onChange={handleSort}
                     value={sortValue}>
-                    <MenuItemOption value="+name">Name (A-Z)</MenuItemOption>
-                    <MenuItemOption value="-name">Name (Z-A)</MenuItemOption>
                     <MenuItemOption value="-timestamp">
                         Newest first
                     </MenuItemOption>
                     <MenuItemOption value="+timestamp">
                         Oldest first
                     </MenuItemOption>
+                    <MenuItemOption value="+name">Name (A-Z)</MenuItemOption>
+                    <MenuItemOption value="-name">Name (Z-A)</MenuItemOption>
                 </MenuOptionGroup>
             </MenuList>
         </Menu>

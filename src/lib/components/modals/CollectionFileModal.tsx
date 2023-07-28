@@ -22,7 +22,7 @@ import { CollectionFileDto } from "../../types/collection-file-dto";
 import {
     CollectionFileFormData,
     CollectionFileValidator
-} from "../../validators/collection-file-validator";
+} from "../../validators/collection-file.validator";
 import TagInput from "../ui/TagInput";
 
 interface CollectionFileModalProps {

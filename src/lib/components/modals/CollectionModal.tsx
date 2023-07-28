@@ -23,7 +23,7 @@ import { Controller, useForm } from "react-hook-form";
 import {
     CollectionFormData,
     CollectionValidator
-} from "../../validators/collection-validator";
+} from "../../validators/collection.validator";
 import TagInput from "../ui/TagInput";
 
 interface CollectionModalProps {
