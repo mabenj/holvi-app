@@ -74,7 +74,7 @@ const ResponsiveGrid = ({
                 </Heading>
             )}
 
-            <SimpleGrid columns={[3, 3, 4, 6]} spacing={[1, 1, 1, 2]}>
+            <SimpleGrid columns={[3, 3, 4, 6, 8, 9]} spacing={[1, 1, 1, 2]}>
                 {items.map((item) => (
                     <CollectionGridCard key={item.id} item={item} />
                 ))}
