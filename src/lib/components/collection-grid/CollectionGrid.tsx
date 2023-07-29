@@ -23,9 +23,9 @@ export default function CollectionGrid({ collectionId }: CollectionGridProps) {
 
 const GridWithActionBar = () => {
     const {
-        isLoading,
         collectionId,
-        items: { collections, files }
+        items: { collections, files },
+        flags: { isLoading }
     } = useCollectionGrid();
 
     return (

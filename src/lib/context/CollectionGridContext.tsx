@@ -1,14 +1,8 @@
-import { useToast } from "@chakra-ui/react";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import useSWR from "swr";
-import { ApiData } from "../common/api-route";
-import {
-    caseInsensitiveSorter,
-    getErrorMessage,
-    isUuidv4
-} from "../common/utilities";
+import { useCollectionFiles } from "../hooks/useCollectionFiles";
+import { useCollectionItems } from "../hooks/useCollectionItems";
 import { useCollectionSearch } from "../hooks/useCollectionSearch";
-import { useHttp } from "../hooks/useHttp";
+import { useCollections } from "../hooks/useCollections";
 import { useUpload } from "../hooks/useUpload";
 import { CollectionDto } from "../types/collection-dto";
 import { CollectionFileDto } from "../types/collection-file-dto";
@@ -20,8 +14,15 @@ import { SearchRequest } from "../validators/search-request.validator";
 
 interface CollectionGridState {
     collectionId: string;
-    isLoading: boolean;
-    isUploading: boolean;
+    flags: {
+        isLoading: boolean;
+        isUploading: boolean;
+        isSavingCollection: boolean;
+        isDeletingCollection: boolean;
+        isSavingFile: boolean;
+        isDeletingFile: boolean;
+        isFetchingTags: boolean;
+    };
     items: {
         collections: CollectionGridItem[];
         files: CollectionGridItem[];
@@ -36,12 +37,12 @@ interface CollectionGridState {
         saveCollection: (
             formData: CollectionFormData,
             id?: string
-        ) => Promise<{ nameError: string } | void>;
+        ) => Promise<{ nameError: string } | CollectionDto>;
+        deleteCollection: (id: string) => Promise<void>;
         editFile: (
             formData: CollectionFileFormData,
             id: string
-        ) => Promise<void>;
-        deleteCollection: (id: string) => Promise<void>;
+        ) => Promise<CollectionFileDto>;
         deleteFile: (id: string) => Promise<void>;
     };
 }
@@ -80,181 +81,83 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         setSearchResult
     } = useCollectionSearch(collectionId);
 
+    const {
+        allItems,
+        allTags,
+        isFetchingItems,
+        isFetchingTags,
+        addCollectionItem,
+        updateCollectionItem,
+        deleteCollectionItem
+    } = useCollectionItems(collectionId, searchRequest.sort);
+
+    const {
+        isSaving: isSavingCollection,
+        isDeleting: isDeletingCollection,
+        createCollection,
+        editCollection,
+        deleteCollection
+    } = useCollections();
+
+    const {
+        isSaving: isSavingFile,
+        isDeleting: isDeletingFile,
+        deleteFile,
+        editFile
+    } = useCollectionFiles();
+
     const { uploadCollection, uploadCollectionFiles, isUploading } =
         useUpload();
-    const http = useHttp();
-    const toast = useToast();
-
-    const itemFetcher = async (
-        collectionId: string
-    ): Promise<CollectionGridItem[]> => {
-        const url =
-            collectionId === "root"
-                ? "/api/collections"
-                : `/api/collections/${collectionId}/files`;
-        const { data, error } = await http.get(url);
-        if (!data || error) {
-            throw new Error((error as any) || "Unable to fetch grid data");
-        }
-
-        let items: CollectionGridItem[] = [];
-        if (collectionId === "root") {
-            const { collections } = data as { collections: CollectionDto[] };
-            items = collections.map((collection) => ({
-                ...collection,
-                type: "collection"
-            }));
-        } else {
-            const { files } = data as { files: CollectionFileDto[] };
-            items = files.map((file) => ({
-                ...file,
-                type: file.mimeType.includes("image") ? "image" : "video"
-            }));
-        }
-
-        return items.sort(
-            caseInsensitiveSorter(
-                searchRequest.sort.field,
-                searchRequest.sort.asc
-            )
-        );
-    };
-    const {
-        data: allItems = [],
-        isLoading: isFetchingItems,
-        mutate: mutateItems
-    } = useSWR(collectionId, itemFetcher);
-
-    const tagFetcher = async (url: string) => {
-        const { data, error } = await http.get<ApiData<{ tags: string[] }>>(
-            url
-        );
-        if (error) {
-            return Promise.reject(error);
-        }
-        return data?.tags.sort() || [];
-    };
-    const {
-        data: allTags = [],
-        isLoading: isFetchingTags,
-        mutate: mutateTags
-    } = useSWR("/api/tags", tagFetcher);
 
     useEffect(() => {
         updateItemsToRender();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [allItems, searchResult]);
 
-    const saveCollection = async (
+    const handleSaveCollection = async (
         formData: CollectionFormData,
         id?: string
-    ): Promise<{ nameError: string } | void> => {
-        const isNew = !isUuidv4(id);
-        const url = isNew ? "/api/collections" : `/api/collections/${id}`;
-        type ResponseData = ApiData<{
-            collection?: CollectionDto;
-            nameError?: string;
-        }>;
-        const { data, error } = await http.post<ResponseData>(url, {
-            payload: formData
-        });
-        if (data && data.nameError) {
-            return {
-                nameError: data.nameError
-            };
+    ) => {
+        const result = id
+            ? await editCollection(formData, id)
+            : await createCollection(formData);
+        if ("nameError" in result) {
+            return result;
         }
-        if (!data || !data.collection || error) {
-            toast({
-                description: `Error ${
-                    isNew ? "creating" : "editing"
-                } collection (${getErrorMessage(error)})`,
-                status: "error"
-            });
-            return Promise.reject();
-        }
-
-        toast({
-            description: `Collection ${isNew ? "created" : "modified"}`,
-            status: "success"
-        });
-        addItem({
-            ...data.collection,
+        updateItem({
+            ...result,
             type: "collection"
         });
+        return result;
     };
 
-    const editFile = async (
-        formData: CollectionFileFormData,
-        collectionId: string
-    ) => {
-        type ResponseData = ApiData<{
-            file?: CollectionFileDto;
-        }>;
-        const { data, error } = await http.post<ResponseData>(
-            `/api/collections/${collectionId}/files`,
-            { payload: formData }
-        );
-        if (!data?.file || error) {
-            toast({
-                description: `Could not edit file: ${getErrorMessage(error)}`,
-                status: "error"
-            });
-            return Promise.reject();
+    const handleDeleteCollection = async (id: string) => {
+        const item = (searchResult || allItems).find((item) => item.id === id);
+        if (!item || item.type !== "collection") {
+            return Promise.reject("Collection not found");
         }
-        toast({
-            description: `Collection '${data.file.name}' modified`,
-            status: "success"
-        });
-        updateItem({
-            ...data.file,
-            type: data.file.mimeType.includes("image") ? "image" : "video"
-        });
-    };
-
-    const deleteCollection = async (id: string) => {
-        const { name } =
-            (searchResult || allItems).find((item) => item.id === id) || {};
-        const { error } = await http.delete(`/api/collections/${id}`);
-        if (error) {
-            toast({
-                description: `Error deleting collection '${name}' (${getErrorMessage(
-                    error
-                )})`,
-                status: "error"
-            });
-            return Promise.reject();
-        }
-        toast({
-            description: `Collection '${name}' deleted`,
-            status: "info"
-        });
+        await deleteCollection(item);
         deleteItem(id);
     };
 
-    const deleteFile = async (id: string) => {
-        const fileItem = (searchResult || allItems).find(
-            (item) => item.id === id
-        );
-        if (!fileItem || !("collectionId" in fileItem)) {
-            return;
-        }
-
-        const { error } = await http.delete(
-            `/api/collections/${fileItem.collectionId}/files/${id}`
-        );
-        if (error) {
-            toast({
-                description: `Error deleting file '${
-                    fileItem.name
-                }' (${getErrorMessage(error)})`,
-                status: "error"
-            });
-            return Promise.reject();
-        }
-        toast({
-            description: `File '${fileItem.name}' deleted`,
-            status: "info"
+    const handleEditFile = async (
+        formData: CollectionFileFormData,
+        collectionId: string
+    ) => {
+        const edited = await editFile(formData, collectionId);
+        updateItem({
+            ...edited,
+            type: edited.mimeType.includes("image") ? "image" : "video"
         });
+        return edited;
+    };
+
+    const handleDeleteFile = async (id: string) => {
+        const item = (searchResult || allItems).find((item) => item.id === id);
+        if (!item || item.type === "collection") {
+            return Promise.reject("File not found");
+        }
+        await deleteFile(item);
         deleteItem(id);
     };
 
@@ -301,41 +204,24 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
     };
 
     const addItem = (...newItems: CollectionGridItem[]) => {
-        mutateItems(
-            [
-                ...newItems,
-                ...allItems.filter((prevItem) =>
-                    newItems.every((newItem) => newItem.id !== prevItem.id)
-                )
-            ],
-            {
-                populateCache: true,
-                revalidate: false
-            }
-        );
-        mutateTags();
+        addCollectionItem(...newItems);
         setSearchResult(null);
     };
 
     const updateItem = (item: CollectionGridItem) => {
-        const mapFn = (prevItem: CollectionGridItem) =>
-            prevItem.id === item.id ? item : prevItem;
-        mutateItems(allItems.map(mapFn), {
-            populateCache: true,
-            revalidate: false
-        });
-        mutateTags();
-        setSearchResult(searchResult?.map(mapFn) || null);
+        updateCollectionItem(item);
+        setSearchResult(
+            searchResult?.map((prevItem) =>
+                prevItem.id === item.id ? item : prevItem
+            ) || null
+        );
     };
 
     const deleteItem = (id: string) => {
-        const filterFn = (prevItem: CollectionGridItem) => prevItem.id !== id;
-        mutateItems(allItems.filter(filterFn), {
-            populateCache: true,
-            revalidate: false
-        });
-        mutateTags();
-        setSearchResult(searchResult?.filter(filterFn) || null);
+        deleteCollectionItem(id);
+        setSearchResult(
+            searchResult?.filter((prevItem) => prevItem.id !== id) || null
+        );
     };
 
     const sortItems = (sort: GridSort) => {
@@ -375,8 +261,15 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
 
     return {
         collectionId: collectionId,
-        isLoading: isFetchingItems || isSearching,
-        isUploading: isUploading,
+        flags: {
+            isLoading: isFetchingItems || isSearching,
+            isSavingCollection: isSavingCollection,
+            isDeletingCollection: isDeletingCollection,
+            isSavingFile: isSavingFile,
+            isDeletingFile: isDeletingFile,
+            isUploading: isUploading,
+            isFetchingTags: isFetchingTags
+        },
         items: itemsToRender,
         tags: allTags,
         searchRequest: searchRequest,
@@ -385,18 +278,25 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
             filterTags: filterTags,
             search: searchItems,
             upload: uploadFiles,
-            saveCollection: saveCollection,
-            editFile: editFile,
-            deleteCollection: deleteCollection,
-            deleteFile: deleteFile
+            saveCollection: handleSaveCollection,
+            deleteCollection: handleDeleteCollection,
+            editFile: handleEditFile,
+            deleteFile: handleDeleteFile
         }
     };
 }
 
 const CollectionGridContext = createContext<CollectionGridState>({
     collectionId: "root",
-    isLoading: false,
-    isUploading: false,
+    flags: {
+        isLoading: false,
+        isSavingCollection: false,
+        isDeletingCollection: false,
+        isSavingFile: false,
+        isDeletingFile: false,
+        isUploading: false,
+        isFetchingTags: false
+    },
     items: {
         collections: [],
         files: []
@@ -412,10 +312,10 @@ const CollectionGridContext = createContext<CollectionGridState>({
         sort: () => null,
         filterTags: () => null,
         search: () => null,
-        upload: () => Promise.resolve(),
-        saveCollection: () => Promise.resolve(),
-        editFile: () => Promise.resolve(),
-        deleteCollection: () => Promise.resolve(),
-        deleteFile: () => Promise.resolve()
+        upload: () => Promise.reject(),
+        saveCollection: () => Promise.reject(),
+        deleteCollection: () => Promise.reject(),
+        editFile: () => Promise.reject(),
+        deleteFile: () => Promise.reject()
     }
 });

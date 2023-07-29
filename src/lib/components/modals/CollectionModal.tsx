@@ -18,7 +18,6 @@ import {
     Textarea
 } from "@chakra-ui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
     CollectionFormData,
@@ -55,20 +54,15 @@ export default function CollectionModal({
         resolver: zodResolver(CollectionValidator)
     });
     const {
-        actions: { saveCollection }
+        actions: { saveCollection },
+        flags: { isSavingCollection }
     } = useCollectionGrid();
-    const [isSaving, setIsSaving] = useState(false);
 
     const onSubmit = async (formData: CollectionFormData) => {
-        setIsSaving(true);
-        const { nameError } =
-            (await saveCollection(formData, initialCollection?.id).finally(() =>
-                setIsSaving(false)
-            )) || {};
-
-        if (nameError) {
+        const result = await saveCollection(formData, initialCollection?.id);
+        if ("nameError" in result) {
             setError("name", {
-                message: nameError
+                message: result.nameError
             });
             return;
         }
@@ -167,7 +161,7 @@ export default function CollectionModal({
                     <Button
                         type="submit"
                         form="create-collection-form"
-                        isLoading={isSaving}>
+                        isLoading={isSavingCollection}>
                         {mode === "edit" ? "Save" : "Create"}
                     </Button>
                 </ModalFooter>

@@ -80,10 +80,10 @@ const ListAllFilesBtn = () => {
 
 const FilterBtn = () => {
     const {
-        actions: { filterTags: filter },
         tags,
-        isLoading,
-        searchRequest: { tags: filters }
+        actions: { filterTags: filter },
+        searchRequest: { tags: filters },
+        flags: { isLoading }
     } = useCollectionGrid();
 
     const handleFilter = (e: string | string[]) => {
@@ -144,7 +144,7 @@ const SortBtn = () => {
     const {
         actions,
         searchRequest: { sort },
-        isLoading
+        flags: { isLoading }
     } = useCollectionGrid();
     const [sortValue, setSortValue] = useState("");
 
@@ -197,8 +197,7 @@ const SortBtn = () => {
 const UploadCollectionBtn = () => {
     const {
         actions: { upload },
-        isLoading,
-        isUploading
+        flags: { isLoading, isUploading }
     } = useCollectionGrid();
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -240,8 +239,7 @@ const UploadCollectionBtn = () => {
 const UploadFilesBtn = () => {
     const {
         actions: { upload },
-        isLoading,
-        isUploading
+        flags: { isLoading, isUploading }
     } = useCollectionGrid();
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -274,7 +272,9 @@ const UploadFilesBtn = () => {
 };
 
 const CreateCollectionBtn = () => {
-    const { isLoading, isUploading } = useCollectionGrid();
+    const {
+        flags: { isLoading, isUploading }
+    } = useCollectionGrid();
     const { isOpen, onOpen, onClose } = useDisclosure();
 
     return (

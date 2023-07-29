@@ -16,7 +16,6 @@ import {
     ModalOverlay
 } from "@chakra-ui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { CollectionFileDto } from "../../types/collection-file-dto";
 import {
@@ -51,19 +50,16 @@ export default function CollectionFileModal({
         resolver: zodResolver(CollectionFileValidator)
     });
 
-    const [isSaving, setIsSaving] = useState(false);
     const {
-        actions: { editFile }
+        actions: { editFile },
+        flags: { isSavingFile }
     } = useCollectionGrid();
 
     const onSubmit = async (formData: CollectionFileFormData) => {
         if (!initialFile.collectionId) {
             return;
         }
-        setIsSaving(true);
-        await editFile(formData, initialFile.collectionId).finally(() =>
-            setIsSaving(false)
-        );
+        await editFile(formData, initialFile.collectionId);
         onClose();
         setValue("name", formData.name);
         setValue("tags", formData.tags);
@@ -135,7 +131,7 @@ export default function CollectionFileModal({
                     <Button
                         type="submit"
                         form="collection-file-form"
-                        isLoading={isSaving}>
+                        isLoading={isSavingFile}>
                         Save
                     </Button>
                 </ModalFooter>

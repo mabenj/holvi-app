@@ -35,12 +35,12 @@ interface CollectionGridCardProps {
 
 export default function CollectionGridCard({ item }: CollectionGridCardProps) {
     const {
-        actions: { deleteCollection, deleteFile }
+        actions: { deleteCollection, deleteFile },
+        flags: { isDeletingCollection, isDeletingFile }
     } = useCollectionGrid();
 
     const [isHovering, setIsHovering] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [isDeleting, setIsDeleting] = useState(false);
     const {
         isOpen: isCollectionModalOpen,
         onOpen: onCollectionModalOpen,
@@ -61,13 +61,13 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
     const isCollection = item.type === "collection";
     const isImage = item.type === "image";
     const isVideo = item.type === "video";
+    const isDeleting = isDeletingCollection || isDeletingFile;
 
     const handleDelete = async () => {
-        setIsDeleting(true);
         if (isCollection) {
-            await deleteCollection(item.id).finally(() => setIsDeleting(false));
+            await deleteCollection(item.id);
         } else {
-            await deleteFile(item.id).finally(() => setIsDeleting(false));
+            await deleteFile(item.id);
         }
         onAlertClose();
     };
