@@ -1,5 +1,6 @@
 import Database from "@/db/Database";
 import { Op, Order } from "sequelize";
+import { isUuidv4 } from "../common/utilities";
 import { CollectionDto } from "../types/collection-dto";
 import { CollectionFileDto } from "../types/collection-file-dto";
 import { SearchResult } from "../types/search-result";
@@ -74,7 +75,10 @@ export default class SearchService {
         searchRequest: SearchRequest
     ): Promise<string[]> {
         const { query, tags, collectionId, sort, target } = searchRequest;
-        if (target !== "all" && target !== "collections") {
+        if (
+            (target !== "all" && target !== "collections") ||
+            isUuidv4(collectionId)
+        ) {
             return Promise.resolve([]);
         }
         const sql = `SELECT DISTINCT c.id, c.name, c."createdAt"

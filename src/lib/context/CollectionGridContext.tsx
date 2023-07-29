@@ -7,14 +7,13 @@ import {
     getErrorMessage,
     isUuidv4
 } from "../common/utilities";
-import useDebounce from "../hooks/useDebounce";
+import { useCollectionSearch } from "../hooks/useCollectionSearch";
 import { useHttp } from "../hooks/useHttp";
 import { useUpload } from "../hooks/useUpload";
 import { CollectionDto } from "../types/collection-dto";
 import { CollectionFileDto } from "../types/collection-file-dto";
 import { CollectionGridItem } from "../types/collection-grid-item";
 import { GridSort } from "../types/grid-sort";
-import { SearchResult } from "../types/search-result";
 import { CollectionFileFormData } from "../validators/collection-file.validator";
 import { CollectionFormData } from "../validators/collection.validator";
 import { SearchRequest } from "../validators/search-request.validator";
@@ -68,24 +67,18 @@ export function CollectionGridProvider({
 }
 
 function useCollectionGridState(collectionId: string): CollectionGridState {
-    const [searchResult, setSearchResult] = useState<
-        CollectionGridItem[] | null
-    >(null);
     const [itemsToRender, setItemsToRender] = useState({
         collections: [] as CollectionGridItem[],
         files: [] as CollectionGridItem[]
     });
-    const [isSearching, setIsSearching] = useState(false);
-    const [searchRequest, setSearchRequest] = useState<SearchRequest>({
-        query: "",
-        tags: [],
-        sort: {
-            field: "timestamp",
-            asc: false
-        },
-        target: "collections"
-    });
-    const debouncedSearchRequest = useDebounce(searchRequest);
+
+    const {
+        isSearching,
+        searchRequest,
+        searchResult,
+        onSearch,
+        setSearchResult
+    } = useCollectionSearch(collectionId);
 
     const { uploadCollection, uploadCollectionFiles, isUploading } =
         useUpload();
@@ -151,11 +144,6 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         updateItemsToRender();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [allItems, searchResult]);
-
-    useEffect(() => {
-        search(structuredClone(debouncedSearchRequest));
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [debouncedSearchRequest]);
 
     const saveCollection = async (
         formData: CollectionFormData,
@@ -224,7 +212,8 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
     };
 
     const deleteCollection = async (id: string) => {
-        const { name } = (searchResult || allItems).find((item) => item.id === id) || {};
+        const { name } =
+            (searchResult || allItems).find((item) => item.id === id) || {};
         const { error } = await http.delete(`/api/collections/${id}`);
         if (error) {
             toast({
@@ -336,7 +325,7 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
             revalidate: false
         });
         mutateTags();
-        setSearchResult((prev) => prev?.map(mapFn) || null);
+        setSearchResult(searchResult?.map(mapFn) || null);
     };
 
     const deleteItem = (id: string) => {
@@ -346,62 +335,28 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
             revalidate: false
         });
         mutateTags();
-        setSearchResult((prev) => prev?.filter(filterFn) || null);
+        setSearchResult(searchResult?.filter(filterFn) || null);
     };
 
     const sortItems = (sort: GridSort) => {
-        setSearchRequest((prev) => ({
-            ...prev,
+        onSearch({
+            ...searchRequest,
             sort: sort
-        }));
+        });
     };
 
     const filterTags = (tags: string[]) => {
-        setSearchRequest((prev) => ({
-            ...prev,
+        onSearch({
+            ...searchRequest,
             tags: tags
-        }));
+        });
     };
 
     const searchItems = (query: string) => {
-        setSearchRequest((prev) => ({
-            ...prev,
+        onSearch({
+            ...searchRequest,
             query: query
-        }));
-    };
-
-    const search = async (searchRequest: SearchRequest) => {
-        if (collectionId !== "root") {
-            searchRequest.collectionId = collectionId;
-        }
-        if (searchRequest.query || searchRequest.tags.length > 0) {
-            searchRequest.target = "all";
-        }
-
-        setIsSearching(true);
-        const { data, error } = await http
-            .post<ApiData<SearchResult>>(`/api/search`, {
-                payload: searchRequest
-            })
-            .finally(() => setIsSearching(false));
-        if (!data || error) {
-            toast({
-                description: `Could not search: '${getErrorMessage(error)}'`,
-                status: "error"
-            });
-        } else {
-            const collectionItems: CollectionGridItem[] = data.collections.map(
-                (collection) => ({
-                    type: "collection",
-                    ...collection
-                })
-            );
-            const fileItems: CollectionGridItem[] = data.files.map((file) => ({
-                type: file.mimeType.includes("image") ? "image" : "video",
-                ...file
-            }));
-            setSearchResult([...collectionItems, ...fileItems]);
-        }
+        });
     };
 
     const updateItemsToRender = () => {
