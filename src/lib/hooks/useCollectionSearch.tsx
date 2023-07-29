@@ -35,9 +35,8 @@ export function useCollectionSearch(collectionId: string) {
         }
 
         request = structuredClone(request);
-
-        if (collectionId !== "root") {
-            request.collectionId = collectionId;
+        if (collectionId === "root") {
+            delete request.collectionId;
         }
 
         const { data, error } = await http.post<ApiData<SearchResult>>(url, {
