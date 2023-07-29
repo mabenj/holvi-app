@@ -264,7 +264,7 @@ export class UserFileSystem {
             );
             if (res.status !== 200) {
                 this.logger.warn(
-                    `Geocoding API request responded with '${res.status}' (${res.statusText})`
+                    `Geocoding API request responded with '${res.status} (${res.statusText})'`
                 );
             } else {
                 const { data } = await res.json();

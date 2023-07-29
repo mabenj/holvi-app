@@ -1,9 +1,9 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { sleep } from "../common/utilities";
 
 const INTERVAL_MS = 500;
 
-export function useRotatingThumbnail(thumbnailSources: string[]){
+export function useRotatingThumbnail(thumbnailSources: string[]) {
     const [index, setIndex] = useState(0);
 
     const thumbnailStoreRef = useRef({
@@ -13,11 +13,16 @@ export function useRotatingThumbnail(thumbnailSources: string[]){
         timerId: -1
     });
 
+    useEffect(() => {
+        resetThumbnailStore();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [thumbnailSources]);
+
     const start = () => {
         thumbnailStoreRef.current.running = true;
         initThumbnailStore();
         thumbnailTick();
-    }
+    };
 
     const stopThumbnailTick = () => {
         thumbnailStoreRef.current.running = false;
@@ -68,9 +73,19 @@ export function useRotatingThumbnail(thumbnailSources: string[]){
         thumbnailStoreRef.current.initialized = true;
     };
 
+    const resetThumbnailStore = () => {
+        stopThumbnailTick();
+        thumbnailStoreRef.current = {
+            thumbnails: thumbnailSources[0] ? [thumbnailSources[0]] : [],
+            initialized: false,
+            running: false,
+            timerId: -1
+        };
+    };
+
     return {
         thumbnail: thumbnailStoreRef.current.thumbnails[index],
         startRotating: start,
         stopRotating: stopThumbnailTick
-    }
+    };
 }

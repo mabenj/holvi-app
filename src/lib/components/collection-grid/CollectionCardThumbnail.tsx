@@ -36,7 +36,7 @@ export default function CollectionCardThumbnail({
                 {item.thumbnails.length > 0 && (
                     <Box w="100%" h="100%" position="relative">
                         <Image
-                            src={thumbnail}
+                            src={thumbnail || item.thumbnails[0]}
                             alt={item.name}
                             fill
                             style={{
