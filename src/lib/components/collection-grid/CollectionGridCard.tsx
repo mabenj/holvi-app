@@ -35,8 +35,8 @@ interface CollectionGridCardProps {
 
 export default function CollectionGridCard({ item }: CollectionGridCardProps) {
     const {
-        actions: { deleteCollection, deleteFile },
-        flags: { isDeletingCollection, isDeletingFile }
+        actions: { saveCollection, deleteCollection, deleteFile },
+        flags: { isSavingCollection, isDeletingCollection, isDeletingFile }
     } = useCollectionGrid();
 
     const [isHovering, setIsHovering] = useState(false);
@@ -159,6 +159,8 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
                 <CollectionModal
                     isOpen={isCollectionModalOpen}
                     onClose={onCollectionModalClose}
+                    onSave={saveCollection}
+                    isSaving={isSavingCollection}
                     mode="edit"
                     initialCollection={{
                         id: item.id,

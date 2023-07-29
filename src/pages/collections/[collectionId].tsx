@@ -1,11 +1,14 @@
 import { NotFoundError } from "@/lib/common/errors";
 import { withSessionSsr } from "@/lib/common/iron-session";
 import CollectionGrid from "@/lib/components/collection-grid/CollectionGrid";
+import CollectionModal from "@/lib/components/modals/CollectionModal";
 import Layout from "@/lib/components/ui/Layout";
 import TagChip from "@/lib/components/ui/TagChip";
+import { useCollections } from "@/lib/hooks/useCollections";
 import { CollectionService } from "@/lib/services/collection.service";
 import { CollectionDto } from "@/lib/types/collection-dto";
 import { UserDto } from "@/lib/types/user-dto";
+import { CollectionFormData } from "@/lib/validators/collection.validator";
 import { Link } from "@chakra-ui/next-js";
 import {
     Box,
@@ -14,11 +17,14 @@ import {
     BreadcrumbLink,
     Button,
     Flex,
-    Heading
+    Heading,
+    useDisclosure
 } from "@chakra-ui/react";
 import { mdiDelete, mdiSquareEditOutline } from "@mdi/js";
 import Icon from "@mdi/react";
 import Head from "next/head";
+import { useRouter } from "next/router";
+import { useState } from "react";
 import Linkify from "react-linkify";
 
 export const getServerSideProps = withSessionSsr(
@@ -52,15 +58,44 @@ export default function CollectionPage({
     user: UserDto;
     collection: CollectionDto;
 }) {
+    const [currentCollection, setCurrentCollection] = useState(collection);
+    const { editCollection, isSaving, deleteCollection, isDeleting } =
+        useCollections();
+
+    const {
+        isOpen: isModalOpen,
+        onOpen: onModalOpen,
+        onClose: onModalClose
+    } = useDisclosure();
+
+    const router = useRouter();
+
+    const handleSaveCollection = async (
+        data: CollectionFormData,
+        id?: string
+    ) => {
+        const edited = await editCollection(data, id!);
+        if ("nameError" in edited) {
+            return edited;
+        }
+        setCurrentCollection(edited);
+        return edited;
+    };
+
+    const handleDeleteCollection = async () => {
+        await deleteCollection(currentCollection);
+        await router.push("/");
+    };
+
     return (
         <>
             <Head>
-                <title>{collection.name}</title>
+                <title>{currentCollection.name}</title>
             </Head>
             <Layout user={user}>
-                <Breadcrumbs collectionName={collection.name} />
+                <Breadcrumbs collectionName={currentCollection.name} />
                 <Flex direction="column" gap={3} px={4} pt={8}>
-                    <Heading>{collection.name}</Heading>
+                    <Heading>{currentCollection.name}</Heading>
 
                     <Box color="gray.500">
                         <Linkify
@@ -76,11 +111,11 @@ export default function CollectionPage({
                                     {decoratedText}
                                 </Link>
                             )}>
-                            {collection.description}
+                            {currentCollection.description}
                         </Linkify>
                     </Box>
                     <Flex flexWrap="wrap" gap={2}>
-                        {collection.tags.map((tag) => (
+                        {currentCollection.tags.map((tag) => (
                             <TagChip key={tag} tag={tag} />
                         ))}
                     </Flex>
@@ -93,20 +128,31 @@ export default function CollectionPage({
                         color="gray.500"
                         leftIcon={
                             <Icon path={mdiSquareEditOutline} size={0.6} />
-                        }>
+                        }
+                        onClick={onModalOpen}>
                         Edit collection
                     </Button>
                     <Button
                         variant="ghost"
                         size="sm"
                         color="gray.500"
-                        leftIcon={<Icon path={mdiDelete} size={0.6} />}>
+                        leftIcon={<Icon path={mdiDelete} size={0.6} />}
+                        onClick={handleDeleteCollection}
+                        isLoading={isDeleting}>
                         Delete collection
                     </Button>
                 </Box>
 
                 <CollectionGrid collectionId={collection.id} />
             </Layout>
+            <CollectionModal
+                isOpen={isModalOpen}
+                onClose={onModalClose}
+                isSaving={isSaving}
+                onSave={handleSaveCollection}
+                initialCollection={currentCollection}
+                mode="edit"
+            />
         </>
     );
 }

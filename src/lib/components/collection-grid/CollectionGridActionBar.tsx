@@ -273,7 +273,8 @@ const UploadFilesBtn = () => {
 
 const CreateCollectionBtn = () => {
     const {
-        flags: { isLoading, isUploading }
+        actions: { saveCollection },
+        flags: { isSavingCollection, isLoading, isUploading }
     } = useCollectionGrid();
     const { isOpen, onOpen, onClose } = useDisclosure();
 
@@ -286,7 +287,13 @@ const CreateCollectionBtn = () => {
                 isDisabled={isLoading || isUploading}>
                 Create
             </Button>
-            <CollectionModal isOpen={isOpen} onClose={onClose} mode="create" />
+            <CollectionModal
+                isOpen={isOpen}
+                onClose={onClose}
+                onSave={saveCollection}
+                isSaving={isSavingCollection}
+                mode="create"
+            />
         </>
     );
 };

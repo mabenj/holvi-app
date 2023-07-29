@@ -124,10 +124,11 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         if ("nameError" in result) {
             return result;
         }
-        updateItem({
-            ...result,
-            type: "collection"
-        });
+        if (id) {
+            updateItem({ ...result, type: "collection" });
+        } else {
+            addItem({ ...result, type: "collection" });
+        }
         return result;
     };
 

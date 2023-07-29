@@ -74,7 +74,9 @@ export function useCollections() {
         }
 
         toast({
-            description: `Collection ${isNew ? "created" : "modified"}`,
+            description: `Collection '${formData.name}' ${
+                isNew ? "created" : "modified"
+            }`,
             status: "success"
         });
 

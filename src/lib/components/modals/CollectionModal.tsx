@@ -1,4 +1,3 @@
-import { useCollectionGrid } from "@/lib/context/CollectionGridContext";
 import { CollectionDto } from "@/lib/types/collection-dto";
 import {
     Button,
@@ -29,12 +28,24 @@ interface CollectionModalProps {
     isOpen: boolean;
     mode: "edit" | "create";
     onClose: () => void;
+    onSave: (
+        data: CollectionFormData,
+        id?: string
+    ) => Promise<
+        | CollectionDto
+        | {
+              nameError: string;
+          }
+    >;
+    isSaving: boolean;
     initialCollection?: Partial<CollectionDto>;
 }
 
 export default function CollectionModal({
     isOpen,
     onClose,
+    onSave,
+    isSaving,
     mode,
     initialCollection
 }: CollectionModalProps) {
@@ -53,13 +64,9 @@ export default function CollectionModal({
         },
         resolver: zodResolver(CollectionValidator)
     });
-    const {
-        actions: { saveCollection },
-        flags: { isSavingCollection }
-    } = useCollectionGrid();
 
     const onSubmit = async (formData: CollectionFormData) => {
-        const result = await saveCollection(formData, initialCollection?.id);
+        const result = await onSave(formData, initialCollection?.id);
         if ("nameError" in result) {
             setError("name", {
                 message: result.nameError
@@ -161,7 +168,7 @@ export default function CollectionModal({
                     <Button
                         type="submit"
                         form="create-collection-form"
-                        isLoading={isSavingCollection}>
+                        isLoading={isSaving}>
                         {mode === "edit" ? "Save" : "Create"}
                     </Button>
                 </ModalFooter>
