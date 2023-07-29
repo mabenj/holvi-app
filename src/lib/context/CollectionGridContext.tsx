@@ -23,7 +23,10 @@ interface CollectionGridState {
     collectionId: string;
     isLoading: boolean;
     isUploading: boolean;
-    items: CollectionGridItem[];
+    items: {
+        collections: CollectionGridItem[];
+        files: CollectionGridItem[];
+    };
     tags: string[];
     searchRequest: SearchRequest;
     actions: {
@@ -68,9 +71,10 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
     const [searchResult, setSearchResult] = useState<
         CollectionGridItem[] | null
     >(null);
-    const [itemsToRender, setItemsToRender] = useState<CollectionGridItem[]>(
-        []
-    );
+    const [itemsToRender, setItemsToRender] = useState({
+        collections: [] as CollectionGridItem[],
+        files: [] as CollectionGridItem[]
+    });
     const [isSearching, setIsSearching] = useState(false);
     const [searchRequest, setSearchRequest] = useState<SearchRequest>({
         query: "",
@@ -220,7 +224,7 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
     };
 
     const deleteCollection = async (id: string) => {
-        const { name } = allItems.find((item) => item.id === id) || {};
+        const { name } = (searchResult || allItems).find((item) => item.id === id) || {};
         const { error } = await http.delete(`/api/collections/${id}`);
         if (error) {
             toast({
@@ -239,7 +243,9 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
     };
 
     const deleteFile = async (id: string) => {
-        const fileItem = allItems.find((item) => item.id === id);
+        const fileItem = (searchResult || allItems).find(
+            (item) => item.id === id
+        );
         if (!fileItem || !("collectionId" in fileItem)) {
             return;
         }
@@ -319,30 +325,28 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
             }
         );
         mutateTags();
+        setSearchResult(null);
     };
 
     const updateItem = (item: CollectionGridItem) => {
-        mutateItems(
-            allItems.map((prevItem) =>
-                prevItem.id === item.id ? item : prevItem
-            ),
-            {
-                populateCache: true,
-                revalidate: false
-            }
-        );
+        const mapFn = (prevItem: CollectionGridItem) =>
+            prevItem.id === item.id ? item : prevItem;
+        mutateItems(allItems.map(mapFn), {
+            populateCache: true,
+            revalidate: false
+        });
         mutateTags();
+        setSearchResult((prev) => prev?.map(mapFn) || null);
     };
 
     const deleteItem = (id: string) => {
-        mutateItems(
-            allItems.filter((prevItem) => prevItem.id !== id),
-            {
-                populateCache: true,
-                revalidate: false
-            }
-        );
+        const filterFn = (prevItem: CollectionGridItem) => prevItem.id !== id;
+        mutateItems(allItems.filter(filterFn), {
+            populateCache: true,
+            revalidate: false
+        });
         mutateTags();
+        setSearchResult((prev) => prev?.filter(filterFn) || null);
     };
 
     const sortItems = (sort: GridSort) => {
@@ -401,8 +405,17 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
     };
 
     const updateItemsToRender = () => {
+        const collections: CollectionGridItem[] = [];
+        const files: CollectionGridItem[] = [];
         const itemPool = searchResult || allItems;
-        setItemsToRender([...itemPool]);
+        itemPool.forEach((item) => {
+            if (item.type === "collection") {
+                collections.push(item);
+            } else {
+                files.push(item);
+            }
+        });
+        setItemsToRender({ collections, files });
     };
 
     return {
@@ -429,7 +442,10 @@ const CollectionGridContext = createContext<CollectionGridState>({
     collectionId: "root",
     isLoading: false,
     isUploading: false,
-    items: [],
+    items: {
+        collections: [],
+        files: []
+    },
     tags: [],
     searchRequest: {
         query: "",
