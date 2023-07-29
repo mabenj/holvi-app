@@ -7,7 +7,8 @@ export const SearchRequestValidator = z.object({
     sort: z.object({
         field: z.enum(["name", "timestamp"]),
         asc: z.boolean()
-    })
+    }),
+    target: z.enum(["collections", "files", "all"])
 });
 
 export type SearchRequest = z.infer<typeof SearchRequestValidator>;

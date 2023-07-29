@@ -78,7 +78,8 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         sort: {
             field: "timestamp",
             asc: false
-        }
+        },
+        target: "collections"
     });
     const debouncedSearchRequest = useDebounce(searchRequest);
 
@@ -148,7 +149,7 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
     }, [allItems, searchResult]);
 
     useEffect(() => {
-        search(debouncedSearchRequest);
+        search(structuredClone(debouncedSearchRequest));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [debouncedSearchRequest]);
 
@@ -366,13 +367,11 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
     };
 
     const search = async (searchRequest: SearchRequest) => {
-        if (!searchRequest.query && searchRequest.tags.length === 0) {
-            setSearchResult(null);
-            return;
-        }
-
         if (collectionId !== "root") {
             searchRequest.collectionId = collectionId;
+        }
+        if (searchRequest.query || searchRequest.tags.length > 0) {
+            searchRequest.target = "all";
         }
 
         setIsSearching(true);
@@ -435,7 +434,8 @@ const CollectionGridContext = createContext<CollectionGridState>({
     searchRequest: {
         query: "",
         tags: [],
-        sort: { field: "timestamp", asc: false }
+        sort: { field: "timestamp", asc: false },
+        target: "collections"
     },
     actions: {
         sort: () => null,
