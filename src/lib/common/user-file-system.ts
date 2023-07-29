@@ -230,11 +230,14 @@ export class UserFileSystem {
                     GPSLongitudeRef,
                     GPSAltitude,
                     GPSAltitudeRef,
+                    DateTimeOriginal,
                     CreateDate
                 }
             } = parser.parse();
 
-            const takenAt = CreateDate
+            const takenAt = DateTimeOriginal
+                ? new Date(DateTimeOriginal * SECONDS_TO_MS)
+                : CreateDate
                 ? new Date(CreateDate * SECONDS_TO_MS)
                 : undefined;
 

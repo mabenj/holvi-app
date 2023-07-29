@@ -79,7 +79,7 @@ export default function CollectionPage({
                             {collection.description}
                         </Linkify>
                     </Box>
-                    <Flex gap={2}>
+                    <Flex flexWrap="wrap" gap={2}>
                         {collection.tags.map((tag) => (
                             <TagChip key={tag} tag={tag} />
                         ))}
