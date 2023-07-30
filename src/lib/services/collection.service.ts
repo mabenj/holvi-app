@@ -6,7 +6,7 @@ import { Op } from "sequelize";
 import appConfig from "../common/app-config";
 import { HolviError, NotFoundError } from "../common/errors";
 import { UserFileSystem } from "../common/user-file-system";
-import { EMPTY_UUIDV4 } from "../common/utilities";
+import { EMPTY_UUIDV4, caseInsensitiveSorter } from "../common/utilities";
 import { CollectionDto } from "../types/collection-dto";
 import { CollectionFileDto } from "../types/collection-file-dto";
 import { CollectionFileFormData } from "../validators/collection-file.validator";
@@ -251,6 +251,7 @@ export class CollectionService {
                 req
             );
             collection.thumbnails = files
+                .sort(caseInsensitiveSorter("name"))
                 .slice(0, Collection.thumbnailsLimit)
                 .map((file) => file.thumbnailSrc);
             collection.imageCount = files.filter((file) =>

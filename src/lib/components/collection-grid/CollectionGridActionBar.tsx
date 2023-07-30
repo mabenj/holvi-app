@@ -125,6 +125,15 @@ const FilterBtn = () => {
                     </Button>
                 </Flex>
                 <Divider />
+                {tags.length === 0 && (
+                    <Flex
+                        alignItems="center"
+                        justifyContent="center"
+                        color="gray.500"
+                        p={2}>
+                        No tags exist
+                    </Flex>
+                )}
                 <MenuOptionGroup
                     type="checkbox"
                     onChange={handleFilter}

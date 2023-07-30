@@ -9,6 +9,8 @@ import { SearchRequest } from "../validators/search-request.validator";
 import useDebounce from "./useDebounce";
 import { useHttp } from "./useHttp";
 
+const DEBOUNCE_MS = 200;
+
 export function useCollectionSearch(collectionId: string) {
     const [searchRequest, setSearchRequest] = useState<SearchRequest>({
         collectionId: collectionId,
@@ -20,7 +22,7 @@ export function useCollectionSearch(collectionId: string) {
             asc: false
         }
     });
-    const debouncedRequest = useDebounce(searchRequest);
+    const debouncedRequest = useDebounce(searchRequest, DEBOUNCE_MS);
     const http = useHttp();
     const toast = useToast();
 
@@ -43,6 +45,7 @@ export function useCollectionSearch(collectionId: string) {
             !request.query &&
             request.tags.length === 0
         ) {
+            // don't search for files when no query or tags specified
             request.target = "collections";
         }
 
@@ -87,7 +90,7 @@ export function useCollectionSearch(collectionId: string) {
     return {
         searchRequest: searchRequest,
         isSearching: isLoading,
-        searchResult: searchResult,
+        searchResult: isLoading ? [] : searchResult,
         onSearch: onSearch,
         setSearchResult: setSearchResult
     };

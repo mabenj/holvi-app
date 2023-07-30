@@ -1,4 +1,4 @@
-import { getFileSrc } from "@/lib/common/utilities";
+import { caseInsensitiveSorter, getFileSrc } from "@/lib/common/utilities";
 import { CollectionDto } from "@/lib/types/collection-dto";
 import {
     CreationOptional,
@@ -60,15 +60,16 @@ export class Collection extends Model<
             description: this.description,
             tags: this.Tags?.map((tag) => tag.name) || [],
             thumbnails:
-                this.CollectionFiles?.slice(0, Collection.thumbnailsLimit).map(
-                    (file) =>
+                this.CollectionFiles?.sort(caseInsensitiveSorter("name"))
+                    .slice(0, Collection.thumbnailsLimit)
+                    .map((file) =>
                         getFileSrc({
                             collectionId: this.id,
                             fileId: file.id,
                             mimeType: file.mimeType,
                             thumbnail: true
                         })
-                ) || [],
+                    ) || [],
             timestamp: this.createdAt.getTime(),
             videoCount:
                 this.CollectionFiles?.filter((file) =>
