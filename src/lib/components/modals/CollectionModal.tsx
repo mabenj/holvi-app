@@ -38,7 +38,7 @@ interface CollectionModalProps {
           }
     >;
     isSaving: boolean;
-    initialCollection?: Partial<CollectionDto>;
+    initialCollection?: CollectionDto;
 }
 
 export default function CollectionModal({
@@ -76,17 +76,17 @@ export default function CollectionModal({
         onClose();
         setValue(
             "name",
-            mode === "edit" ? formData.name : initialCollection?.name || ""
+            mode === "edit" ? result.name : initialCollection?.name || ""
         );
         setValue(
             "description",
             mode === "edit"
-                ? formData.description
+                ? result.description
                 : initialCollection?.description
         );
         setValue(
             "tags",
-            mode === "edit" ? formData.tags : initialCollection?.tags || []
+            mode === "edit" ? result.tags : initialCollection?.tags || []
         );
     };
 

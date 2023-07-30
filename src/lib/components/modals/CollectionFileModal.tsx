@@ -27,12 +27,16 @@ import TagInput from "../ui/TagInput";
 interface CollectionFileModalProps {
     isOpen: boolean;
     onClose: () => void;
-    initialFile: Partial<CollectionFileDto>;
+    onSave: (data: CollectionFileFormData, id: string) => Promise<CollectionFileDto>;
+    isSaving: boolean;
+    initialFile: CollectionFileDto;
 }
 
 export default function CollectionFileModal({
     isOpen,
     onClose,
+    onSave,
+    isSaving,
     initialFile
 }: CollectionFileModalProps) {
     const {
@@ -50,19 +54,14 @@ export default function CollectionFileModal({
         resolver: zodResolver(CollectionFileValidator)
     });
 
-    const {
-        actions: { editFile },
-        flags: { isSavingFile }
-    } = useCollectionGrid();
-
     const onSubmit = async (formData: CollectionFileFormData) => {
         if (!initialFile.collectionId) {
             return;
         }
-        await editFile(formData, initialFile.collectionId);
+        const edited = await onSave(formData, initialFile.collectionId);
         onClose();
-        setValue("name", formData.name);
-        setValue("tags", formData.tags);
+        setValue("name", edited.name);
+        setValue("tags", edited.tags);
     };
 
     const handleCancel = () => {
@@ -131,7 +130,7 @@ export default function CollectionFileModal({
                     <Button
                         type="submit"
                         form="collection-file-form"
-                        isLoading={isSavingFile}>
+                        isLoading={isSaving}>
                         Save
                     </Button>
                 </ModalFooter>

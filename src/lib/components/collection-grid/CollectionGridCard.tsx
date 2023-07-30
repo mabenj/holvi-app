@@ -10,7 +10,6 @@ import {
     MenuButton,
     MenuItem,
     MenuList,
-    Spinner,
     useDisclosure
 } from "@chakra-ui/react";
 import { mdiDelete, mdiDotsVertical, mdiSquareEditOutline } from "@mdi/js";
@@ -29,8 +28,8 @@ interface CollectionGridCardProps {
 
 export default function CollectionGridCard({ item }: CollectionGridCardProps) {
     const {
-        actions: { saveCollection, deleteCollection, deleteFile },
-        flags: { isSavingCollection, isDeletingCollection, isDeletingFile }
+        actions: { saveCollection, deleteCollection, editFile, deleteFile },
+        flags: { isSavingCollection, isDeletingCollection, isSavingFile, isDeletingFile }
     } = useCollectionGrid();
 
     const [isHovering, setIsHovering] = useState(false);
@@ -138,14 +137,6 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
                             </MenuList>
                         </Menu>
                     )}
-                    {isDeleting && (
-                        <Spinner
-                            position="absolute"
-                            top="50%"
-                            left="50%"
-                            color="whiteAlpha.800"
-                        />
-                    )}
                 </Box>
             </Flex>
 
@@ -156,12 +147,7 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
                     onSave={saveCollection}
                     isSaving={isSavingCollection}
                     mode="edit"
-                    initialCollection={{
-                        id: item.id,
-                        name: item.name,
-                        tags: item.tags,
-                        description: item.description
-                    }}
+                    initialCollection={item as CollectionDto}
                 />
             )}
 
@@ -169,12 +155,9 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
                 <CollectionFileModal
                     isOpen={isFileModalOpen}
                     onClose={onFileModalClose}
-                    initialFile={{
-                        collectionId: (item as CollectionFileDto).collectionId,
-                        id: item.id,
-                        name: item.name,
-                        tags: item.tags || []
-                    }}
+                    onSave={editFile}
+                    isSaving={isSavingFile}
+                    initialFile={item as CollectionFileDto}
                 />
             )}
 
