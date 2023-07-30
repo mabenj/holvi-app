@@ -194,10 +194,10 @@ const PhotoViewerToolbar = ({ item }: { item: CollectionGridItem | null }) => {
     }
 
     return (
-        <Flex direction="column" alignItems="end" pr={5}>
+        <Flex direction="column" alignItems="end">
             <Box
                 fontSize="sm"
-                maxW={["8rem", "20rem", "25rem", "30rem"]}
+                maxW={["12rem", "20rem", "25rem", "30rem"]}
                 whiteSpace="nowrap"
                 overflow="hidden"
                 textOverflow="ellipsis"
@@ -212,13 +212,20 @@ const PhotoViewerToolbar = ({ item }: { item: CollectionGridItem | null }) => {
                             target="_blank">
                             <Flex alignItems="center" gap={1}>
                                 <Icon path={mdiMapMarker} size={0.5} />
-                                <span>{item.gps.label || "Google Maps"}</span>
+                                <Box
+                                    maxW={["6rem", "12rem", "30rem"]}
+                                    whiteSpace="nowrap"
+                                    overflow="hidden"
+                                    textOverflow="ellipsis"
+                                    title={item.gps.label || "Google Maps"}>
+                                    {item.gps.label || "Google Maps"}
+                                </Box>
                             </Flex>
                         </Link>
                     )}
                 </Box>
                 {item.type === "image" && item.gps && <span>|</span>}
-                <span>{formatDate(item.timestamp)}</span>
+                <Box whiteSpace="nowrap">{formatDate(item.timestamp)}</Box>
             </Flex>
         </Flex>
     );

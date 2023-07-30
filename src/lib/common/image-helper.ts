@@ -6,7 +6,7 @@ import appConfig from "./app-config";
 import { HolviError } from "./errors";
 import Log, { LogColor } from "./log";
 import { createDirIfNotExists } from "./user-file-system";
-import { getErrorMessage } from "./utilities";
+import { getErrorMessage, removeSubstring } from "./utilities";
 
 interface ExifData {
     gps?: {
@@ -68,40 +68,25 @@ export class ImageHelper {
             let label: string | undefined;
 
             const res = await fetch(
-                `http://api.positionstack.com/v1/reverse?access_key=${appConfig.geoApiKey}&query=${latitude},${longitude}&output=json`
+                `https://api.bigdatacloud.net/data/reverse-geocode?latitude=${latitude}&longitude=${longitude}&key=${appConfig.geoApiKey}`
             );
             if (res.status !== 200) {
                 this.logger.warn(
                     `Geocoding API request responded with '${res.status} (${res.statusText})'`
                 );
             } else {
-                const { data } = await res.json();
-                let {
-                    country,
-                    region,
-                    county,
-                    locality,
-                    neighbourhood,
-                    name,
-                    label: apiLabel
-                } = data[0] || {};
-                let specificArea = county || locality || neighbourhood;
-                if (!specificArea || !country) {
-                    label = apiLabel || name || undefined;
-                } else {
-                    const stringBuilder = [] as string[];
-                    if (specificArea?.toLowerCase() !== region?.toLowerCase()) {
-                        stringBuilder.push(specificArea);
-                    }
-                    region && stringBuilder.push(region);
-                    if (
-                        specificArea?.toLowerCase() !== region?.toLowerCase() &&
-                        !region?.includes(country)
-                    ) {
-                        stringBuilder.push(country);
-                    }
-                    label = stringBuilder.join(", ") || apiLabel || name;
-                }
+                const { countryName, principalSubdivision, city, locality } =
+                    await res.json();
+
+                const uniqueParts = new Set(
+                    [
+                        removeSubstring(countryName, "(the)"),
+                        principalSubdivision,
+                        city,
+                        locality
+                    ].filter((part) => !!part.trim())
+                );
+                label = Array.from(uniqueParts).reverse().join(", ");
             }
 
             return {

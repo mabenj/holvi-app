@@ -23,7 +23,7 @@ if (
 
 if (!isProd && !process.env.GEO_API_KEY) {
     throw new Error(
-        "Positionstack API key missing (get  free api key at https://positionstack.com/product)"
+        "Positionstack API key missing (get free api key at https://www.bigdatacloud.com/packages/reverse-geocoding)"
     );
 }
 

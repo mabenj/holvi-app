@@ -16,7 +16,9 @@ export function useUpload() {
         try {
             const response = await upload(
                 files,
-                `/api/collections/upload?name=${encodeURIComponent(collectionName)}`,
+                `/api/collections/upload?name=${encodeURIComponent(
+                    collectionName
+                )}`,
                 "POST"
             );
             if (response.status === "error" || response.error) {
@@ -95,7 +97,9 @@ export function useUpload() {
                 });
             } else {
                 toast({
-                    description: `${collectionFiles.length} files uploaded`,
+                    description: `${collectionFiles.length} file${
+                        collectionFiles.length !== 1 ? "s" : ""
+                    } uploaded`,
                     status: "success"
                 });
             }

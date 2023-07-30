@@ -32,7 +32,7 @@ Create a `.env.local` file in the root of the project and add the following vari
 
 `SESSION_PASSWORD=<32 character long session password>`
 
-`GEO_API_KEY=<reverse geocoding API key (https://positionstack.com/product)>`
+`GEO_API_KEY=<reverse geocoding API key (https://www.bigdatacloud.com/packages/reverse-geocoding)>`
 
 ### Install dependencies
 

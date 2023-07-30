@@ -118,3 +118,8 @@ export function formatDate(date: Date | number) {
 export function isValidDate(d: any) {
     return !isNaN(d) && d instanceof Date;
 }
+
+export function removeSubstring(input: string, substring: string): string {
+    const regex = new RegExp(substring, "gi");
+    return input.replace(regex, "").replace(/\(\)/g, "").trim();
+}
