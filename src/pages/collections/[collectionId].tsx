@@ -100,54 +100,56 @@ export default function CollectionPage({
                 <title>{currentCollection.name}</title>
             </Head>
             <Layout user={user}>
-                <Breadcrumbs collectionName={currentCollection.name} />
-                <Flex direction="column" gap={3} px={4} pt={8}>
-                    <Heading>{currentCollection.name}</Heading>
+                <Box px={4}>
+                    <Breadcrumbs collectionName={currentCollection.name} />
+                    <Flex direction="column" gap={3} pt={8}>
+                        <Heading>{currentCollection.name}</Heading>
 
-                    <Box color="gray.500">
-                        <Linkify
-                            componentDecorator={(
-                                decoratedHref,
-                                decoratedText,
-                                key
-                            ) => (
-                                <Link
-                                    key={key}
-                                    href={decoratedHref}
-                                    target="_blank">
-                                    {decoratedText}
-                                </Link>
-                            )}>
-                            {currentCollection.description}
-                        </Linkify>
-                    </Box>
-                    <Flex flexWrap="wrap" gap={2}>
-                        {currentCollection.tags.map((tag) => (
-                            <TagChip key={tag} tag={tag} />
-                        ))}
+                        <Box color="gray.500">
+                            <Linkify
+                                componentDecorator={(
+                                    decoratedHref,
+                                    decoratedText,
+                                    key
+                                ) => (
+                                    <Link
+                                        key={key}
+                                        href={decoratedHref}
+                                        target="_blank">
+                                        {decoratedText}
+                                    </Link>
+                                )}>
+                                {currentCollection.description}
+                            </Linkify>
+                        </Box>
+                        <Flex flexWrap="wrap" gap={2}>
+                            {currentCollection.tags.map((tag) => (
+                                <TagChip key={tag} tag={tag} />
+                            ))}
+                        </Flex>
                     </Flex>
-                </Flex>
 
-                <Box py={5}>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        color="gray.500"
-                        leftIcon={
-                            <Icon path={mdiSquareEditOutline} size={0.6} />
-                        }
-                        onClick={onModalOpen}>
-                        Edit collection
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        color="gray.500"
-                        leftIcon={<Icon path={mdiDelete} size={0.6} />}
-                        onClick={onAlertOpen}
-                        isLoading={isDeleting}>
-                        Delete collection
-                    </Button>
+                    <Box py={5}>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            color="gray.500"
+                            leftIcon={
+                                <Icon path={mdiSquareEditOutline} size={0.6} />
+                            }
+                            onClick={onModalOpen}>
+                            Edit collection
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            color="gray.500"
+                            leftIcon={<Icon path={mdiDelete} size={0.6} />}
+                            onClick={onAlertOpen}
+                            isLoading={isDeleting}>
+                            Delete collection
+                        </Button>
+                    </Box>
                 </Box>
 
                 <CollectionGrid collectionId={collection.id} />
@@ -176,7 +178,7 @@ export default function CollectionPage({
 }
 
 const Breadcrumbs = ({ collectionName }: { collectionName: string }) => (
-    <Breadcrumb px={4}>
+    <Breadcrumb>
         <BreadcrumbItem>
             <BreadcrumbLink as={Link} href="/" fontWeight="semibold">
                 Home

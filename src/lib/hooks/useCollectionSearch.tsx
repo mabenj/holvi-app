@@ -38,6 +38,13 @@ export function useCollectionSearch(collectionId: string) {
         if (collectionId === "root") {
             delete request.collectionId;
         }
+        if (
+            collectionId === "root" &&
+            !request.query &&
+            request.tags.length === 0
+        ) {
+            request.target = "collections";
+        }
 
         const { data, error } = await http.post<ApiData<SearchResult>>(url, {
             payload: request
