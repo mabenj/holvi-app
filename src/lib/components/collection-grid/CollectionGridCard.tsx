@@ -49,7 +49,6 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
         onOpen: onAlertOpen,
         onClose: onAlertClose
     } = useDisclosure();
-    const cancelDeleteRef = useRef(null);
 
     const isCollection = item.type === "collection";
     const isImage = item.type === "image";

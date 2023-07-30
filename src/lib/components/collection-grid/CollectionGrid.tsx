@@ -2,9 +2,9 @@ import {
     CollectionGridProvider,
     useCollectionGrid
 } from "@/lib/context/CollectionGridContext";
+import { PhotoViewerProvider } from "@/lib/context/PhotoViewerContext";
 import { CollectionGridItem } from "@/lib/types/collection-grid-item";
 import { Box, Flex, Heading, SimpleGrid } from "@chakra-ui/react";
-import PhotoViewer from "../photo-viewer/PhotoViewer";
 import IfNotLoading from "../ui/IfNotLoading";
 import CollectionGridActionBar from "./CollectionGridActionBar";
 import CollectionGridCard from "./CollectionGridCard";
@@ -47,8 +47,6 @@ const GridWithActionBar = () => {
                         No collections or files
                     </Box>
                 )}
-
-                <PhotoViewer items={files} />
             </IfNotLoading>
         </Flex>
     );
@@ -67,7 +65,7 @@ const ResponsiveGrid = ({
         return <></>;
     }
     return (
-        <>
+        <PhotoViewerProvider items={items}>
             {showTitle && (
                 <Heading size="md" px={3}>
                     {title}
@@ -79,6 +77,6 @@ const ResponsiveGrid = ({
                     <CollectionGridCard key={item.id} item={item} />
                 ))}
             </SimpleGrid>
-        </>
+        </PhotoViewerProvider>
     );
 };

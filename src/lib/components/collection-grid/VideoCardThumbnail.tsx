@@ -3,15 +3,30 @@ import { Box, Flex } from "@chakra-ui/react";
 import { mdiPlayCircle } from "@mdi/js";
 import Icon from "@mdi/react";
 import Image from "next/image";
-import { Photo } from "../photo-viewer/PhotoViewer";
+import { useRouter } from "next/router";
 
 export default function VideoCardThumbnail({
     item
 }: {
     item: CollectionFileDto;
 }) {
+    const router = useRouter();
+
+    const handleClick = () => {
+        router.push(
+            {
+                pathname: window.location.pathname,
+                query: {
+                    photoId: item.id
+                }
+            },
+            undefined,
+            { shallow: true }
+        );
+    };
+
     return (
-        <Photo id={item.id}>
+        <Box onClick={handleClick}>
             <Image
                 src={item.thumbnailSrc!}
                 alt={item.name}
@@ -47,7 +62,7 @@ export default function VideoCardThumbnail({
                     </Box>
                 )}
             </Flex>
-        </Photo>
+        </Box>
     );
 }
 

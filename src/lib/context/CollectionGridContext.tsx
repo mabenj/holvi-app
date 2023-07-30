@@ -249,7 +249,8 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
     const updateItemsToRender = () => {
         const collections: CollectionGridItem[] = [];
         const files: CollectionGridItem[] = [];
-        const itemPool = isSearching ? [] : (searchResult || allItems);
+        const itemPool =
+            isSearching || isFetchingItems ? [] : searchResult || allItems;
         itemPool.forEach((item) => {
             if (item.type === "collection") {
                 collections.push(item);
