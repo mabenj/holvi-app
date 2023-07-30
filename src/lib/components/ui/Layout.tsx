@@ -1,17 +1,8 @@
+import { useAuth } from "@/lib/hooks/useAuth";
 import { Image, Link } from "@chakra-ui/next-js";
-import {
-    Box,
-    Button,
-    Container,
-    Flex,
-    Heading,
-    useToast
-} from "@chakra-ui/react";
+import { Box, Button, Container, Flex, Heading } from "@chakra-ui/react";
 import Head from "next/head";
-import { useRouter } from "next/router";
 import brandImage from "../../../../public/favicon-32x32.png";
-import { getErrorMessage } from "../../common/utilities";
-import { useHttp } from "../../hooks/useHttp";
 import { UserDto } from "../../types/user-dto";
 import ColorModeToggle from "./ColorModeToggle";
 
@@ -42,25 +33,7 @@ export default function Layout({ children, user }: LayoutProps) {
 }
 
 const Navbar = ({ username }: { username?: string }) => {
-    const http = useHttp();
-    const router = useRouter();
-    const toast = useToast();
-
-    const handleLogout = async () => {
-        const { error } = await http.post("/api/auth/logout");
-        if (error) {
-            toast({
-                description: `Error signing out: ${getErrorMessage(error)}`,
-                status: "error"
-            });
-        } else {
-            await router.push("/login");
-            toast({
-                description: "You have been signed out",
-                status: "info"
-            });
-        }
-    };
+    const { signOut, isSigningOut } = useAuth();
 
     return (
         <nav>
@@ -82,9 +55,9 @@ const Navbar = ({ username }: { username?: string }) => {
                     <strong>{username}</strong>
                     <Button
                         type="button"
-                        onClick={handleLogout}
+                        onClick={signOut}
                         size="sm"
-                        isLoading={http.isLoading}>
+                        isLoading={isSigningOut}>
                         Log out
                     </Button>
                     <ColorModeToggle />

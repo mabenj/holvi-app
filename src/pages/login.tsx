@@ -1,8 +1,6 @@
-import { ApiData } from "@/lib/common/api-route";
 import { getErrorMessage } from "@/lib/common/utilities";
 import ColorModeToggle from "@/lib/components/ui/ColorModeToggle";
-import { useHttp } from "@/lib/hooks/useHttp";
-import { SignUpResponse } from "@/lib/types/sign-up-response";
+import { useAuth } from "@/lib/hooks/useAuth";
 import {
     LoginFormData,
     LoginValidator
@@ -31,13 +29,10 @@ import {
     ModalFooter,
     ModalHeader,
     ModalOverlay,
-    useDisclosure,
-    useToast
+    useDisclosure
 } from "@chakra-ui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Head from "next/head";
-import { useRouter } from "next/router";
-import { useState } from "react";
 import { useForm } from "react-hook-form";
 import brandImage from "../../public/favicon-32x32.png";
 
@@ -60,7 +55,6 @@ export default function Login() {
 }
 
 const LoginCard = () => {
-    const [isBusy, setIsBusy] = useState(false);
     const {
         register,
         handleSubmit,
@@ -69,31 +63,14 @@ const LoginCard = () => {
     } = useForm<LoginFormData>({
         resolver: zodResolver(LoginValidator)
     });
-    const http = useHttp();
-    const toast = useToast();
-    const router = useRouter();
+    const { signIn, isSigningIn } = useAuth();
 
-    const onSubmit = async (formData: LoginFormData) => {
-        setIsBusy(true);
-        const { error, statusCode } = await http
-            .post("/api/auth/login", { payload: formData })
-            .catch((error) => {
-                setIsBusy(false);
-                throw error;
-            });
-        if (error || statusCode !== 200) {
+    const onSubmit = (formData: LoginFormData) => {
+        signIn(formData).catch((error) => {
             setError("username", { message: "" });
             // show the message only below pwd field
             setError("password", { message: getErrorMessage(error) });
-            setIsBusy(false);
-            return;
-        }
-        await router.push("/");
-        toast({
-            description: "Successfully logged in",
-            status: "success"
         });
-        setIsBusy(false);
     };
 
     return (
@@ -137,7 +114,7 @@ const LoginCard = () => {
 
                                 <Button
                                     type="submit"
-                                    isLoading={http.isLoading || isBusy}
+                                    isLoading={isSigningIn}
                                     form="login-form">
                                     Login
                                 </Button>
@@ -160,7 +137,6 @@ const LoginCard = () => {
 };
 
 const SignUpModal = () => {
-    const [isBusy, setIsBusy] = useState(false);
     const { isOpen, onOpen, onClose } = useDisclosure();
     const {
         register,
@@ -170,34 +146,19 @@ const SignUpModal = () => {
     } = useForm<SignUpFormData>({
         resolver: zodResolver(SignUpValidator)
     });
-    const http = useHttp();
-    const toast = useToast();
-    const router = useRouter();
+    const { isSigningUp, signUp } = useAuth();
 
     const onSubmit = async (formData: SignUpFormData) => {
-        setIsBusy(true);
-        const { data, error } = await http
-            .post<ApiData<SignUpResponse>>("/api/auth/signup", {
-                payload: formData
-            })
-            .catch((error) => {
-                setIsBusy(false);
-                throw error;
-            });
-        if (data?.status === "ok" && !error) {
-            await router.push("/");
-            toast({
-                description: "Successfully singed up",
-                status: "success"
-            });
-            setIsBusy(false);
-            return;
-        }
-        data?.usernameError &&
-            setError("username", { message: data.usernameError });
-        data?.passwordError &&
-            setError("password", { message: data.passwordError });
-        setIsBusy(false);
+        signUp(formData).catch((error) => {
+            if ("usernameError" in error || "passwordError" in error) {
+                error.usernameError &&
+                    setError("username", { message: error.usernameError });
+                error.passwordError &&
+                    setError("password", { message: error.passwordError });
+                return;
+            }
+            throw error;
+        });
     };
 
     return (
@@ -272,7 +233,7 @@ const SignUpModal = () => {
                         <Button
                             type="submit"
                             form="sign-up-form"
-                            isLoading={http.isLoading || isBusy}>
+                            isLoading={isSigningUp}>
                             Sign up
                         </Button>
                     </ModalFooter>
