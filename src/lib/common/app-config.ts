@@ -43,6 +43,8 @@ interface AppConfig {
     };
     readonly streamChunkSize: number;
     readonly geoApiKey: string;
+    readonly thumbnailMaxWidth: number,
+    readonly thumbnailMaxHeight: number,
 }
 
 const appConfig: AppConfig = {
@@ -69,7 +71,9 @@ const appConfig: AppConfig = {
     },
     streamChunkSize:
         parseInt(process.env.STREAM_CHUNK_SIZE_KB || "0", 10) || 3_000_000, // default to 3 mb
-    geoApiKey: process.env.GEO_API_KEY || ""
+    geoApiKey: process.env.GEO_API_KEY || "",
+    thumbnailMaxWidth: 600,
+    thumbnailMaxHeight: 600,
 };
 
 export default appConfig;

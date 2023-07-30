@@ -19,7 +19,7 @@ const DIVISIONS = [
 export const EMPTY_UUIDV4 = "00000000-0000-0000-0000-000000000000";
 
 export function isUuidv4(uuid?: string) {
-    if(!uuid){
+    if (!uuid) {
         return false;
     }
     return /^[0-9A-F]{8}-[0-9A-F]{4}-[4][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/i.test(
@@ -117,4 +117,4 @@ export function formatDate(date: Date | number) {
 
 export function isValidDate(d: any) {
     return !isNaN(d) && d instanceof Date;
-  }
+}

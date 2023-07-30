@@ -1,4 +1,3 @@
-import ExifParser from "exif-parser";
 import formidable from "formidable";
 import { createReadStream } from "fs";
 import {
@@ -13,22 +12,13 @@ import {
 } from "fs/promises";
 import { IncomingMessage } from "http";
 import path from "path";
-import { promisify } from "util";
 import appConfig from "./app-config";
 import Cryptography from "./cryptography";
 import { HolviError } from "./errors";
+import { ImageHelper } from "./image-helper";
 import Log, { LogColor } from "./log";
 import { getErrorMessage, isValidDate } from "./utilities";
-
-interface ExifData {
-    gps?: {
-        latitude: number;
-        longitude: number;
-        altitude?: number;
-        label?: string;
-    };
-    takenAt?: Date;
-}
+import { VideoHelper } from "./video-helper";
 
 interface ParsedFile {
     filepath: string;
@@ -213,107 +203,6 @@ export class UserFileSystem {
         }
     }
 
-    private async getExif(imagePath: string): Promise<ExifData | undefined> {
-        const SECONDS_TO_MS = 1000;
-
-        try {
-            const buffer = await readBytes(imagePath);
-            if (!buffer) {
-                throw new HolviError("Could not read image to buffer");
-            }
-            const parser = ExifParser.create(buffer);
-            const {
-                tags: {
-                    GPSLatitude,
-                    GPSLatitudeRef,
-                    GPSLongitude,
-                    GPSLongitudeRef,
-                    GPSAltitude,
-                    GPSAltitudeRef,
-                    DateTimeOriginal,
-                    CreateDate
-                }
-            } = parser.parse();
-
-            const takenAt = DateTimeOriginal
-                ? new Date(DateTimeOriginal * SECONDS_TO_MS)
-                : CreateDate
-                ? new Date(CreateDate * SECONDS_TO_MS)
-                : undefined;
-
-            if (
-                !GPSLatitude ||
-                !GPSLatitudeRef ||
-                !GPSLongitude ||
-                !GPSLongitudeRef
-            ) {
-                return { takenAt };
-            }
-
-            const latitude = (
-                GPSLatitudeRef === "N" ? GPSLatitude : -GPSLatitude
-            ) as number;
-            const longitude = (
-                GPSLongitudeRef === "E" ? GPSLongitude : -GPSLongitude
-            ) as number;
-            const altitude = GPSAltitude as number;
-            let label: string | undefined;
-
-            const res = await fetch(
-                `http://api.positionstack.com/v1/reverse?access_key=${appConfig.geoApiKey}&query=${latitude},${longitude}&output=json`
-            );
-            if (res.status !== 200) {
-                this.logger.warn(
-                    `Geocoding API request responded with '${res.status} (${res.statusText})'`
-                );
-            } else {
-                const { data } = await res.json();
-                let {
-                    country,
-                    region,
-                    county,
-                    locality,
-                    neighbourhood,
-                    name,
-                    label: apiLabel
-                } = data[0] || {};
-                let specificArea = county || locality || neighbourhood;
-                if (!specificArea || !country) {
-                    label = apiLabel || name || undefined;
-                } else {
-                    const stringBuilder = [] as string[];
-                    if (specificArea?.toLowerCase() !== region?.toLowerCase()) {
-                        stringBuilder.push(specificArea);
-                    }
-                    region && stringBuilder.push(region);
-                    if (
-                        specificArea?.toLowerCase() !== region?.toLowerCase() &&
-                        !region?.includes(country)
-                    ) {
-                        stringBuilder.push(country);
-                    }
-                    label = stringBuilder.join(", ") || apiLabel || name;
-                }
-            }
-
-            return {
-                takenAt,
-                gps: {
-                    latitude,
-                    longitude,
-                    altitude,
-                    label
-                }
-            };
-        } catch (error) {
-            this.logger.warn(
-                `Could not parse exif data of image '${imagePath}' (${getErrorMessage(
-                    error
-                )})`
-            );
-        }
-    }
-
     private async tryProcessFile(
         file: ParsedFile,
         fallbackName: string
@@ -334,42 +223,82 @@ export class UserFileSystem {
                 file.originalFilename ||
                 fallbackName;
 
-            const {
-                width,
-                height,
-                thumbnailWidth,
-                thumbnailHeight,
-                durationInSeconds
-            } = await generateThumbnail(
-                isImage ? "image" : "video",
-                path.join(this.tempDir, filename),
-                path.join(this.tempDir, "tn", filename)
-            );
-            const exif = isImage
-                ? await this.getExif(path.join(this.tempDir, filename))
-                : undefined;
+            const filepath = path.join(this.tempDir, filename);
+            const thumbnailPath = path.join(this.tempDir, "tn", filename);
 
-            return {
-                processed: {
-                    id: filename,
-                    originalFilename,
-                    mimeType: file.mimeType || "unknown",
+            if (isVideo) {
+                const {
                     width,
                     height,
                     thumbnailWidth,
                     thumbnailHeight,
-                    gps: exif?.gps,
-                    takenAt: exif?.takenAt || file.lastModified || undefined,
                     durationInSeconds
-                }
-            };
+                } = await this.processVideo(filepath, thumbnailPath);
+                return {
+                    processed: {
+                        id: filename,
+                        originalFilename,
+                        mimeType: file.mimeType || "unknown",
+                        width,
+                        height,
+                        thumbnailWidth,
+                        thumbnailHeight,
+                        takenAt: file.lastModified || undefined,
+                        durationInSeconds
+                    }
+                };
+            } else {
+                const { width, height, thumbnailWidth, thumbnailHeight, exif } =
+                    await this.processImage(filepath, thumbnailPath);
+                return {
+                    processed: {
+                        id: filename,
+                        originalFilename,
+                        mimeType: file.mimeType || "unknown",
+                        width,
+                        height,
+                        thumbnailWidth,
+                        thumbnailHeight,
+                        gps: exif?.gps,
+                        takenAt: exif?.takenAt || file.lastModified || undefined
+                    }
+                };
+            }
         } catch (error) {
             return { error: getErrorMessage(error) };
         }
     }
+
+    private async processVideo(videoPath: string, thumbnailPath: string) {
+        const UNSUPPORTED_FORMATS = ["avi"];
+        const { durationInSeconds, format } =
+            await VideoHelper.getVideoMetadata(videoPath);
+
+        if (format && UNSUPPORTED_FORMATS.includes(format)) {
+            await VideoHelper.convertToMov(videoPath);
+        }
+
+        const { width, height, thumbnailWidth, thumbnailHeight } =
+            await VideoHelper.generateVideoThumbnail(videoPath, thumbnailPath);
+
+        return {
+            width,
+            height,
+            thumbnailWidth,
+            thumbnailHeight,
+            durationInSeconds
+        };
+    }
+
+    private async processImage(imagePath: string, thumbnailPath: string) {
+        const { width, height, thumbnailWidth, thumbnailHeight } =
+            await ImageHelper.generateImageThumbnail(imagePath, thumbnailPath);
+        const exif = await ImageHelper.getExif(imagePath);
+        return { width, height, thumbnailWidth, thumbnailHeight, exif };
+    }
 }
 
-async function createDirIfNotExists(dir: string) {
+export async function createDirIfNotExists(dir: string) {
     try {
         await stat(dir);
     } catch (e: any) {
@@ -456,142 +385,4 @@ async function parseForm(
             lastModified: isValidDate(lastModified) ? lastModified : null
         }));
     });
-}
-
-async function generateThumbnail(
-    filetype: "image" | "video",
-    sourceFile: string,
-    targetPath: string
-): Promise<{
-    width: number;
-    height: number;
-    thumbnailWidth: number;
-    thumbnailHeight: number;
-    durationInSeconds?: number;
-}> {
-    const maxWidth = 600;
-    const maxHeight = 600;
-    const dirname = path.dirname(targetPath);
-    await createDirIfNotExists(dirname);
-
-    if (filetype === "image") {
-        const [{ default: imageSize }, { default: sharp }] = await Promise.all([
-            import("image-size"),
-            import("sharp")
-        ]);
-        const sizeOf = promisify(imageSize);
-        const { width, height } = await sizeOf(sourceFile).then((result) => ({
-            width: result?.width || 0,
-            height: result?.height || 0
-        }));
-        sharp.cache(false);
-        const { width: thumbnailWidth, height: thumbnailHeight } = await sharp(
-            sourceFile
-        )
-            .resize({ width: maxWidth, height: maxHeight, fit: "inside" })
-            .toFile(targetPath);
-        return { width, height, thumbnailWidth, thumbnailHeight };
-    }
-
-    const thumbnailTimePercentage = 50;
-    const [
-        { default: ffmpegStatic },
-        { path: ffprobeStatic },
-        { default: ffmpeg }
-    ] = await Promise.all([
-        import("ffmpeg-static"),
-        import("ffprobe-static"),
-        import("fluent-ffmpeg")
-    ]);
-    ffmpeg.setFfmpegPath(ffmpegStatic!);
-    ffmpeg.setFfprobePath(ffprobeStatic!);
-    return new Promise((resolve, reject) =>
-        ffmpeg.ffprobe(sourceFile, (error, metadata) => {
-            try {
-                if (error) {
-                    throw error;
-                }
-
-                const videoStream = metadata.streams.find(
-                    (stream) => stream.codec_type === "video"
-                );
-                if (!videoStream) {
-                    throw new Error("Could not find video stream");
-                }
-                let rotation = 0;
-                if (videoStream.rotation) {
-                    if (typeof videoStream.rotation === "number") {
-                        rotation = Math.abs(videoStream.rotation);
-                    } else {
-                        rotation = Math.abs(
-                            Number(videoStream.rotation.replace(/\D/g, ""))
-                        );
-                    }
-                }
-                const videoWidth = videoStream.width || 0;
-                const videoHeight = videoStream.height || 0;
-                const { width: thumbnailWidth, height: thumbnailHeight } =
-                    calculateResolution({
-                        originalWidth:
-                            rotation === 90 ? videoHeight : videoWidth,
-                        originalHeight:
-                            rotation === 90 ? videoWidth : videoHeight,
-                        maxWidth,
-                        maxHeight
-                    });
-
-                const thumbnailTime =
-                    (metadata.format.duration || 1) *
-                    (thumbnailTimePercentage / 100);
-                ffmpeg(sourceFile)
-                    .on("end", async () => {
-                        // takeScreenshots() will add an unwanted .png extension
-                        await rename(targetPath + ".png", targetPath);
-                        resolve({
-                            width: videoWidth,
-                            height: videoHeight,
-                            thumbnailWidth,
-                            thumbnailHeight,
-                            durationInSeconds: metadata.format.duration
-                        });
-                    })
-                    .on("error", (error) => {
-                        throw error;
-                    })
-                    .takeScreenshots(
-                        {
-                            count: 1,
-                            fastSeek: true,
-                            timestamps: [thumbnailTime],
-                            size: `${thumbnailWidth}x${thumbnailHeight}`,
-                            filename: path.basename(targetPath)
-                        },
-                        dirname
-                    );
-            } catch (error) {
-                reject(
-                    new HolviError("Error generating video thumbnail", error)
-                );
-            }
-        })
-    );
-}
-
-function calculateResolution(options: {
-    originalWidth: number;
-    originalHeight: number;
-    maxWidth: number;
-    maxHeight: number;
-}) {
-    const { originalWidth, originalHeight, maxWidth, maxHeight } = options;
-    const ratioW = originalWidth / maxWidth;
-    const ratioH = originalHeight / maxHeight;
-    const factor = ratioW > ratioH ? ratioW : ratioH;
-    if (factor === 0) {
-        return { width: originalWidth, height: originalHeight };
-    }
-    return {
-        width: Math.floor(originalWidth / factor),
-        height: Math.floor(originalHeight / factor)
-    };
 }
