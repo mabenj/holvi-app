@@ -107,7 +107,10 @@ export class CollectionService {
                 }
             });
 
-            return fileInDb.toDto();
+            return {
+                ...fileInDb.toDto(),
+                tags: fileTags.map((tag) => tag.TagName)
+            };
         } catch (error) {
             transaction.rollback();
             throw new HolviError(`Error updating file '${data.id}'`, error);
