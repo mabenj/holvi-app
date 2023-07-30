@@ -3,14 +3,7 @@ import { CollectionDto } from "@/lib/types/collection-dto";
 import { CollectionFileDto } from "@/lib/types/collection-file-dto";
 import { CollectionGridItem } from "@/lib/types/collection-grid-item";
 import {
-    AlertDialog,
-    AlertDialogBody,
-    AlertDialogContent,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogOverlay,
     Box,
-    Button,
     Flex,
     IconButton,
     Menu,
@@ -25,6 +18,7 @@ import Icon from "@mdi/react";
 import { useRef, useState } from "react";
 import CollectionFileModal from "../modals/CollectionFileModal";
 import CollectionModal from "../modals/CollectionModal";
+import AreYouSureDialog from "../ui/AreYouSureDialog";
 import CollectionCardThumbnail from "./CollectionCardThumbnail";
 import ImageCardThumbnail from "./ImageCardThumbnail";
 import VideoCardThumbnail from "./VideoCardThumbnail";
@@ -184,38 +178,15 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
                 />
             )}
 
-            <AlertDialog
+            <AreYouSureDialog
+                confirmLabel="Delete"
+                header={`Delete ${isCollection ? "collection" : "file"}`}
+                isConfirming={isDeleting}
                 isOpen={isAlertOpen}
-                leastDestructiveRef={cancelDeleteRef}
                 onClose={onAlertClose}
-                isCentered>
-                <AlertDialogOverlay>
-                    <AlertDialogContent>
-                        <AlertDialogHeader fontSize="lg" fontWeight="bold">
-                            Delete {isCollection ? "collection" : "file"}
-                        </AlertDialogHeader>
-
-                        <AlertDialogBody>
-                            Are you sure? You cannot undo this afterwards.
-                        </AlertDialogBody>
-
-                        <AlertDialogFooter>
-                            <Button
-                                ref={cancelDeleteRef}
-                                onClick={onAlertClose}>
-                                Cancel
-                            </Button>
-                            <Button
-                                colorScheme="red"
-                                onClick={handleDelete}
-                                isLoading={isDeleting}
-                                ml={3}>
-                                Delete
-                            </Button>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialogOverlay>
-            </AlertDialog>
+                onConfirm={handleDelete}>
+                Are you sure? You cannot undo this afterwards.
+            </AreYouSureDialog>
         </>
     );
 }

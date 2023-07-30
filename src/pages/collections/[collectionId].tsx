@@ -2,6 +2,7 @@ import { NotFoundError } from "@/lib/common/errors";
 import { withSessionSsr } from "@/lib/common/iron-session";
 import CollectionGrid from "@/lib/components/collection-grid/CollectionGrid";
 import CollectionModal from "@/lib/components/modals/CollectionModal";
+import AreYouSureDialog from "@/lib/components/ui/AreYouSureDialog";
 import Layout from "@/lib/components/ui/Layout";
 import TagChip from "@/lib/components/ui/TagChip";
 import { useCollections } from "@/lib/hooks/useCollections";
@@ -66,6 +67,12 @@ export default function CollectionPage({
         isOpen: isModalOpen,
         onOpen: onModalOpen,
         onClose: onModalClose
+    } = useDisclosure();
+
+    const {
+        isOpen: isAlertOpen,
+        onOpen: onAlertOpen,
+        onClose: onAlertClose
     } = useDisclosure();
 
     const router = useRouter();
@@ -137,7 +144,7 @@ export default function CollectionPage({
                         size="sm"
                         color="gray.500"
                         leftIcon={<Icon path={mdiDelete} size={0.6} />}
-                        onClick={handleDeleteCollection}
+                        onClick={onAlertOpen}
                         isLoading={isDeleting}>
                         Delete collection
                     </Button>
@@ -145,6 +152,7 @@ export default function CollectionPage({
 
                 <CollectionGrid collectionId={collection.id} />
             </Layout>
+
             <CollectionModal
                 isOpen={isModalOpen}
                 onClose={onModalClose}
@@ -153,6 +161,16 @@ export default function CollectionPage({
                 initialCollection={currentCollection}
                 mode="edit"
             />
+
+            <AreYouSureDialog
+                confirmLabel="Delete"
+                header={`Delete collection`}
+                isConfirming={isDeleting}
+                isOpen={isAlertOpen}
+                onClose={onAlertClose}
+                onConfirm={handleDeleteCollection}>
+                Are you sure? You cannot undo this afterwards.
+            </AreYouSureDialog>
         </>
     );
 }
