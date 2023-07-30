@@ -195,7 +195,15 @@ const PhotoViewerToolbar = ({ item }: { item: CollectionGridItem | null }) => {
 
     return (
         <Flex direction="column" alignItems="end" pr={5}>
-            <Box fontSize="sm">{item.name}</Box>
+            <Box
+                fontSize="sm"
+                maxW={["8rem", "20rem", "25rem", "30rem"]}
+                whiteSpace="nowrap"
+                overflow="hidden"
+                textOverflow="ellipsis"
+                title={item.name}>
+                {item.name}
+            </Box>
             <Flex gap={2} fontSize="xs" textColor="whiteAlpha.600">
                 <Box>
                     {item.type === "image" && item.gps && (
