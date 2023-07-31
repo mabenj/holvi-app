@@ -9,12 +9,11 @@ import {
     Menu,
     MenuButton,
     MenuItem,
-    MenuList,
-    useDisclosure
+    MenuList
 } from "@chakra-ui/react";
 import { mdiDelete, mdiDotsVertical, mdiSquareEditOutline } from "@mdi/js";
 import Icon from "@mdi/react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import CollectionFileModal from "../modals/CollectionFileModal";
 import CollectionModal from "../modals/CollectionModal";
 import AreYouSureDialog from "../ui/AreYouSureDialog";
@@ -29,26 +28,16 @@ interface CollectionGridCardProps {
 export default function CollectionGridCard({ item }: CollectionGridCardProps) {
     const {
         actions: { saveCollection, deleteCollection, editFile, deleteFile },
-        flags: { isSavingCollection, isDeletingCollection, isSavingFile, isDeletingFile }
+        flags: {
+            isSavingCollection,
+            isDeletingCollection,
+            isSavingFile,
+            isDeletingFile
+        }
     } = useCollectionGrid();
 
     const [isHovering, setIsHovering] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const {
-        isOpen: isCollectionModalOpen,
-        onOpen: onCollectionModalOpen,
-        onClose: onCollectionModalClose
-    } = useDisclosure();
-    const {
-        isOpen: isFileModalOpen,
-        onOpen: onFileModalOpen,
-        onClose: onFileModalClose
-    } = useDisclosure();
-    const {
-        isOpen: isAlertOpen,
-        onOpen: onAlertOpen,
-        onClose: onAlertClose
-    } = useDisclosure();
 
     const isCollection = item.type === "collection";
     const isImage = item.type === "image";
@@ -61,7 +50,6 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
         } else {
             await deleteFile(item.id);
         }
-        onAlertClose();
     };
 
     return (
@@ -113,62 +101,78 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
                             />
 
                             <MenuList>
-                                <MenuItem
-                                    icon={
-                                        <Icon
-                                            path={mdiSquareEditOutline}
-                                            size={0.7}
-                                        />
-                                    }
-                                    onClick={
-                                        isCollection
-                                            ? onCollectionModalOpen
-                                            : onFileModalOpen
+                                {isCollection ? (
+                                    <CollectionModal
+                                        onSave={saveCollection}
+                                        isSaving={isSavingCollection}
+                                        mode="edit"
+                                        initialCollection={
+                                            item as CollectionDto
+                                        }
+                                        trigger={
+                                            <MenuItem
+                                                icon={
+                                                    <Icon
+                                                        path={
+                                                            mdiSquareEditOutline
+                                                        }
+                                                        size={0.7}
+                                                    />
+                                                }>
+                                                Edit collection
+                                            </MenuItem>
+                                        }
+                                    />
+                                ) : (
+                                    <CollectionFileModal
+                                        onSave={editFile}
+                                        isSaving={isSavingFile}
+                                        initialFile={item as CollectionFileDto}
+                                        trigger={
+                                            <MenuItem
+                                                icon={
+                                                    <Icon
+                                                        path={
+                                                            mdiSquareEditOutline
+                                                        }
+                                                        size={0.7}
+                                                    />
+                                                }>
+                                                Edit file
+                                            </MenuItem>
+                                        }
+                                    />
+                                )}
+
+                                <AreYouSureDialog
+                                    confirmLabel="Delete"
+                                    header={`Delete ${
+                                        isCollection ? "collection" : "file"
+                                    }`}
+                                    isConfirming={isDeleting}
+                                    onConfirm={handleDelete}
+                                    trigger={
+                                        <MenuItem
+                                            icon={
+                                                <Icon
+                                                    path={mdiDelete}
+                                                    size={0.7}
+                                                />
+                                            }>
+                                            Delete{" "}
+                                            {isCollection
+                                                ? "collection"
+                                                : "file"}
+                                        </MenuItem>
                                     }>
-                                    Edit {isCollection ? "collection" : "file"}
-                                </MenuItem>
-                                <MenuItem
-                                    icon={<Icon path={mdiDelete} size={0.7} />}
-                                    onClick={onAlertOpen}>
-                                    Delete{" "}
-                                    {isCollection ? "collection" : "file"}
-                                </MenuItem>
+                                    Are you sure? You cannot undo this
+                                    afterwards.
+                                </AreYouSureDialog>
                             </MenuList>
                         </Menu>
                     )}
                 </Box>
             </Flex>
-
-            {isCollection && (
-                <CollectionModal
-                    isOpen={isCollectionModalOpen}
-                    onClose={onCollectionModalClose}
-                    onSave={saveCollection}
-                    isSaving={isSavingCollection}
-                    mode="edit"
-                    initialCollection={item as CollectionDto}
-                />
-            )}
-
-            {(isImage || isVideo) && (
-                <CollectionFileModal
-                    isOpen={isFileModalOpen}
-                    onClose={onFileModalClose}
-                    onSave={editFile}
-                    isSaving={isSavingFile}
-                    initialFile={item as CollectionFileDto}
-                />
-            )}
-
-            <AreYouSureDialog
-                confirmLabel="Delete"
-                header={`Delete ${isCollection ? "collection" : "file"}`}
-                isConfirming={isDeleting}
-                isOpen={isAlertOpen}
-                onClose={onAlertClose}
-                onConfirm={handleDelete}>
-                Are you sure? You cannot undo this afterwards.
-            </AreYouSureDialog>
         </>
     );
 }

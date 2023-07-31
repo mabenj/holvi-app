@@ -1,7 +1,7 @@
 import { useRotatingThumbnail } from "@/lib/hooks/useRotatingThumbnail";
 import { CollectionDto } from "@/lib/types/collection-dto";
 import { Link } from "@chakra-ui/next-js";
-import { Box, Flex } from "@chakra-ui/react";
+import { Box, Flex, Heading } from "@chakra-ui/react";
 import { mdiCamera, mdiImageOutline, mdiVideo } from "@mdi/js";
 import Icon from "@mdi/react";
 import Image from "next/image";
@@ -75,12 +75,14 @@ export default function CollectionCardThumbnail({
                     }}
                     opacity={isHovering ? 0 : 0.9}
                     transition="all 0.3s">
-                    <Box
-                        whiteSpace="nowrap"
-                        overflow="hidden"
-                        textOverflow="ellipsis">
-                        {item.name}
-                    </Box>
+                    <Heading p={0} m={0} size="xs" fontWeight="semibold">
+                        <Box
+                            whiteSpace="nowrap"
+                            overflow="hidden"
+                            textOverflow="ellipsis">
+                            {item.name}
+                        </Box>
+                    </Heading>
                     <Flex direction="column" alignItems="flex-end" gap={1}>
                         {item.videoCount > 0 && (
                             <Flex alignItems="center" gap={1}>

@@ -18,8 +18,7 @@ import {
     BreadcrumbLink,
     Button,
     Flex,
-    Heading,
-    useDisclosure
+    Heading
 } from "@chakra-ui/react";
 import { mdiDelete, mdiSquareEditOutline } from "@mdi/js";
 import Icon from "@mdi/react";
@@ -62,18 +61,6 @@ export default function CollectionPage({
     const [currentCollection, setCurrentCollection] = useState(collection);
     const { editCollection, isSaving, deleteCollection, isDeleting } =
         useCollections();
-
-    const {
-        isOpen: isModalOpen,
-        onOpen: onModalOpen,
-        onClose: onModalClose
-    } = useDisclosure();
-
-    const {
-        isOpen: isAlertOpen,
-        onOpen: onAlertOpen,
-        onClose: onAlertClose
-    } = useDisclosure();
 
     const router = useRouter();
 
@@ -130,49 +117,51 @@ export default function CollectionPage({
                     </Flex>
 
                     <Box py={5}>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            color="gray.500"
-                            leftIcon={
-                                <Icon path={mdiSquareEditOutline} size={0.6} />
+                        <CollectionModal
+                            isSaving={isSaving}
+                            onSave={handleSaveCollection}
+                            initialCollection={currentCollection}
+                            mode="edit"
+                            trigger={
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    color="gray.500"
+                                    leftIcon={
+                                        <Icon
+                                            path={mdiSquareEditOutline}
+                                            size={0.6}
+                                        />
+                                    }>
+                                    Edit collection
+                                </Button>
                             }
-                            onClick={onModalOpen}>
-                            Edit collection
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            color="gray.500"
-                            leftIcon={<Icon path={mdiDelete} size={0.6} />}
-                            onClick={onAlertOpen}
-                            isLoading={isDeleting}>
-                            Delete collection
-                        </Button>
+                        />
+
+                        <AreYouSureDialog
+                            confirmLabel="Delete"
+                            header={`Delete collection`}
+                            isConfirming={isDeleting}
+                            onConfirm={handleDeleteCollection}
+                            trigger={
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    color="gray.500"
+                                    leftIcon={
+                                        <Icon path={mdiDelete} size={0.6} />
+                                    }
+                                    isLoading={isDeleting}>
+                                    Delete collection
+                                </Button>
+                            }>
+                            Are you sure? You cannot undo this afterwards.
+                        </AreYouSureDialog>
                     </Box>
                 </Box>
 
                 <CollectionGrid collectionId={collection.id} />
             </Layout>
-
-            <CollectionModal
-                isOpen={isModalOpen}
-                onClose={onModalClose}
-                isSaving={isSaving}
-                onSave={handleSaveCollection}
-                initialCollection={currentCollection}
-                mode="edit"
-            />
-
-            <AreYouSureDialog
-                confirmLabel="Delete"
-                header={`Delete collection`}
-                isConfirming={isDeleting}
-                isOpen={isAlertOpen}
-                onClose={onAlertClose}
-                onConfirm={handleDeleteCollection}>
-                Are you sure? You cannot undo this afterwards.
-            </AreYouSureDialog>
         </>
     );
 }

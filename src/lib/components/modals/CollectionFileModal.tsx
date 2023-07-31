@@ -1,4 +1,3 @@
-import { useCollectionGrid } from "@/lib/context/CollectionGridContext";
 import {
     Button,
     Flex,
@@ -6,14 +5,9 @@ import {
     FormErrorMessage,
     FormHelperText,
     FormLabel,
+    Heading,
     Input,
-    Modal,
-    ModalBody,
-    ModalCloseButton,
-    ModalContent,
-    ModalFooter,
-    ModalHeader,
-    ModalOverlay
+    useDisclosure
 } from "@chakra-ui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
@@ -22,23 +16,27 @@ import {
     CollectionFileFormData,
     CollectionFileValidator
 } from "../../validators/collection-file.validator";
+import Dialog from "../ui/Dialog";
 import TagInput from "../ui/TagInput";
 
 interface CollectionFileModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    onSave: (data: CollectionFileFormData, id: string) => Promise<CollectionFileDto>;
+    trigger: React.ReactNode;
+    onSave: (
+        data: CollectionFileFormData,
+        id: string
+    ) => Promise<CollectionFileDto>;
     isSaving: boolean;
     initialFile: CollectionFileDto;
 }
 
 export default function CollectionFileModal({
-    isOpen,
-    onClose,
+    trigger,
     onSave,
     isSaving,
     initialFile
 }: CollectionFileModalProps) {
+    const { isOpen, onOpen, onClose } = useDisclosure();
+
     const {
         register,
         handleSubmit,
@@ -71,70 +69,74 @@ export default function CollectionFileModal({
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={handleCancel}>
-            <ModalOverlay />
-            <ModalContent>
-                <ModalHeader>Edit file</ModalHeader>
-                <ModalCloseButton />
-
-                <ModalBody>
-                    <form
-                        id="collection-file-form"
-                        onSubmit={handleSubmit(onSubmit)}>
-                        <Flex direction="column" gap={4}>
-                            <Input {...register("id")} hidden />
-                            <FormControl isInvalid={!!errors.name}>
-                                <FormLabel>File name</FormLabel>
-                                <Input
-                                    type="text"
-                                    isRequired
-                                    placeholder="Name..."
-                                    {...register("name")}
+        <Dialog
+            isOpen={isOpen}
+            onClose={onClose}
+            onOpen={onOpen}
+            trigger={trigger}
+            title={
+                <Heading size="lg" mb={8}>
+                    Edit file
+                </Heading>
+            }>
+            <form id="collection-file-form" onSubmit={handleSubmit(onSubmit)}>
+                <Flex direction="column" gap={4}>
+                    <Input {...register("id")} hidden />
+                    <FormControl isInvalid={!!errors.name}>
+                        <FormLabel>File name</FormLabel>
+                        <Input
+                            type="text"
+                            isRequired
+                            placeholder="Name..."
+                            {...register("name")}
+                        />
+                        <FormErrorMessage>
+                            {errors.name?.message}
+                        </FormErrorMessage>
+                    </FormControl>
+                    <FormControl isInvalid={!!errors.tags}>
+                        <FormLabel>Tags</FormLabel>
+                        <Controller
+                            control={control}
+                            name="tags"
+                            defaultValue={[]}
+                            render={({
+                                field: { onChange, onBlur, value }
+                            }) => (
+                                <TagInput
+                                    value={value}
+                                    onChange={onChange}
+                                    onBlur={onBlur}
                                 />
-                                <FormErrorMessage>
-                                    {errors.name?.message}
-                                </FormErrorMessage>
-                            </FormControl>
-                            <FormControl isInvalid={!!errors.tags}>
-                                <FormLabel>Tags</FormLabel>
-                                <Controller
-                                    control={control}
-                                    name="tags"
-                                    defaultValue={[]}
-                                    render={({
-                                        field: { onChange, onBlur, value }
-                                    }) => (
-                                        <TagInput
-                                            value={value}
-                                            onChange={onChange}
-                                            onBlur={onBlur}
-                                        />
-                                    )}
-                                />
+                            )}
+                        />
 
-                                <FormErrorMessage>
-                                    {errors.tags?.message}
-                                </FormErrorMessage>
-                                <FormHelperText>
-                                    Confirm tags with Enter, Tab, or comma keys
-                                </FormHelperText>
-                            </FormControl>
-                        </Flex>
-                    </form>
-                </ModalBody>
+                        <FormErrorMessage>
+                            {errors.tags?.message}
+                        </FormErrorMessage>
+                        <FormHelperText>
+                            Confirm tags with Enter, Tab, or comma keys
+                        </FormHelperText>
+                    </FormControl>
+                </Flex>
+            </form>
 
-                <ModalFooter>
-                    <Button variant="ghost" mr={3} onClick={handleCancel}>
-                        Cancel
-                    </Button>
-                    <Button
-                        type="submit"
-                        form="collection-file-form"
-                        isLoading={isSaving}>
-                        Save
-                    </Button>
-                </ModalFooter>
-            </ModalContent>
-        </Modal>
+            <Flex
+                w="100%"
+                justifyContent="center"
+                alignItems="center"
+                mt={10}
+                gap={3}>
+                <Button variant="ghost" onClick={handleCancel}>
+                    Cancel
+                </Button>
+                <Button
+                    type="submit"
+                    form="collection-file-form"
+                    isLoading={isSaving}>
+                    Save
+                </Button>
+            </Flex>
+        </Dialog>
     );
 }

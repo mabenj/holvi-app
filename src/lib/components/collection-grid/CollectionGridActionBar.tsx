@@ -14,8 +14,7 @@ import {
     MenuItemOption,
     MenuList,
     MenuOptionGroup,
-    Tag,
-    useDisclosure
+    Tag
 } from "@chakra-ui/react";
 import { mdiFilterVariant, mdiFolderUpload, mdiSort, mdiUpload } from "@mdi/js";
 import Icon from "@mdi/react";
@@ -285,25 +284,21 @@ const CreateCollectionBtn = () => {
         actions: { saveCollection },
         flags: { isSavingCollection, isLoading, isUploading }
     } = useCollectionGrid();
-    const { isOpen, onOpen, onClose } = useDisclosure();
 
     return (
-        <>
-            <Button
-                onClick={onOpen}
-                leftIcon={<AddIcon />}
-                title="Create a new collection"
-                isDisabled={isLoading || isUploading}>
-                Create
-            </Button>
-            <CollectionModal
-                isOpen={isOpen}
-                onClose={onClose}
-                onSave={saveCollection}
-                isSaving={isSavingCollection}
-                mode="create"
-            />
-        </>
+        <CollectionModal
+            onSave={saveCollection}
+            isSaving={isSavingCollection}
+            mode="create"
+            trigger={
+                <Button
+                    leftIcon={<AddIcon />}
+                    title="Create a new collection"
+                    isDisabled={isLoading || isUploading}>
+                    Create
+                </Button>
+            }
+        />
     );
 };
 
