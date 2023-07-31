@@ -63,10 +63,7 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
                     onMouseEnter={() => setIsHovering(true)}
                     onMouseLeave={() => setIsHovering(false)}>
                     {isCollection && (
-                        <CollectionCardThumbnail
-                            item={item as CollectionDto}
-                            isHovering={isHovering}
-                        />
+                        <CollectionCardThumbnail item={item as CollectionDto} />
                     )}
                     {isImage && (
                         <ImageCardThumbnail item={item as CollectionFileDto} />

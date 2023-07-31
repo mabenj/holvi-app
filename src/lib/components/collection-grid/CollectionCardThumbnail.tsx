@@ -5,15 +5,14 @@ import { Box, Flex, Heading } from "@chakra-ui/react";
 import { mdiCamera, mdiImageOutline, mdiVideo } from "@mdi/js";
 import Icon from "@mdi/react";
 import Image from "next/image";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export default function CollectionCardThumbnail({
-    item,
-    isHovering
+    item
 }: {
     item: CollectionDto;
-    isHovering: boolean;
 }) {
+    const [isHovering, setIsHovering] = useState(false);
     const { thumbnail, startRotating, stopRotating } = useRotatingThumbnail(
         item.thumbnails
     );
@@ -32,7 +31,13 @@ export default function CollectionCardThumbnail({
 
     return (
         <Link href={`/collections/${item.id}`}>
-            <Flex justifyContent="center" alignItems="center" w="100%" h="100%">
+            <Flex
+                justifyContent="center"
+                alignItems="center"
+                w="100%"
+                h="100%"
+                onMouseEnter={() => setIsHovering(true)}
+                onMouseLeave={() => setIsHovering(false)}>
                 {item.thumbnails.length > 0 && (
                     <Box w="100%" h="100%" position="relative">
                         <Image
