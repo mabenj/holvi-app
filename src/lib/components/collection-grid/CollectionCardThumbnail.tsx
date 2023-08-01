@@ -55,7 +55,6 @@ export default function CollectionCardThumbnail({
                     <Icon path={mdiImageOutline} size={4} />
                 )}
                 <Flex
-                    fontSize={["xs", "xs", "sm", "md"]}
                     w="100%"
                     h="100%"
                     justifyContent="space-between"
@@ -80,20 +79,24 @@ export default function CollectionCardThumbnail({
                     }}
                     opacity={isHovering ? 0 : 0.9}
                     transition="all 0.3s">
-                    <Heading p={0} m={0} size="xs" fontWeight="semibold">
-                        <Box
-                            whiteSpace="nowrap"
-                            overflow="hidden"
-                            textOverflow="ellipsis">
-                            {item.name}
-                        </Box>
+                    <Heading
+                        p={0}
+                        m={0}
+                        size="xs"
+                        fontSize={["x-small", "x-small", "xs", "sm"]}
+                        fontWeight="semibold"
+                        display="inline"
+                        whiteSpace="nowrap"
+                        overflow="hidden"
+                        textOverflow="ellipsis">
+                        {item.name}
                     </Heading>
-                    <Flex direction="column" alignItems="flex-end" gap={1}>
+                    <Flex direction="column" alignItems="flex-end" gap={1} fontSize={["x-small", "x-small", "xs", "sm"]}>
                         {item.videoCount > 0 && (
                             <Flex alignItems="center" gap={1}>
                                 <Icon
                                     path={mdiVideo}
-                                    size={0.7}
+                                    size={0.5}
                                     style={{
                                         filter: "drop-shadow(0 0 2px black)"
                                     }}
@@ -105,7 +108,7 @@ export default function CollectionCardThumbnail({
                             <Flex alignItems="center" gap={1}>
                                 <Icon
                                     path={mdiCamera}
-                                    size={0.7}
+                                    size={0.5}
                                     style={{
                                         filter: "drop-shadow(0 0 2px black)"
                                     }}
