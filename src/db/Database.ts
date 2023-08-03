@@ -1,7 +1,7 @@
 import appConfig from "@/lib/common/app-config";
 import Log, { LogColor } from "@/lib/common/log";
 import { sleep } from "@/lib/common/utilities";
-import { QueryTypes, Sequelize, Transaction } from "sequelize";
+import { QueryTypes, Sequelize } from "sequelize";
 import DatabaseUpgrade from "./DatabaseUpgrade";
 import { Collection } from "./models/Collection";
 import { CollectionFile } from "./models/CollectionFile";
@@ -12,7 +12,7 @@ import { Tag } from "./models/Tag";
 import { User } from "./models/User";
 
 export default class Database {
-    private static readonly version = 3;
+    private static readonly version = 2;
     private static instance: Database;
 
     private readonly sequelize;
@@ -50,10 +50,6 @@ export default class Database {
         return this.sequelize.transaction();
     }
 
-    public close() {
-        return this.sequelize.close();
-    }
-
     public static async getInstance() {
         while (Database.instance?.initializing) {
             await sleep(100);
@@ -63,21 +59,6 @@ export default class Database {
             await this.init();
         }
         return Database.instance;
-    }
-
-    public static async withTransaction<T>(
-        handler: (transaction: Transaction, db: Database) => Promise<T>
-    ) {
-        const db = await Database.getInstance();
-        const transaction = await db.transaction();
-        try {
-            const result = await handler(transaction, db);
-            transaction.commit();
-            return result;
-        } catch (error) {
-            await transaction.rollback();
-            throw error;
-        }
     }
 
     private static async init() {
@@ -153,10 +134,15 @@ export default class Database {
         const [dbInfo] = await DatabaseInfo.findCreateFind({
             where: { id: 1 }
         });
+        if (dbInfo.version === Database.version) {
+            return;
+        }
         await DatabaseUpgrade.upgrade(
             dbInfo.version,
             Database.version,
             Database.instance
         );
+        dbInfo.version = Database.version;
+        await dbInfo.save();
     }
 }
