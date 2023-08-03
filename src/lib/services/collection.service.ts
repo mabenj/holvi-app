@@ -378,7 +378,7 @@ export class CollectionService {
             }
             // update file
             collectionInDb.name = collectionData.name;
-            collectionInDb.description = collectionData.description;
+            collectionInDb.description = collectionData.description || "";
             await collectionInDb.save({ transaction });
 
             // create new tags
