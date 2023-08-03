@@ -1,129 +1,84 @@
-const isProd = process.env.NODE_ENV === "production";
+import { DeepReadonly } from "../types/deep-readonly";
 
-if (!isProd && !process.env.DB_CONNECTION_STRING) {
-    throw new Error(
-        "Database connection string is not defined (use environment variable 'DB_CONNECTION_STRING')"
-    );
-}
+const MEGABYTE = 1_000_000;
+const GIGABYTE = 1_000 * MEGABYTE;
+const HOUR = 60 * 60;
 
-if (!isProd && !process.env.DATA_DIR) {
-    throw new Error(
-        "Data directory is not defined (use environment variable 'DATA_DIR')"
-    );
-}
-
-if (
-    !isProd &&
-    (!process.env.SESSION_PASSWORD || process.env.SESSION_PASSWORD.length < 32)
-) {
-    throw new Error(
-        "Missing a 32 characters long session password. Generate one at https://1password.com/password-generator/ and use environment variable 'SESSION_PASSWORD'"
-    );
-}
-
-if (!isProd && !process.env.GEO_API_KEY) {
-    throw new Error(
-        "Positionstack API key missing (get free api key at https://www.bigdatacloud.com/packages/reverse-geocoding)"
-    );
-}
-
-interface AppConfig {
-    readonly connectionString: string;
-    readonly maxFileUploadSize: number;
-    readonly maxTotalFileUploadSize: number;
-    readonly dataDir: string;
-    readonly sessionOptions: {
-        readonly password: string;
-        readonly cookieName: string;
-        readonly cookieOptions: {
-            readonly maxAge: undefined;
-            readonly secure: boolean;
-            readonly ttl: number;
-        };
-    };
-    readonly streamChunkSize: number;
-    readonly geoApiKey: string;
-    readonly thumbnailMaxWidth: number,
-    readonly thumbnailMaxHeight: number,
-}
-
-const appConfig: AppConfig = {
-    connectionString: process.env.DB_CONNECTION_STRING || "",
-    maxFileUploadSize:
-        parseInt(process.env.MAX_FILE_SIZE_KB || "0", 10) ||
-        1024 * 1024 * 1024 * 4, // default to 4gb
-    maxTotalFileUploadSize:
-        parseInt(process.env.MAX_TOTAL_FILE_SIZE_KB || "0", 10) ||
-        1024 * 1024 * 1024 * 16, // default to 16gb
-    dataDir: process.env.DATA_DIR || "",
+const appConfig = {
+    connectionString: getEnvVariable("HOLVI_DB_CONNECTION_STRING"),
+    maxFileUploadSize: getEnvVariable(
+        "HOLVI_MAX_FILE_SIZE_KB",
+        "number",
+        4 * GIGABYTE
+    ),
+    maxTotalFileUploadSize: getEnvVariable(
+        "HOLVI_MAX_TOTAL_FILE_SIZE_KB",
+        "number",
+        16 * GIGABYTE
+    ),
+    dataDir: getEnvVariable("HOLVI_DATA_DIR"),
     sessionOptions: {
-        password: process.env.SESSION_PASSWORD || "",
+        password: getEnvVariable("HOLVI_SESSION_PASSWORD"),
         cookieName: "holviapp",
         cookieOptions: {
             maxAge: undefined,
             secure:
-                process.env.USE_HTTPS?.toLowerCase() === "true" &&
+                getEnvVariable("HOLVI_USE_HTTPS", "boolean", true) &&
                 process.env.NODE_ENV === "production",
-            ttl:
-                parseInt(process.env.SESSION_TTL_SECONDS || "0", 10) ||
-                2 * 60 * 60 // default to 2 hr
+            ttl: getEnvVariable("HOLVI_SESSION_TTL_SECONDS", "number", 2 * HOUR)
         }
     },
-    streamChunkSize:
-        parseInt(process.env.STREAM_CHUNK_SIZE_KB || "0", 10) || 3_000_000, // default to 3 mb
-    geoApiKey: process.env.GEO_API_KEY || "",
+    streamChunkSize: getEnvVariable(
+        "HOLVI_STREAM_CHUNK_SIZE_KB",
+        "number",
+        3 * MEGABYTE
+    ),
+    geoApiKey: getEnvVariable("HOLVI_GEO_API_KEY"),
     thumbnailMaxWidth: 600,
-    thumbnailMaxHeight: 600,
+    thumbnailMaxHeight: 600
 };
 
-export default appConfig;
+export default appConfig as DeepReadonly<typeof appConfig>;
 
-// export default class AppConfig {
-//     static readonly maxFileUploadSize =
-//         parseInt(process.env.MAX_FILE_SIZE_KB || "0") || 1024 * 1024 * 1024 * 4; // default to 4gb
-//     static readonly maxTotalFileUploadSize =
-//         parseInt(process.env.MAX_TOTAL_FILE_SIZE_KB || "0") ||
-//         1024 * 1024 * 1024 * 16; // default to 16gb
+function getEnvVariable(
+    key: string,
+    type?: "string",
+    defaultValue?: string
+): string;
 
-//     static get connectionString() {
-//         if (!process.env.DB_CONNECTION_STRING) {
-//             throw new Error(
-//                 "Database connection string is not defined (use environment variable 'DB_CONNECTION_STRING')"
-//             );
-//         }
-//         return process.env.DB_CONNECTION_STRING;
-//     }
+function getEnvVariable(
+    key: string,
+    type: "number",
+    defaultValue?: number
+): number;
 
-//     static get dataDir() {
-//         if (!process.env.DATA_DIR) {
-//             throw new Error(
-//                 "Data directory is not defined (use environment variable 'DATA_DIR')"
-//             );
-//         }
-//         return process.env.DATA_DIR;
-//     }
+function getEnvVariable(
+    key: string,
+    type?: "boolean",
+    defaultValue?: boolean
+): boolean;
 
-//     static get sessionOptions() {
-//         if (
-//             !process.env.SESSION_PASSWORD ||
-//             process.env.SESSION_PASSWORD.length < 32
-//         ) {
-//             throw new Error(
-//                 "Missing a 32 characters long session password. Generate one at https://1password.com/password-generator/ and use environment variable 'SESSION_PASSWORD'"
-//             );
-//         }
-//         return {
-//             password: process.env.SESSION_PASSWORD,
-//             cookieName: "holviapp",
-//             cookieOptions: {
-//                 maxAge: undefined,
-//                 secure:
-//                     process.env.USE_HTTPS?.toLowerCase() === "true" &&
-//                     process.env.NODE_ENV === "production",
-//                 ttl:
-//                     parseInt(process.env.SESSION_TTL_SECONDS || "0") ||
-//                     2 * 60 * 60 // default to 2 hr
-//             }
-//         };
-//     }
-// }
+function getEnvVariable(
+    key: string,
+    type?: "string" | "number" | "boolean",
+    defaultValue?: string | number | boolean
+): string | number | boolean {
+    const value = process.env[key];
+    if (!value) {
+        if (defaultValue) {
+            return defaultValue;
+        }
+        throw new Error(`Couldn't find environment variable '${key}'`);
+    }
+    if (type === "number") {
+        const parsed = parseInt(value, 10);
+        if (isNaN(parsed) || !isFinite(parsed)) {
+            throw new Error(`Could not parse number from '${value}'`);
+        }
+        return parsed;
+    }
+    if (type === "boolean") {
+        return value.toLowerCase() === "true" || value !== "0";
+    }
+    return value;
+}
