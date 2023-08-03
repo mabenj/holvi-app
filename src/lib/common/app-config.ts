@@ -78,7 +78,7 @@ function getEnvVariable(
         return parsed;
     }
     if (type === "boolean") {
-        return value.toLowerCase() === "true" || value !== "0";
+        return value.toLowerCase() === "true" || value === "1";
     }
     return value;
 }
