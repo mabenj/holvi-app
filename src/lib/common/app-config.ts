@@ -63,12 +63,15 @@ function getEnvVariable(
     type?: "string" | "number" | "boolean",
     defaultValue?: string | number | boolean
 ): string | number | boolean {
-    const value = process.env[key];
+    let value = process.env[key];
     if (!value) {
         if (defaultValue) {
             return defaultValue;
         }
-        throw new Error(`Couldn't find environment variable '${key}'`);
+        if (process.env.NEXT_PHASE !== "phase-production-build") {
+            throw new Error(`Couldn't find environment variable '${key}'`);
+        }
+        value = "0";
     }
     if (type === "number") {
         const parsed = parseInt(value, 10);
