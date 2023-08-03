@@ -9,7 +9,8 @@ import {
     Menu,
     MenuButton,
     MenuItem,
-    MenuList
+    MenuList,
+    Skeleton
 } from "@chakra-ui/react";
 import { mdiDelete, mdiDotsVertical, mdiSquareEditOutline } from "@mdi/js";
 import Icon from "@mdi/react";
@@ -22,10 +23,14 @@ import ImageCardThumbnail from "./ImageCardThumbnail";
 import VideoCardThumbnail from "./VideoCardThumbnail";
 
 interface CollectionGridCardProps {
-    item: CollectionGridItem;
+    isLoading?: boolean;
+    item?: CollectionGridItem;
 }
 
-export default function CollectionGridCard({ item }: CollectionGridCardProps) {
+export default function CollectionGridCard({
+    item,
+    isLoading = false
+}: CollectionGridCardProps) {
     const {
         actions: { saveCollection, deleteCollection, editFile, deleteFile },
         flags: {
@@ -39,15 +44,15 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
     const [isHovering, setIsHovering] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-    const isCollection = item.type === "collection";
-    const isImage = item.type === "image";
-    const isVideo = item.type === "video";
+    const isCollection = item?.type === "collection";
+    const isImage = item?.type === "image";
+    const isVideo = item?.type === "video";
     const isDeleting = isDeletingCollection || isDeletingFile;
 
     const handleDelete = async () => {
         if (isCollection) {
             await deleteCollection(item.id);
-        } else {
+        } else if (isImage || isVideo) {
             await deleteFile(item.id);
         }
     };
@@ -62,13 +67,14 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
                     cursor="pointer"
                     onMouseEnter={() => setIsHovering(true)}
                     onMouseLeave={() => setIsHovering(false)}>
-                    {isCollection && (
+                    {isLoading && <Skeleton w="100%" h="100%" />}
+                    {!isLoading && isCollection && (
                         <CollectionCardThumbnail item={item as CollectionDto} />
                     )}
-                    {isImage && (
+                    {!isLoading && isImage && (
                         <ImageCardThumbnail item={item as CollectionFileDto} />
                     )}
-                    {isVideo && (
+                    {!isLoading && isVideo && (
                         <VideoCardThumbnail item={item as CollectionFileDto} />
                     )}
 
@@ -98,7 +104,7 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
                             />
 
                             <MenuList>
-                                {isCollection ? (
+                                {isCollection && (
                                     <CollectionModal
                                         onSave={saveCollection}
                                         isSaving={isSavingCollection}
@@ -120,7 +126,8 @@ export default function CollectionGridCard({ item }: CollectionGridCardProps) {
                                             </MenuItem>
                                         }
                                     />
-                                ) : (
+                                )}
+                                {(isImage || isVideo) && (
                                     <CollectionFileModal
                                         onSave={editFile}
                                         isSaving={isSavingFile}

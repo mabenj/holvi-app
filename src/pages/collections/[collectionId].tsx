@@ -1,15 +1,12 @@
-import { NotFoundError } from "@/lib/common/errors";
 import { withSessionSsr } from "@/lib/common/iron-session";
+import { isUuidv4 } from "@/lib/common/utilities";
 import CollectionGrid from "@/lib/components/collection-grid/CollectionGrid";
 import CollectionModal from "@/lib/components/modals/CollectionModal";
 import AreYouSureDialog from "@/lib/components/ui/AreYouSureDialog";
 import Layout from "@/lib/components/ui/Layout";
 import TagChip from "@/lib/components/ui/TagChip";
-import { useCollections } from "@/lib/hooks/useCollections";
-import { CollectionService } from "@/lib/services/collection.service";
-import { CollectionDto } from "@/lib/types/collection-dto";
+import { useCollection } from "@/lib/hooks/useCollection";
 import { UserDto } from "@/lib/types/user-dto";
-import { CollectionFormData } from "@/lib/validators/collection.validator";
 import { Link } from "@chakra-ui/next-js";
 import {
     Box,
@@ -18,131 +15,136 @@ import {
     BreadcrumbLink,
     Button,
     Flex,
-    Heading
+    Heading,
+    Skeleton,
+    SkeletonText
 } from "@chakra-ui/react";
 import { mdiDelete, mdiSquareEditOutline } from "@mdi/js";
 import Icon from "@mdi/react";
 import Head from "next/head";
-import { useRouter } from "next/router";
-import { useState } from "react";
 import Linkify from "react-linkify";
 
 export const getServerSideProps = withSessionSsr(
     async function getServerSideProps({ req, query }) {
         const { collectionId } = query as { collectionId: string };
-        try {
-            const collection = await new CollectionService(
-                req.session.user.id
-            ).getCollection(collectionId);
+        if (!isUuidv4(collectionId)) {
             return {
-                props: {
-                    user: req.session.user,
-                    collection: collection
-                }
+                notFound: true
             };
-        } catch (error) {
-            if (error instanceof NotFoundError) {
-                return {
-                    notFound: true
-                };
-            }
-            throw new Error("Internal server error");
         }
+        return {
+            props: {
+                user: req.session.user,
+                collectionId: collectionId
+            }
+        };
     }
 );
 
 export default function CollectionPage({
     user,
-    collection
+    collectionId
 }: {
     user: UserDto;
-    collection: CollectionDto;
+    collectionId: string;
 }) {
-    const [currentCollection, setCurrentCollection] = useState(collection);
-    const { editCollection, isSaving, deleteCollection, isDeleting } =
-        useCollections();
+    let {
+        collection,
+        isLoading,
+        editCollection,
+        isSaving,
+        deleteCollection,
+        isDeleting
+    } = useCollection(collectionId);
 
-    const router = useRouter();
-
-    const handleSaveCollection = async (
-        data: CollectionFormData,
-        id?: string
-    ) => {
-        const edited = await editCollection(data, id!);
-        if ("nameError" in edited) {
-            return edited;
-        }
-        setCurrentCollection(edited);
-        return edited;
-    };
-
-    const handleDeleteCollection = async () => {
-        await deleteCollection(currentCollection);
-        await router.push("/");
-    };
+    const collectionName = collection?.name || "Collection not found";
 
     return (
         <>
             <Head>
-                <title>{currentCollection.name}</title>
+                <title>{isLoading ? "Loading..." : collectionName}</title>
             </Head>
             <Layout user={user}>
                 <Box px={4}>
-                    <Breadcrumbs collectionName={currentCollection.name} />
+                    <Skeleton
+                        isLoaded={!isLoading}
+                        w={isLoading ? "13rem" : undefined}>
+                        <Breadcrumbs collectionName={collectionName} />
+                    </Skeleton>
+
                     <Flex direction="column" gap={3} pt={8}>
-                        <Heading>{currentCollection.name}</Heading>
+                        <Skeleton
+                            isLoaded={!isLoading}
+                            w={isLoading ? "22rem" : undefined}>
+                            <Heading>{collectionName}</Heading>
+                        </Skeleton>
 
                         <Box color="gray.500">
-                            <Linkify
-                                componentDecorator={(
-                                    decoratedHref,
-                                    decoratedText,
-                                    key
-                                ) => (
-                                    <Link
-                                        key={key}
-                                        href={decoratedHref}
-                                        target="_blank">
-                                        {decoratedText}
-                                    </Link>
-                                )}>
-                                {currentCollection.description}
-                            </Linkify>
+                            <SkeletonText
+                                isLoaded={!isLoading}
+                                spacing="3"
+                                skeletonHeight="2"
+                                my={4}>
+                                <Linkify
+                                    componentDecorator={(
+                                        decoratedHref,
+                                        decoratedText,
+                                        key
+                                    ) => (
+                                        <Link
+                                            key={key}
+                                            href={decoratedHref}
+                                            target="_blank">
+                                            {decoratedText}
+                                        </Link>
+                                    )}>
+                                    {collection?.description}
+                                </Linkify>
+                            </SkeletonText>
                         </Box>
                         <Flex flexWrap="wrap" gap={2}>
-                            {currentCollection.tags.map((tag) => (
-                                <TagChip key={tag} tag={tag} />
-                            ))}
+                            {isLoading
+                                ? Array.from({ length: 5 }).map((_, i) => (
+                                      <Skeleton key={i} w="5rem" rounded="full">
+                                          <TagChip tag={i.toString()} />
+                                      </Skeleton>
+                                  ))
+                                : collection?.tags.map((tag) => (
+                                      <TagChip key={tag} tag={tag} />
+                                  ))}
                         </Flex>
                     </Flex>
 
                     <Box py={5}>
-                        <CollectionModal
-                            isSaving={isSaving}
-                            onSave={handleSaveCollection}
-                            initialCollection={currentCollection}
-                            mode="edit"
-                            trigger={
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    color="gray.500"
-                                    leftIcon={
-                                        <Icon
-                                            path={mdiSquareEditOutline}
-                                            size={0.6}
-                                        />
-                                    }>
-                                    Edit collection
-                                </Button>
-                            }
-                        />
+                        {collection && (
+                            <CollectionModal
+                                isSaving={isSaving}
+                                onSave={editCollection}
+                                initialCollection={collection}
+                                mode="edit"
+                                trigger={
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        color="gray.500"
+                                        leftIcon={
+                                            <Icon
+                                                path={mdiSquareEditOutline}
+                                                size={0.6}
+                                            />
+                                        }
+                                        isDisabled={isLoading}>
+                                        Edit collection
+                                    </Button>
+                                }
+                            />
+                        )}
 
                         <AreYouSureDialog
                             confirmLabel="Delete"
                             header={`Delete collection`}
                             isConfirming={isDeleting}
-                            onConfirm={handleDeleteCollection}
+                            onConfirm={deleteCollection}
                             trigger={
                                 <Button
                                     variant="ghost"
@@ -151,7 +153,8 @@ export default function CollectionPage({
                                     leftIcon={
                                         <Icon path={mdiDelete} size={0.6} />
                                     }
-                                    isLoading={isDeleting}>
+                                    isLoading={isDeleting}
+                                    isDisabled={isLoading}>
                                     Delete collection
                                 </Button>
                             }>
@@ -160,7 +163,7 @@ export default function CollectionPage({
                     </Box>
                 </Box>
 
-                <CollectionGrid collectionId={collection.id} />
+                <CollectionGrid collectionId={collectionId} />
             </Layout>
         </>
     );
@@ -172,10 +175,6 @@ const Breadcrumbs = ({ collectionName }: { collectionName: string }) => (
             <BreadcrumbLink as={Link} href="/" fontWeight="semibold">
                 Home
             </BreadcrumbLink>
-        </BreadcrumbItem>
-
-        <BreadcrumbItem>
-            <Box color="gray.500">Collections</Box>
         </BreadcrumbItem>
 
         <BreadcrumbItem isCurrentPage>

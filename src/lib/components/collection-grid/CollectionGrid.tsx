@@ -4,8 +4,7 @@ import {
 } from "@/lib/context/CollectionGridContext";
 import { PhotoViewerProvider } from "@/lib/context/PhotoViewerContext";
 import { CollectionGridItem } from "@/lib/types/collection-grid-item";
-import { Box, Flex, Heading, SimpleGrid } from "@chakra-ui/react";
-import IfNotLoading from "../ui/IfNotLoading";
+import { Box, Flex, Heading, SimpleGrid, Skeleton } from "@chakra-ui/react";
 import CollectionGridActionBar from "./CollectionGridActionBar";
 import CollectionGridCard from "./CollectionGridCard";
 
@@ -31,23 +30,23 @@ const GridWithActionBar = () => {
     return (
         <Flex direction="column" gap={5}>
             <CollectionGridActionBar collectionId={collectionId} />
-            <IfNotLoading isLoading={isLoading}>
-                <ResponsiveGrid
-                    items={collections}
-                    title="Collections"
-                    showTitle={files.length > 0}
-                />
-                <ResponsiveGrid
-                    items={files}
-                    title="Files"
-                    showTitle={collections.length > 0}
-                />
-                {collections.length === 0 && files.length === 0 && (
-                    <Box color="gray.500" p={4}>
-                        No collections or files
-                    </Box>
-                )}
-            </IfNotLoading>
+            <ResponsiveGrid
+                items={collections}
+                title="Collections"
+                showTitle={files.length > 0}
+                isLoading={isLoading}
+            />
+            <ResponsiveGrid
+                items={files}
+                title="Files"
+                showTitle={collections.length > 0}
+                isLoading={isLoading}
+            />
+            {!isLoading && collections.length === 0 && files.length === 0 && (
+                <Box color="gray.500" p={4}>
+                    No collections or files
+                </Box>
+            )}
         </Flex>
     );
 };
@@ -55,13 +54,15 @@ const GridWithActionBar = () => {
 const ResponsiveGrid = ({
     items,
     title,
-    showTitle = false
+    showTitle = false,
+    isLoading
 }: {
     items: CollectionGridItem[];
     title: string;
     showTitle?: boolean;
+    isLoading: boolean;
 }) => {
-    if (items.length === 0) {
+    if (!isLoading && items.length === 0) {
         return <></>;
     }
     return (
@@ -73,10 +74,18 @@ const ResponsiveGrid = ({
             )}
 
             <SimpleGrid columns={[3, 3, 4, 6, 8, 9]} spacing={[1, 1, 1, 2]}>
-                {items.map((item) => (
-                    <CollectionGridCard key={item.id} item={item} />
-                ))}
+                {isLoading
+                    ? Array.from({ length: 20 }).map((_, i) => (
+                          <CollectionGridCard key={i} isLoading={isLoading} />
+                      ))
+                    : items.map((item) => (
+                          <CollectionGridCard key={item.id} item={item} />
+                      ))}
             </SimpleGrid>
         </PhotoViewerProvider>
     );
+};
+
+const SkeletonCardThumbnail = () => {
+    return <Skeleton></Skeleton>;
 };

@@ -43,6 +43,8 @@ export default function CollectionCardThumbnail({
                         <Image
                             src={thumbnail || item.thumbnails[0]}
                             alt={item.name}
+                            placeholder={item.blurDataUrl ? "blur" : undefined}
+                            blurDataURL={item.blurDataUrl || undefined}
                             fill
                             style={{
                                 position: "absolute",
