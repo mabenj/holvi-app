@@ -54,22 +54,26 @@ export class Collection extends Model<
     }
 
     toDto(): CollectionDto {
-        return {
+        const thumbnails =
+            this.CollectionFiles?.sort(caseInsensitiveSorter("name")).slice(
+                0,
+                Collection.thumbnailsLimit
+            ) || [];
+        const blur = thumbnails[0]?.blurDataUrl;
+
+        const dto: CollectionDto = {
             id: this.id,
             name: this.name,
             description: this.description,
             tags: this.Tags?.map((tag) => tag.name) || [],
-            thumbnails:
-                this.CollectionFiles?.sort(caseInsensitiveSorter("name"))
-                    .slice(0, Collection.thumbnailsLimit)
-                    .map((file) =>
-                        getFileSrc({
-                            collectionId: this.id,
-                            fileId: file.id,
-                            mimeType: file.mimeType,
-                            thumbnail: true
-                        })
-                    ) || [],
+            thumbnails: thumbnails.map((file) =>
+                getFileSrc({
+                    collectionId: this.id,
+                    fileId: file.id,
+                    mimeType: file.mimeType,
+                    thumbnail: true
+                })
+            ),
             timestamp: this.createdAt.getTime(),
             videoCount:
                 this.CollectionFiles?.filter((file) =>
@@ -80,5 +84,11 @@ export class Collection extends Model<
                     file.mimeType.includes("image")
                 ).length || 0
         };
+
+        if (blur) {
+            dto.blurDataUrl = blur;
+        }
+
+        return dto;
     }
 }

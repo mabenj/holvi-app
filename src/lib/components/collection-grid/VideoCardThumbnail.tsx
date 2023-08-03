@@ -30,6 +30,8 @@ export default function VideoCardThumbnail({
             <Image
                 src={item.thumbnailSrc!}
                 alt={item.name}
+                placeholder={item.blurDataUrl ? "blur" : undefined}
+                blurDataURL={item.blurDataUrl}
                 fill
                 style={{
                     objectFit: "cover"

@@ -91,7 +91,11 @@ export default function CollectionCardThumbnail({
                         textOverflow="ellipsis">
                         {item.name}
                     </Heading>
-                    <Flex direction="column" alignItems="flex-end" gap={1} fontSize={["x-small", "x-small", "xs", "sm"]}>
+                    <Flex
+                        direction="column"
+                        alignItems="flex-end"
+                        gap={1}
+                        fontSize={["x-small", "x-small", "xs", "sm"]}>
                         {item.videoCount > 0 && (
                             <Flex alignItems="center" gap={1}>
                                 <Icon

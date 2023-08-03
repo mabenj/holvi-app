@@ -30,6 +30,7 @@ export class CollectionFile extends Model<
     declare gpsLabel?: CreationOptional<string>;
     declare takenAt?: CreationOptional<Date>;
     declare durationInSeconds?: CreationOptional<number>;
+    declare blurDataUrl?: CreationOptional<string>;
 
     declare createdAt: CreationOptional<Date>;
     declare updatedAt: CreationOptional<Date>;
@@ -65,7 +66,8 @@ export class CollectionFile extends Model<
                 gpsAltitude: DataTypes.DECIMAL,
                 gpsLabel: DataTypes.STRING,
                 createdAt: DataTypes.DATE,
-                updatedAt: DataTypes.DATE
+                updatedAt: DataTypes.DATE,
+                blurDataUrl: DataTypes.TEXT
             },
             {
                 sequelize
@@ -106,7 +108,8 @@ export class CollectionFile extends Model<
             tags: this.Tags?.map((tag) => tag.name) || [],
             timestamp: (this.takenAt || this.createdAt).getTime(),
             gps: gps,
-            durationInSeconds: this.durationInSeconds
+            durationInSeconds: this.durationInSeconds,
+            blurDataUrl: this.blurDataUrl
         };
     }
 }

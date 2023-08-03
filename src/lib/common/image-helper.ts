@@ -1,6 +1,7 @@
 import ExifParser from "exif-parser";
 import { readFile } from "fs/promises";
 import path from "path";
+import { getPlaiceholder } from "plaiceholder";
 import { promisify } from "util";
 import appConfig from "./app-config";
 import { HolviError } from "./errors";
@@ -135,5 +136,13 @@ export class ImageHelper {
             })
             .toFile(targetPath);
         return { width, height, thumbnailWidth, thumbnailHeight };
+    }
+
+    static async generateBlur(fileBuffer: Buffer | null) {
+        if (!fileBuffer) {
+            throw new Error("Invalid file");
+        }
+        const { base64 } = await getPlaiceholder(fileBuffer);
+        return base64;
     }
 }

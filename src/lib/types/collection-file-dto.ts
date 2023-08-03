@@ -18,4 +18,5 @@ export interface CollectionFileDto {
         label?: string;
     };
     durationInSeconds?: number;
+    blurDataUrl?: string
 }

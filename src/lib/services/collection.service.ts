@@ -328,7 +328,8 @@ export class CollectionService {
                     gpsAltitude: file.gps?.altitude,
                     gpsLabel: file.gps?.label,
                     takenAt: file.takenAt,
-                    durationInSeconds: file.durationInSeconds
+                    durationInSeconds: file.durationInSeconds,
+                    blurDataUrl: file.blurDataUrl
                 })),
                 {
                     transaction

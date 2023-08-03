@@ -44,6 +44,7 @@ interface UploadedFile {
         label?: string;
     };
     durationInSeconds?: number;
+    blurDataUrl?: string;
 }
 
 export class UserFileSystem {
@@ -226,6 +227,12 @@ export class UserFileSystem {
             const filepath = path.join(this.tempDir, filename);
             const thumbnailPath = path.join(this.tempDir, "tn", filename);
 
+            let processed: UploadedFile = {
+                id: filename,
+                originalFilename,
+                mimeType: file.mimeType || "unknown"
+            };
+
             if (isVideo) {
                 const {
                     width,
@@ -234,36 +241,34 @@ export class UserFileSystem {
                     thumbnailHeight,
                     durationInSeconds
                 } = await this.processVideo(filepath, thumbnailPath);
-                return {
-                    processed: {
-                        id: filename,
-                        originalFilename,
-                        mimeType: file.mimeType || "unknown",
-                        width,
-                        height,
-                        thumbnailWidth,
-                        thumbnailHeight,
-                        takenAt: file.lastModified || undefined,
-                        durationInSeconds
-                    }
+                processed = {
+                    ...processed,
+                    width,
+                    height,
+                    thumbnailWidth,
+                    thumbnailHeight,
+                    takenAt: file.lastModified || undefined,
+                    durationInSeconds
                 };
             } else {
                 const { width, height, thumbnailWidth, thumbnailHeight, exif } =
                     await this.processImage(filepath, thumbnailPath);
-                return {
-                    processed: {
-                        id: filename,
-                        originalFilename,
-                        mimeType: file.mimeType || "unknown",
-                        width,
-                        height,
-                        thumbnailWidth,
-                        thumbnailHeight,
-                        gps: exif?.gps,
-                        takenAt: exif?.takenAt || file.lastModified || undefined
-                    }
+                processed = {
+                    ...processed,
+                    width,
+                    height,
+                    thumbnailWidth,
+                    thumbnailHeight,
+                    gps: exif?.gps,
+                    takenAt: exif?.takenAt || file.lastModified || undefined
                 };
             }
+
+            processed.blurDataUrl = await ImageHelper.generateBlur(
+                await readBytes(thumbnailPath)
+            );
+
+            return { processed };
         } catch (error) {
             return { error: getErrorMessage(error) };
         }

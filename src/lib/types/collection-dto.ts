@@ -7,4 +7,5 @@ export interface CollectionDto {
     timestamp: number;
     videoCount: number;
     imageCount: number;
+    blurDataUrl?: string;
 }
