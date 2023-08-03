@@ -26,13 +26,13 @@ docker run -d --name holvi-db-dev -p 5432:5432 -v holvi-db-data-dev:/var/lib/pos
 
 Create a `.env.local` file in the root of the project and add the following variables:
 
-`DB_CONNECTION_STRING=postgres://admin:<db_password>@localhost:5432/holvi`
+`HOLVI_DB_CONNECTION_STRING=postgres://admin:<db_password>@localhost:5432/holvi`
 
-`DATA_DIR=<directory to hold app data>`
+`HOLVI_DATA_DIR=<directory to hold app data>`
 
-`SESSION_PASSWORD=<32 character long session password>`
+`HOLVI_SESSION_PASSWORD=<32 character long session password>`
 
-`GEO_API_KEY=<reverse geocoding API key (https://www.bigdatacloud.com/packages/reverse-geocoding)>`
+`HOLVI_GEO_API_KEY=<reverse geocoding API key (https://www.bigdatacloud.com/packages/reverse-geocoding)>`
 
 ### Install dependencies
 
