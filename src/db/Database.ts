@@ -2,14 +2,17 @@ import appConfig from "@/lib/common/app-config";
 import Log, { LogColor } from "@/lib/common/log";
 import { sleep } from "@/lib/common/utilities";
 import { QueryTypes, Sequelize, Transaction } from "sequelize";
+import DatabaseUpgrade from "./DatabaseUpgrade";
 import { Collection } from "./models/Collection";
 import { CollectionFile } from "./models/CollectionFile";
 import { CollectionFileTag } from "./models/CollectionFileTag";
 import { CollectionTag } from "./models/CollectionTag";
+import { DatabaseInfo } from "./models/DatabaseInfo";
 import { Tag } from "./models/Tag";
 import { User } from "./models/User";
 
 export default class Database {
+    private static readonly version = 3;
     private static instance: Database;
 
     private readonly sequelize;
@@ -35,7 +38,7 @@ export default class Database {
         this.logger = new Log("DB", LogColor.BLUE);
     }
 
-    public select(sql: string, replacements?: Record<string, any>){
+    public select(sql: string, replacements?: Record<string, any>) {
         return this.sequelize.query(sql, {
             replacements: replacements,
             type: QueryTypes.SELECT,
@@ -47,7 +50,7 @@ export default class Database {
         return this.sequelize.transaction();
     }
 
-    public close(){
+    public close() {
         return this.sequelize.close();
     }
 
@@ -92,6 +95,7 @@ export default class Database {
         }
 
         try {
+            DatabaseInfo.initModel(Database.instance.sequelize);
             User.initModel(Database.instance.sequelize);
             Collection.initModel(Database.instance.sequelize);
             CollectionFile.initModel(Database.instance.sequelize);
@@ -134,6 +138,8 @@ export default class Database {
             Database.instance.logger.info("Initializing models");
             await Database.instance.sequelize.sync({ alter: true });
 
+            await Database.ensureUpToDate();
+
             Database.instance.logger.info("Database initialized");
         } catch (error) {
             Database.instance.logger.error("Error initializing models", error);
@@ -141,5 +147,16 @@ export default class Database {
         } finally {
             Database.instance.initializing = false;
         }
+    }
+
+    private static async ensureUpToDate() {
+        const [dbInfo] = await DatabaseInfo.findCreateFind({
+            where: { id: 1 }
+        });
+        await DatabaseUpgrade.upgrade(
+            dbInfo.version,
+            Database.version,
+            Database.instance
+        );
     }
 }
