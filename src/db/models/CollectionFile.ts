@@ -20,17 +20,17 @@ export class CollectionFile extends Model<
     declare id: CreationOptional<string>;
     declare name: string;
     declare mimeType: string;
-    declare width?: number;
-    declare height?: number;
-    declare thumbnailWidth?: number;
-    declare thumbnailHeight?: number;
-    declare gpsLatitude?: CreationOptional<number>;
-    declare gpsLongitude?: CreationOptional<number>;
-    declare gpsAltitude?: CreationOptional<number>;
-    declare gpsLabel?: CreationOptional<string>;
-    declare takenAt?: CreationOptional<Date>;
-    declare durationInSeconds?: CreationOptional<number>;
-    declare blurDataUrl?: CreationOptional<string>;
+    declare width: number | null;
+    declare height: number | null;
+    declare thumbnailWidth: number | null;
+    declare thumbnailHeight: number | null;
+    declare gpsLatitude: CreationOptional<number | null>;
+    declare gpsLongitude: CreationOptional<number | null>;
+    declare gpsAltitude: CreationOptional<number | null>;
+    declare gpsLabel: CreationOptional<string | null>;
+    declare takenAt: CreationOptional<Date | null>;
+    declare durationInSeconds: CreationOptional<number | null>;
+    declare blurDataUrl: CreationOptional<string | null>;
 
     declare createdAt: CreationOptional<Date>;
     declare updatedAt: CreationOptional<Date>;
@@ -38,6 +38,7 @@ export class CollectionFile extends Model<
     declare CollectionId: ForeignKey<Collection["id"]>;
 
     declare Tags?: NonAttribute<Tag[]>;
+    declare Collection?: NonAttribute<Collection>;
 
     static initModel(sequelize: Sequelize) {
         CollectionFile.init(
@@ -81,8 +82,8 @@ export class CollectionFile extends Model<
                 ? {
                       lat: this.gpsLatitude,
                       long: this.gpsLongitude,
-                      alt: this.gpsAltitude,
-                      label: this.gpsLabel
+                      alt: this.gpsAltitude ?? undefined,
+                      label: this.gpsLabel ?? undefined
                   }
                 : undefined;
         return {
@@ -95,21 +96,21 @@ export class CollectionFile extends Model<
                 fileId: this.id,
                 mimeType: this.mimeType
             }),
-            width: this.width,
-            height: this.height,
+            width: this.width ?? undefined,
+            height: this.height ?? undefined,
             thumbnailSrc: getFileSrc({
                 collectionId: this.CollectionId,
                 fileId: this.id,
                 mimeType: this.mimeType,
                 thumbnail: true
             }),
-            thumbnailWidth: this.thumbnailWidth,
-            thumbnailHeight: this.thumbnailHeight,
+            thumbnailWidth: this.thumbnailWidth ?? undefined,
+            thumbnailHeight: this.thumbnailHeight ?? undefined,
             tags: this.Tags?.map((tag) => tag.name) || [],
             timestamp: (this.takenAt || this.createdAt).getTime(),
-            gps: gps,
-            durationInSeconds: this.durationInSeconds,
-            blurDataUrl: this.blurDataUrl
+            gps: gps ?? undefined,
+            durationInSeconds: this.durationInSeconds ?? undefined,
+            blurDataUrl: this.blurDataUrl ?? undefined
         };
     }
 }

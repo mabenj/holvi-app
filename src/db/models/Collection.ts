@@ -22,7 +22,7 @@ export class Collection extends Model<
 
     declare id: CreationOptional<string>;
     declare name: string;
-    declare description?: CreationOptional<string>;
+    declare description: CreationOptional<string | null>;
     declare createdAt: CreationOptional<Date>;
     declare updatedAt: CreationOptional<Date>;
 
@@ -59,12 +59,11 @@ export class Collection extends Model<
                 0,
                 Collection.thumbnailsLimit
             ) || [];
-        const blur = thumbnails[0]?.blurDataUrl;
 
-        const dto: CollectionDto = {
+        return {
             id: this.id,
             name: this.name,
-            description: this.description,
+            description: this.description || "",
             tags: this.Tags?.map((tag) => tag.name) || [],
             thumbnails: thumbnails.map((file) =>
                 getFileSrc({
@@ -82,13 +81,8 @@ export class Collection extends Model<
             imageCount:
                 this.CollectionFiles?.filter((file) =>
                     file.mimeType.includes("image")
-                ).length || 0
+                ).length || 0,
+            blurDataUrl: thumbnails[0]?.blurDataUrl || null
         };
-
-        if (blur) {
-            dto.blurDataUrl = blur;
-        }
-
-        return dto;
     }
 }

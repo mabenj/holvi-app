@@ -47,6 +47,10 @@ export default class Database {
         return this.sequelize.transaction();
     }
 
+    public close(){
+        return this.sequelize.close();
+    }
+
     public static async getInstance() {
         while (Database.instance?.initializing) {
             await sleep(100);
