@@ -9,15 +9,19 @@
         "Holvi",
         "holviapp",
         "hookform",
+        "lightbox",
         "Linkify",
         "mozdirectory",
         "neighbourhood",
         "nodownload",
+        "photoswipe",
         "Plaiceholder",
         "Positionstack",
+        "pswp",
         "sidegrid",
         "signup",
         "UUIDV",
-        "vaul"
+        "vaul",
+        "Zoomable"
     ]
 }

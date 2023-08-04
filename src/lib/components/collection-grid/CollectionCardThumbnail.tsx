@@ -8,9 +8,11 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 
 export default function CollectionCardThumbnail({
-    item
+    item,
+    imageRef
 }: {
     item: CollectionDto;
+    imageRef?: React.MutableRefObject<HTMLImageElement>;
 }) {
     const [isHovering, setIsHovering] = useState(false);
     const { thumbnail, startRotating, stopRotating } = useRotatingThumbnail(
@@ -41,6 +43,7 @@ export default function CollectionCardThumbnail({
                 {item.thumbnails.length > 0 && (
                     <Box w="100%" h="100%" position="relative">
                         <Image
+                            ref={imageRef}
                             src={thumbnail || item.thumbnails[0]}
                             alt={item.name}
                             placeholder={item.blurDataUrl ? "blur" : undefined}

@@ -114,3 +114,41 @@ a {
         color-scheme: dark;
     }
 }
+
+.caption-wrapper {
+    // background-color: rgba(0, 0, 0, 0.5);
+    // width: max-content;
+    margin: 0 auto;
+    padding: 0.25rem 0.5rem;
+    // font-size: small;
+    // text-shadow: -1px -1px 0 rgba(0, 0, 0, 0.4), 1px -1px 0 rgba(0, 0, 0, 0.4),
+    //     -1px 1px 0 rgba(0, 0, 0, 0.4), 1px 1px 0 rgba(0, 0, 0, 0.4);
+
+    .caption-filename {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .caption-date {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        // color: #afadad;
+    }
+
+    .caption-gps-link {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: inline-block;
+        max-width: 100%;
+
+        // color: #afadad;
+
+        &:hover {
+            text-decoration: underline;
+            filter: brightness(0.8);
+        }
+    }
+}

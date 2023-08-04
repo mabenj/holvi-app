@@ -25,11 +25,13 @@ import VideoCardThumbnail from "./VideoCardThumbnail";
 interface CollectionGridCardProps {
     isLoading?: boolean;
     item?: CollectionGridItem;
+    imageRef?: React.MutableRefObject<HTMLImageElement>
 }
 
 export default function CollectionGridCard({
     item,
-    isLoading = false
+    isLoading = false,
+    imageRef
 }: CollectionGridCardProps) {
     const {
         actions: { saveCollection, deleteCollection, editFile, deleteFile },
@@ -69,13 +71,13 @@ export default function CollectionGridCard({
                     onMouseLeave={() => setIsHovering(false)}>
                     {isLoading && <Skeleton w="100%" h="100%" />}
                     {!isLoading && isCollection && (
-                        <CollectionCardThumbnail item={item as CollectionDto} />
+                        <CollectionCardThumbnail imageRef={imageRef} item={item as CollectionDto} />
                     )}
                     {!isLoading && isImage && (
-                        <ImageCardThumbnail item={item as CollectionFileDto} />
+                        <ImageCardThumbnail imageRef={imageRef} item={item as CollectionFileDto} />
                     )}
                     {!isLoading && isVideo && (
-                        <VideoCardThumbnail item={item as CollectionFileDto} />
+                        <VideoCardThumbnail imageRef={imageRef} item={item as CollectionFileDto} />
                     )}
 
                     {(isHovering || isMenuOpen) && (

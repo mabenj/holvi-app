@@ -2,9 +2,9 @@ import {
     CollectionGridProvider,
     useCollectionGrid
 } from "@/lib/context/CollectionGridContext";
-import { PhotoViewerProvider } from "@/lib/context/PhotoViewerContext";
 import { CollectionGridItem } from "@/lib/types/collection-grid-item";
-import { Box, Flex, Heading, SimpleGrid, Skeleton } from "@chakra-ui/react";
+import { Box, Flex, Heading, SimpleGrid } from "@chakra-ui/react";
+import LightboxGallery from "../lightbox-gallery/LightboxGallery";
 import CollectionGridActionBar from "./CollectionGridActionBar";
 import CollectionGridCard from "./CollectionGridCard";
 
@@ -63,29 +63,25 @@ const ResponsiveGrid = ({
     isLoading: boolean;
 }) => {
     if (!isLoading && items.length === 0) {
-        return <></>;
+        return null;
     }
+
     return (
-        <PhotoViewerProvider items={items}>
+        <>
             {showTitle && (
                 <Heading size="md" px={3}>
                     {title}
                 </Heading>
             )}
-
-            <SimpleGrid columns={[3, 3, 4, 6, 8, 9]} spacing={[1, 1, 1, 2]}>
-                {isLoading
-                    ? Array.from({ length: 20 }).map((_, i) => (
-                          <CollectionGridCard key={i} isLoading={isLoading} />
-                      ))
-                    : items.map((item) => (
-                          <CollectionGridCard key={item.id} item={item} />
-                      ))}
+            <SimpleGrid columns={[3, 3, 4, 6, 8, 9]} spacing={[0.5, 0.5, 1, 1]}>
+                {isLoading ? (
+                    Array.from({ length: 20 }).map((_, i) => (
+                        <CollectionGridCard key={i} isLoading={isLoading} />
+                    ))
+                ) : (
+                    <LightboxGallery items={items} />
+                )}
             </SimpleGrid>
-        </PhotoViewerProvider>
+        </>
     );
-};
-
-const SkeletonCardThumbnail = () => {
-    return <Skeleton></Skeleton>;
 };

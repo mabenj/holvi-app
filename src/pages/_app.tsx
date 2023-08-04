@@ -3,7 +3,7 @@ import "@/styles/globals.scss";
 import { ChakraProvider, extendTheme } from "@chakra-ui/react";
 import { mode } from "@chakra-ui/theme-tools";
 import type { AppProps } from "next/app";
-import "react-photo-view/dist/react-photo-view.css";
+import "photoswipe/dist/photoswipe.css";
 
 const styles = {
     global: (props: any) => ({

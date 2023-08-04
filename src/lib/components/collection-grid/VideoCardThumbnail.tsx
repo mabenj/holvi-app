@@ -6,9 +6,11 @@ import Image from "next/image";
 import { useRouter } from "next/router";
 
 export default function VideoCardThumbnail({
-    item
+    item,
+    imageRef
 }: {
     item: CollectionFileDto;
+    imageRef?: React.MutableRefObject<HTMLImageElement>;
 }) {
     const router = useRouter();
 
@@ -28,6 +30,7 @@ export default function VideoCardThumbnail({
     return (
         <Box onClick={handleClick}>
             <Image
+                ref={imageRef}
                 src={item.thumbnailSrc!}
                 alt={item.name}
                 placeholder={item.blurDataUrl ? "blur" : undefined}

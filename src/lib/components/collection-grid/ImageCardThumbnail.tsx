@@ -4,9 +4,11 @@ import Image from "next/image";
 import { useRouter } from "next/router";
 
 export default function ImageCardThumbnail({
-    item
+    item,
+    imageRef
 }: {
     item: CollectionFileDto;
+    imageRef?: React.MutableRefObject<HTMLImageElement>;
 }) {
     const router = useRouter();
 
@@ -26,6 +28,7 @@ export default function ImageCardThumbnail({
     return (
         <Box maxW="100%" maxH="100%" overflow="hidden" onClick={handleClick}>
             <Image
+                ref={imageRef}
                 src={item.thumbnailSrc!}
                 alt={item.name}
                 placeholder={item.blurDataUrl ? "blur" : undefined}
