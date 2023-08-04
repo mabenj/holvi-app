@@ -71,7 +71,7 @@ export default class SearchService {
         return files.map((file) => file.toDto());
     }
 
-    private getMatchingCollectionIds(
+    private async getMatchingCollectionIds(
         searchRequest: SearchRequest
     ): Promise<string[]> {
         const { query, tags, collectionId, sort, target } = searchRequest;
@@ -81,25 +81,38 @@ export default class SearchService {
         ) {
             return Promise.resolve([]);
         }
-        const sql = `SELECT DISTINCT c.id, c.name, c."createdAt"
+
+        const tagSql = tags.length === 0 ? "" : `AND ct."TagName" IN (:tags)`;
+        const orderBySql = `${
+            sort.field === "name" ? "c.name" : 'c."createdAt"'
+        } ${sort.asc ? "ASC" : "DESC"}`;
+        const sql = `SELECT DISTINCT c.id, c.name, c."createdAt", ct."TagName" as tag
                     FROM "Collections" c
                     LEFT JOIN "CollectionTags" ct ON ct."CollectionId" = c.id
-                    WHERE c."UserId"::text = :userId AND c.id::text LIKE :likeCollectionId AND
-                        c.name LIKE :likeQuery ${
-                            tags.length ? 'AND ct."TagName" IN(:tags)' : ""
-                        }
-                    ORDER BY ${
-                        sort.field === "name" ? "c.name" : 'c."createdAt"'
-                    } ${sort.asc ? "ASC" : "DESC"}`;
+                    WHERE c."UserId"::text = :userId AND c.id::text LIKE :likeCollectionId AND c.name LIKE :likeQuery ${tagSql}
+                    ORDER BY ${orderBySql}`;
         const values = {
             userId: this.userId,
             likeQuery: query ? `%${query}%` : "%",
             likeCollectionId: collectionId ? collectionId : "%",
-            tags: tags
+            tags: tags,
+            tagCount: tags.length
         };
-        return Database.getInstance()
-            .then((db) => db.select(sql, values))
-            .then((rows) => rows.map((row: any) => row.id));
+
+        const db = await Database.getInstance();
+        const rows = await db.select(sql, values);
+
+        type GroupedTags = Record<string, string[]>;
+        const tagsByFileId = rows.reduce((acc: GroupedTags, curr: any) => {
+            acc[curr.id] ||= [];
+            curr.tag && acc[curr.id].push(curr.tag);
+            return acc;
+        }, {} as GroupedTags);
+
+        return Object.keys(tagsByFileId).filter((fileId) => {
+            const tagPool = tagsByFileId[fileId];
+            return tags.every((tag) => tagPool.includes(tag));
+        });
     }
 
     private async getMatchingFileIds(
@@ -109,32 +122,44 @@ export default class SearchService {
         if (target !== "all" && target !== "files") {
             return Promise.resolve([]);
         }
-        const sql = `SELECT cf.*
+
+        const tagSql =
+            tags.length === 0
+                ? ""
+                : `AND (cft."TagName" IN (:tags) OR ct."TagName" IN (:tags))`;
+        const orderBySql = `${
+            sort.field === "name" ? "cf.name" : 'cf."takenAt", cf."createdAt"'
+        } ${sort.asc ? "ASC" : "DESC"}`;
+        const sql = `SELECT cf.id, cf.name, cf."takenAt", cf."createdAt", cft."TagName" as "fileTag", ct."TagName" as "collectionTag"
                     FROM "CollectionFiles" cf
                     JOIN "Collections" c ON c.id = cf."CollectionId"
                     LEFT JOIN "CollectionFileTags" cft ON cft."CollectionFileId" = cf.id
                     LEFT JOIN "CollectionTags" ct ON ct."CollectionId" = c.id
-                    WHERE c."UserId"::text = :userId AND c.id::text LIKE :likeCollectionId AND
-                        cf.name LIKE :likeQuery ${
-                            tags.length
-                                ? 'AND (cft."TagName" IN(:tags) OR ct."TagName" IN(:tags))'
-                                : ""
-                        }
-                    ORDER BY ${
-                        sort.field === "name"
-                            ? "cf.name"
-                            : 'cf."takenAt", cf."createdAt"'
-                    } ${sort.asc ? "ASC" : "DESC"}`;
+                    WHERE c."UserId"::text = :userId AND c.id::text LIKE :likeCollectionId AND cf.name LIKE :likeQuery ${tagSql}
+                    ORDER BY ${orderBySql}`;
         const values = {
             userId: this.userId,
             likeQuery: query ? `%${query}%` : "%",
             likeCollectionId: collectionId ? collectionId : "%",
-            tags: tags
+            tags: tags,
+            tagCount: tags.length
         };
 
-        return Database.getInstance()
-            .then((db) => db.select(sql, values))
-            .then((rows) => rows.map((row: any) => row.id));
+        const db = await Database.getInstance();
+        const rows = await db.select(sql, values);
+
+        type GroupedTags = Record<string, string[]>;
+        const tagsByFileId = rows.reduce((acc: GroupedTags, curr: any) => {
+            acc[curr.id] ||= [];
+            curr.collectionTag && acc[curr.id].push(curr.collectionTag);
+            curr.fileTag && acc[curr.id].push(curr.fileTag);
+            return acc;
+        }, {} as GroupedTags);
+
+        return Object.keys(tagsByFileId).filter((fileId) => {
+            const tagPool = tagsByFileId[fileId];
+            return tags.every((tag) => tagPool.includes(tag));
+        });
     }
 
     async tagAutocomplete(query: string): Promise<string[]> {
