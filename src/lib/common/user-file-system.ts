@@ -1,25 +1,20 @@
 import formidable from "formidable";
-import {
-    mkdir,
-    readFile,
-    readdir,
-    rename,
-    rm,
-    rmdir,
-    stat,
-    unlink,
-    writeFile
-} from "fs/promises";
+import { unlink } from "fs/promises";
 import { IncomingMessage } from "http";
 import path from "path";
 import appConfig from "./app-config";
 import Cryptography from "./cryptography";
 import { HolviError } from "./errors";
+import {
+    createDirIfNotExists,
+    deleteDirectory,
+    moveDirectoryContents,
+    tryReadFile
+} from "./file-system-helpers";
 import { ImageHelper } from "./image-helper";
 import Log, { LogColor } from "./log";
 import { getErrorMessage, isValidDate } from "./utilities";
 import { VideoHelper } from "./video-helper";
-import { createDirIfNotExists, deleteDirectory, moveDirectoryContents, tryReadFile } from "./file-system-helpers";
 
 interface ParsedFile {
     filepath: string;
@@ -258,9 +253,8 @@ export class UserFileSystem {
                 };
             }
 
-            let fileBuffer = await tryReadFile(filepath);
             let thumbnailBuffer = await tryReadFile(thumbnailPath);
-            if (!fileBuffer || !thumbnailBuffer) {
+            if (!thumbnailBuffer) {
                 throw new HolviError(
                     `Could not read file '${originalFilename}'`
                 );
@@ -269,10 +263,8 @@ export class UserFileSystem {
                 thumbnailBuffer
             );
 
-            fileBuffer = Cryptography.encrypt(fileBuffer);
-            thumbnailBuffer = Cryptography.encrypt(thumbnailBuffer);
-            await writeFile(filepath, fileBuffer);
-            await writeFile(thumbnailPath, thumbnailBuffer);
+            await Cryptography.encryptFile(filepath);
+            await Cryptography.encryptFile(thumbnailPath);
 
             return { processed };
         } catch (error) {

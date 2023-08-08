@@ -1,10 +1,11 @@
 import appConfig from "@/lib/common/app-config";
 import Cryptography from "@/lib/common/cryptography";
 import { HolviError } from "@/lib/common/errors";
+import { moveDirectoryContents } from "@/lib/common/file-system-helpers";
 import { ImageHelper } from "@/lib/common/image-helper";
 import Log, { LogColor } from "@/lib/common/log";
 import { getErrorMessage } from "@/lib/common/utilities";
-import { mkdir, readFile, rm, writeFile } from "fs/promises";
+import { copyFile, mkdir, readFile, rm } from "fs/promises";
 import path from "path";
 import Database from "./Database";
 
@@ -49,7 +50,10 @@ export default class DatabaseUpgrade {
         if (isSuccess) {
             return;
         }
-        throw new HolviError(`Upgrade unsuccessful`);
+        DatabaseUpgrade.logger.error(
+            "Database upgrade unsuccessful. Shutting down..."
+        );
+        process.exit(1);
     }
 
     private static async performUpgrade1(db: Database): Promise<boolean> {
@@ -125,7 +129,7 @@ export default class DatabaseUpgrade {
                 await backupAndEncryptFile(userId, collectionId, fileId);
                 await backupAndEncryptFile(userId, collectionId, fileId, true);
             }
-
+            
             DatabaseUpgrade.logger.info(
                 "All files encrypted. Deleting backup..."
             );
@@ -138,9 +142,9 @@ export default class DatabaseUpgrade {
                 `Error encrypting files (${getErrorMessage(error)})`,
                 error
             );
-            DatabaseUpgrade.logger.info(
-                `So far processed files are backed up in '${backupDir}'`
-            );
+            DatabaseUpgrade.logger.info("Restoring files from backup...");
+            await moveDirectoryContents(backupDir, appConfig.dataDir);
+            DatabaseUpgrade.logger.info("Files restored");
             return false;
         }
 
@@ -160,9 +164,8 @@ export default class DatabaseUpgrade {
             const backupPath = path.join(backupDir, ...filepath);
             await mkdir(path.dirname(backupPath), { recursive: true });
 
-            const file = await readFile(originalPath);
-            await writeFile(backupPath, file);
-            await writeFile(originalPath, Cryptography.encrypt(file));
+            await copyFile(originalPath, backupPath);
+            await Cryptography.encryptFile(originalPath);
         }
     }
 }

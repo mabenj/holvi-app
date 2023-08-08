@@ -1,8 +1,8 @@
 import bcrypt from "bcrypt";
 import { toBigIntBE, toBufferBE } from "bigint-buffer";
 import crypto from "crypto";
-import { createReadStream } from "fs";
-import { stat } from "fs/promises";
+import { createReadStream, createWriteStream } from "fs";
+import { rename, stat } from "fs/promises";
 import { Stream, Transform } from "stream";
 import appConfig from "./app-config";
 
@@ -27,15 +27,22 @@ export default class Cryptography {
         return crypto.randomUUID();
     }
 
-    static encrypt(buffer: Buffer) {
+    static async encryptFile(filepath: string) {
         const iv = crypto.randomBytes(IV_SIZE);
         const cipher = Cryptography.getCipher(iv);
-        const result = Buffer.concat([
-            iv,
-            cipher.update(buffer),
-            cipher.final()
-        ]);
-        return result;
+        const input = createReadStream(filepath);
+        const output = createWriteStream(filepath + ".temp");
+
+        output.write(iv);
+        input.pipe(cipher).pipe(output);
+
+        return new Promise<void>((resolve, reject) => {
+            output.on("finish", async () => {
+                await rename(filepath + ".temp", filepath);
+                resolve();
+            });
+            output.on("error", reject);
+        });
     }
 
     static decrypt(buffer: Buffer) {

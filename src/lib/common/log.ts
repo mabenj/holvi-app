@@ -56,7 +56,7 @@ export default class Log {
             `${this.timestamp} ${chalk.red(
                 "[ERROR]"
             )} ${this.getName()}: ${message}`,
-            error
+            error || ""
         );
     }
 
