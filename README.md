@@ -34,6 +34,8 @@ Create a `.env.local` file in the root of the project and add the following vari
 
 `HOLVI_GEO_API_KEY=<reverse geocoding API key (https://www.bigdatacloud.com/packages/reverse-geocoding)>`
 
+`HOLVI_ENCRYPTION_KEY=<32 character long encryption key>`
+
 ### Install dependencies
 
 ```bash
