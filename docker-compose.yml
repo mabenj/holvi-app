@@ -20,7 +20,7 @@ services:
         environment:
             - HOLVI_DB_CONNECTION_STRING=postgres://admin:securepassword@database:5432/holvi
             - HOLVI_SESSION_PASSWORD=generate-a-32-character-long-key-at-https://1password.com/password-generator
-            - HOLVI_ENCRYPTION_KEY=generate-a-32-character-long-key-at-https://1password.com/password-generator
+            - HOLVI_ENCRYPTION_KEY=generate-an-encryption-ket-at-https://generate-random.org/encryption-key-generator?count=1&bytes=32&cipher=aes-256-ctr
             - HOLVI_DATA_DIR=/app/data
             - HOLVI_USE_HTTPS=false
             - HOLVI_SESSION_TTL_SECONDS=7200
