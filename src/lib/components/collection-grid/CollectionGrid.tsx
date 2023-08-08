@@ -73,7 +73,9 @@ const ResponsiveGrid = ({
                     {title}
                 </Heading>
             )}
-            <SimpleGrid columns={[3, 3, 4, 6, 8, 9]} spacing={[0.5, 0.5, 1, 1]}>
+            <SimpleGrid
+                columns={[3, 3, 4, 6, 8, 9]}
+                spacing={[0.5, 0.5, 0.5, 0.5]}>
                 {isLoading ? (
                     Array.from({ length: 20 }).map((_, i) => (
                         <CollectionGridCard key={i} isLoading={isLoading} />
