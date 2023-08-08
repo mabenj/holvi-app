@@ -1,9 +1,8 @@
 import Database from "@/db/Database";
 import { Collection } from "@/db/models/Collection";
-import { ReadStream } from "fs";
 import { IncomingMessage } from "http";
 import { Op } from "sequelize";
-import appConfig from "../common/app-config";
+import { Stream } from "stream";
 import { HolviError, NotFoundError } from "../common/errors";
 import { UserFileSystem } from "../common/user-file-system";
 import { EMPTY_UUIDV4, caseInsensitiveSorter } from "../common/utilities";
@@ -25,7 +24,7 @@ interface GetBufferResult {
 }
 
 interface GetStreamResult {
-    stream: ReadStream;
+    stream: Stream;
     chunkStartEnd: [start: number, end: number];
     totalLengthBytes: number;
     mimeType: string;
@@ -171,7 +170,7 @@ export class CollectionService {
     async getVideoStream(
         collectionId: string,
         videoId: string,
-        chunkStart: number
+        offset: number
     ): Promise<GetStreamResult> {
         const fileInfo = await this.getCollectionFileInfo(
             collectionId,
@@ -183,12 +182,7 @@ export class CollectionService {
 
         const fileSystem = new UserFileSystem(this.userId);
         const { stream, totalLengthBytes, chunkStartEnd } =
-            await fileSystem.getFileStream(
-                collectionId,
-                fileInfo.id,
-                chunkStart,
-                appConfig.streamChunkSize
-            );
+            await fileSystem.getFileStream(collectionId, fileInfo.id, offset);
         if (!stream) {
             throw new HolviError(
                 `Could not get file stream for file '${videoId}'`
@@ -202,13 +196,6 @@ export class CollectionService {
             chunkStartEnd,
             totalLengthBytes
         };
-    }
-
-    async getFileThumbnailBuffer(
-        collectionId: string,
-        fileId: string
-    ): Promise<GetBufferResult> {
-        return this.getFileBuffer(collectionId, fileId, true);
     }
 
     async getFileBuffer(

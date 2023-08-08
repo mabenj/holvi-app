@@ -1,5 +1,4 @@
 import formidable from "formidable";
-import { createReadStream } from "fs";
 import {
     mkdir,
     readFile,
@@ -8,7 +7,8 @@ import {
     rm,
     rmdir,
     stat,
-    unlink
+    unlink,
+    writeFile
 } from "fs/promises";
 import { IncomingMessage } from "http";
 import path from "path";
@@ -83,30 +83,20 @@ export class UserFileSystem {
         }
     }
 
-    async getFileStream(
-        collectionId: string,
-        fileId: string,
-        chunkStart: number,
-        chunkSize: number
-    ) {
+    async getFileStream(collectionId: string, fileId: string, offset: number) {
         try {
             const filePath = path.join(this.rootDir, collectionId, fileId);
-            const fileSize = await stat(filePath).then((stats) => stats.size);
-            const chunkEnd = Math.min(chunkStart + chunkSize, fileSize - 1);
-
-            const stream = createReadStream(filePath, {
-                start: chunkStart,
-                end: chunkEnd
-            });
+            const { stream, size, totalSize } =
+                await Cryptography.getDecryptedStreamChunk(filePath, offset);
 
             return {
                 stream,
-                totalLengthBytes: fileSize,
-                chunkStartEnd: [chunkStart, chunkEnd] as [number, number]
+                totalLengthBytes: totalSize,
+                chunkStartEnd: [offset, offset + size] as [number, number]
             };
         } catch (error) {
             this.logger.error(
-                `Error fetching file stream (collection: ${collectionId}, file: ${fileId}, start: ${chunkStart}, size: ${chunkSize})`,
+                `Error fetching file stream (collection: ${collectionId}, file: ${fileId}, start: ${offset})`,
                 error
             );
             throw error;
@@ -125,7 +115,10 @@ export class UserFileSystem {
             }
             filepath.push(fileId);
             const file = await readBytes(path.join(...filepath));
-            return file;
+            if (!file) {
+                throw new HolviError(`Could not read file '${fileId}'`);
+            }
+            return Cryptography.decrypt(file);
         } catch (error) {
             this.logger.error(
                 `Error reading file${
@@ -264,9 +257,21 @@ export class UserFileSystem {
                 };
             }
 
+            let fileBuffer = await readBytes(filepath);
+            let thumbnailBuffer = await readBytes(thumbnailPath);
+            if (!fileBuffer || !thumbnailBuffer) {
+                throw new HolviError(
+                    `Could not read file '${originalFilename}'`
+                );
+            }
             processed.blurDataUrl = await ImageHelper.generateBlur(
-                await readBytes(thumbnailPath)
+                thumbnailBuffer
             );
+
+            fileBuffer = Cryptography.encrypt(fileBuffer);
+            thumbnailBuffer = Cryptography.encrypt(thumbnailBuffer);
+            await writeFile(filepath, fileBuffer);
+            await writeFile(thumbnailPath, thumbnailBuffer);
 
             return { processed };
         } catch (error) {

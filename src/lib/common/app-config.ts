@@ -1,5 +1,3 @@
-import { DeepReadonly } from "../types/deep-readonly";
-
 const MEGABYTE = 1_000_000;
 const GIGABYTE = 1_000 * MEGABYTE;
 const HOUR = 60 * 60;
@@ -35,10 +33,11 @@ const appConfig = {
     ),
     geoApiKey: getEnvVariable("HOLVI_GEO_API_KEY"),
     thumbnailMaxWidth: 600,
-    thumbnailMaxHeight: 600
-};
+    thumbnailMaxHeight: 600,
+    encryptionKey: getEnvVariable("HOLVI_ENCRYPTION_KEY")
+} as const;
 
-export default appConfig as DeepReadonly<typeof appConfig>;
+export default appConfig;
 
 function getEnvVariable(
     key: string,
