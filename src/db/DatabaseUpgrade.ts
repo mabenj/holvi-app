@@ -1,21 +1,21 @@
 import appConfig from "@/lib/common/app-config";
+import Cryptography from "@/lib/common/cryptography";
 import { HolviError } from "@/lib/common/errors";
 import { ImageHelper } from "@/lib/common/image-helper";
 import Log, { LogColor } from "@/lib/common/log";
 import { getErrorMessage } from "@/lib/common/utilities";
-import { readFile } from "fs/promises";
+import { mkdir, readFile, rm, writeFile } from "fs/promises";
 import path from "path";
 import Database from "./Database";
 
-type UpgradeFunction = (db: Database) => Promise<void>;
+type UpgradeFunction = (db: Database) => Promise<boolean>;
 
 export default class DatabaseUpgrade {
     private static readonly logger = new Log("DB-UPGRADE", LogColor.MAGENTA);
     private static readonly upgradeFunctions: Record<number, UpgradeFunction> =
         {
             1: DatabaseUpgrade.performUpgrade1,
-            2: DatabaseUpgrade.performUpgrade2,
-            3: DatabaseUpgrade.performUpgrade3
+            2: DatabaseUpgrade.performUpgrade2
         };
 
     static async upgrade(from: number, to: number, db: Database) {
@@ -45,10 +45,14 @@ export default class DatabaseUpgrade {
                 `No upgrade function exists for version '${fromVersion}'`
             );
         }
-        await upgradeFn(db);
+        const isSuccess = await upgradeFn(db);
+        if (isSuccess) {
+            return;
+        }
+        throw new HolviError(`Upgrade unsuccessful`);
     }
 
-    private static async performUpgrade1(db: Database) {
+    private static async performUpgrade1(db: Database): Promise<boolean> {
         const transaction = await db.transaction();
         try {
             const files = await db.models.CollectionFile.findAll({
@@ -62,7 +66,9 @@ export default class DatabaseUpgrade {
                 const collectionId = files[i].CollectionId;
                 const fileId = files[i].id;
                 DatabaseUpgrade.logger.info(
-                    `Generating placeholder for '${fileId}'`
+                    `Generating placeholder ${i + 1}/${
+                        files.length
+                    } (${fileId})`
                 );
 
                 const thumbnailPath = path.join(
@@ -86,19 +92,77 @@ export default class DatabaseUpgrade {
                 }
             );
             DatabaseUpgrade.logger.info(`${result.length} rows affected`);
+
+            return true;
         } catch (error) {
             DatabaseUpgrade.logger.error(
                 `Error generating placeholders (${getErrorMessage(error)})`
             );
             await transaction.rollback();
+            return false;
         }
     }
 
-    private static async performUpgrade2(db: Database) {
-        throw new Error("Not implemented");
-    }
+    private static async performUpgrade2(db: Database): Promise<boolean> {
+        const files = await db.models.CollectionFile.findAll({
+            include: db.models.Collection
+        });
 
-    private static async performUpgrade3(db: Database) {
-        throw new Error("Not implemented");
+        const backupDir = path.join(
+            appConfig.dataDir,
+            "db_upgrade_2_to_3_backup"
+        );
+
+        try {
+            for (let i = 0; i < files.length; i++) {
+                const userId = files[i].Collection!.UserId;
+                const collectionId = files[i].CollectionId;
+                const fileId = files[i].id;
+                DatabaseUpgrade.logger.info(
+                    `Encrypting file ${i + 1}/${files.length} (${fileId})`
+                );
+
+                await backupAndEncryptFile(userId, collectionId, fileId);
+                await backupAndEncryptFile(userId, collectionId, fileId, true);
+            }
+
+            DatabaseUpgrade.logger.info(
+                "All files encrypted. Deleting backup..."
+            );
+            await rm(backupDir, { recursive: true, force: true });
+            DatabaseUpgrade.logger.info("Done");
+
+            return true;
+        } catch (error) {
+            DatabaseUpgrade.logger.error(
+                `Error encrypting files (${getErrorMessage(error)})`,
+                error
+            );
+            DatabaseUpgrade.logger.info(
+                `So far processed files are backed up in '${backupDir}'`
+            );
+            return false;
+        }
+
+        async function backupAndEncryptFile(
+            userId: string,
+            collectionId: string,
+            fileId: string,
+            isThumbnail: boolean = false
+        ) {
+            const filepath = [userId, collectionId];
+            if (isThumbnail) {
+                filepath.push("tn");
+            }
+            filepath.push(fileId);
+
+            const originalPath = path.join(appConfig.dataDir, ...filepath);
+            const backupPath = path.join(backupDir, ...filepath);
+            await mkdir(path.dirname(backupPath), { recursive: true });
+
+            const file = await readFile(originalPath);
+            await writeFile(backupPath, file);
+            await writeFile(originalPath, Cryptography.encrypt(file));
+        }
     }
 }

@@ -80,11 +80,11 @@ export default class AuthService {
         }
 
         const db = await Database.getInstance();
-        const user = await db.models.User.findOne({
-            where: { id: session.user.id, requireSignIn: false },
+        const user = await db.models.User.findByPk(session.user.id, {
+            attributes: ["id", "username", "requireSignIn"],
             raw: true
         });
-        if (!user) {
+        if (!user || user.requireSignIn) {
             session.destroy();
             return null;
         }

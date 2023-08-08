@@ -19,6 +19,7 @@ import { ImageHelper } from "./image-helper";
 import Log, { LogColor } from "./log";
 import { getErrorMessage, isValidDate } from "./utilities";
 import { VideoHelper } from "./video-helper";
+import { createDirIfNotExists, deleteDirectory, moveDirectoryContents, tryReadFile } from "./file-system-helpers";
 
 interface ParsedFile {
     filepath: string;
@@ -114,7 +115,7 @@ export class UserFileSystem {
                 filepath.push("tn");
             }
             filepath.push(fileId);
-            const file = await readBytes(path.join(...filepath));
+            const file = await tryReadFile(path.join(...filepath));
             if (!file) {
                 throw new HolviError(`Could not read file '${fileId}'`);
             }
@@ -257,8 +258,8 @@ export class UserFileSystem {
                 };
             }
 
-            let fileBuffer = await readBytes(filepath);
-            let thumbnailBuffer = await readBytes(thumbnailPath);
+            let fileBuffer = await tryReadFile(filepath);
+            let thumbnailBuffer = await tryReadFile(thumbnailPath);
             if (!fileBuffer || !thumbnailBuffer) {
                 throw new HolviError(
                     `Could not read file '${originalFilename}'`
@@ -305,47 +306,6 @@ export class UserFileSystem {
             await ImageHelper.generateImageThumbnail(imagePath, thumbnailPath);
         const exif = await ImageHelper.getExif(imagePath);
         return { width, height, thumbnailWidth, thumbnailHeight, exif };
-    }
-}
-
-export async function createDirIfNotExists(dir: string) {
-    try {
-        await stat(dir);
-    } catch (e: any) {
-        if (e.code === "ENOENT") {
-            await mkdir(dir, { recursive: true });
-        } else {
-            throw e;
-        }
-    }
-}
-
-async function moveDirectoryContents(sourceDir: string, targetDir: string) {
-    await createDirIfNotExists(targetDir);
-    const files = await readdir(sourceDir);
-    for (const file of files) {
-        const sourcePath = path.join(sourceDir, file);
-        const targetPath = path.join(targetDir, file);
-
-        const stats = await stat(sourcePath);
-        if (stats.isFile()) {
-            await rename(sourcePath, targetPath);
-        } else {
-            await moveDirectoryContents(sourcePath, targetPath);
-            await rmdir(sourcePath);
-        }
-    }
-}
-
-async function deleteDirectory(path: string) {
-    await rm(path, { recursive: true, force: true });
-}
-
-async function readBytes(path: string) {
-    try {
-        return readFile(path);
-    } catch {
-        return null;
     }
 }
 

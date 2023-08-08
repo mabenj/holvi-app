@@ -3,8 +3,8 @@ import { rename, unlink } from "fs/promises";
 import path from "path";
 import appConfig from "./app-config";
 import { HolviError } from "./errors";
+import { createDirIfNotExists } from "./file-system-helpers";
 import Log, { LogColor } from "./log";
-import { createDirIfNotExists } from "./user-file-system";
 import { getErrorMessage } from "./utilities";
 
 export class VideoHelper {

@@ -12,7 +12,7 @@ import { Tag } from "./models/Tag";
 import { User } from "./models/User";
 
 export default class Database {
-    private static readonly version = 2;
+    private static readonly version = 3;
     private static instance: Database;
 
     private readonly sequelize;
