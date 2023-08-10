@@ -1,5 +1,5 @@
 import { useCollectionGrid } from "@/lib/context/CollectionGridContext";
-import { AddIcon, SearchIcon } from "@chakra-ui/icons";
+import { SearchIcon } from "@chakra-ui/icons";
 import {
     Box,
     Button,
@@ -30,9 +30,7 @@ export default function CollectionGridActionBar({
     collectionId
 }: CollectionGridActionBarProps) {
     const canFilter = collectionId === "root";
-    const canListFiles = collectionId === "root";
     const canUploadFiles = collectionId !== "root";
-    const canUploadCollection = collectionId === "root";
     const canCreateCollection = collectionId === "root";
 
     return (
@@ -49,33 +47,13 @@ export default function CollectionGridActionBar({
                 <Flex alignItems="center" gap={2}>
                     {canFilter && <FilterBtn />}
                     <SortBtn />
-                    {canListFiles && <ListAllFilesBtn />}
                     {canUploadFiles && <UploadFilesBtn />}
-                    {canUploadCollection && <UploadCollectionBtn />}
                     {canCreateCollection && <CreateCollectionBtn />}
                 </Flex>
             </Flex>
         </>
     );
 }
-
-const ListAllFilesBtn = () => {
-    return <></>;
-    // TODO: maybe some day?
-    // const {
-    //     isLoading,
-    // } = useCollectionGrid();
-
-    // return (
-    //     <Button
-    //         variant="ghost"
-    //         onClick={toggleIsFileOnly}
-    //         title="List all files"
-    //         isDisabled={isLoading}>
-    //         {isFileOnly ? "List collections" : "List files"}
-    //     </Button>
-    // );
-};
 
 const FilterBtn = () => {
     const {
@@ -202,48 +180,6 @@ const SortBtn = () => {
     );
 };
 
-const UploadCollectionBtn = () => {
-    const {
-        actions: { upload },
-        flags: { isLoading, isUploading }
-    } = useCollectionGrid();
-    const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-    const handleUpload = (e: ChangeEvent<HTMLInputElement>) => {
-        const files = Array.from(e.target.files || []);
-        const name =
-            files[0]?.webkitRelativePath.split("/")[0] || "New collection";
-        upload(files, name);
-        if (fileInputRef.current?.value) {
-            fileInputRef.current.value = "";
-        }
-    };
-
-    return (
-        <div>
-            <input
-                ref={fileInputRef}
-                type="file"
-                style={{ display: "none" }}
-                {...{
-                    webkitdirectory: "true",
-                    mozdirectory: "true",
-                    directory: "true"
-                }}
-                onChange={handleUpload}
-            />
-            <IconButton
-                aria-label="Upload collection"
-                title="Upload collection"
-                variant="ghost"
-                onClick={() => fileInputRef?.current?.click()}
-                icon={<Icon path={mdiFolderUpload} size={1} />}
-                isDisabled={isLoading || isUploading}
-            />
-        </div>
-    );
-};
-
 const UploadFilesBtn = () => {
     const {
         actions: { upload },
@@ -292,7 +228,7 @@ const CreateCollectionBtn = () => {
             mode="create"
             trigger={
                 <Button
-                    leftIcon={<AddIcon />}
+                    leftIcon={<Icon path={mdiFolderUpload} size={1} />}
                     title="Create a new collection"
                     isDisabled={isLoading || isUploading}>
                     Create

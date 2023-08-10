@@ -36,7 +36,7 @@ export default function Dialog({
         flexDirection: "column",
         borderRadius: "10px",
         marginTop: "12rem",
-        paddingBottom: "5rem",
+        paddingBottom: "1rem",
         position: "fixed",
         bottom: 0,
         left: 0,

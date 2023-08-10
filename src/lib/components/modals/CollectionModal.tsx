@@ -1,5 +1,6 @@
 import { CollectionDto } from "@/lib/types/collection-dto";
 import {
+    Box,
     Button,
     Flex,
     FormControl,
@@ -12,7 +13,9 @@ import {
     useDisclosure
 } from "@chakra-ui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import React from "react";
+import { mdiFolderUpload, mdiUpload } from "@mdi/js";
+import Icon from "@mdi/react";
+import React, { ChangeEvent, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
     CollectionFormData,
@@ -26,7 +29,8 @@ interface CollectionModalProps {
     trigger: React.ReactNode;
     onSave: (
         data: CollectionFormData,
-        id?: string
+        id?: string,
+        files?: File[]
     ) => Promise<
         | CollectionDto
         | {
@@ -45,12 +49,14 @@ export default function CollectionModal({
     initialCollection
 }: CollectionModalProps) {
     const { isOpen, onOpen, onClose } = useDisclosure();
+    const [files, setFiles] = useState<File[]>([]);
 
     const {
         register,
         handleSubmit,
         formState: { errors },
         setError,
+        getValues,
         setValue,
         control
     } = useForm<CollectionFormData>({
@@ -63,7 +69,7 @@ export default function CollectionModal({
     });
 
     const onSubmit = async (formData: CollectionFormData) => {
-        const result = await onSave(formData, initialCollection?.id);
+        const result = await onSave(formData, initialCollection?.id, files);
         if ("nameError" in result) {
             setError("name", {
                 message: result.nameError
@@ -94,6 +100,14 @@ export default function CollectionModal({
         setValue("description", initialCollection?.description);
     };
 
+    const onFiles = (files: File[], folderName?: string) => {
+        setFiles(files);
+        const { name } = getValues();
+        if (!name && folderName) {
+            setValue("name", folderName);
+        }
+    };
+
     return (
         <Dialog
             isOpen={isOpen}
@@ -101,18 +115,19 @@ export default function CollectionModal({
             onOpen={onOpen}
             trigger={trigger}
             title={
-                <Heading size="lg" mb={8}>
+                <Heading size="lg" mb={8} textAlign="center">
                     {mode === "edit" ? "Edit collection" : "Create collection"}
                 </Heading>
             }>
+            {mode === "create" && <UploadButtons onFiles={onFiles} />}
             <form id="create-collection-form" onSubmit={handleSubmit(onSubmit)}>
-                <Flex direction="column" gap={4}>
+                <Flex direction="column" gap={5}>
                     <FormControl isInvalid={!!errors.name}>
                         <FormLabel>Collection name</FormLabel>
                         <Input
                             type="text"
                             isRequired
-                            placeholder="Name..."
+                            placeholder="Name"
                             {...register("name")}
                         />
                         <FormErrorMessage>
@@ -122,7 +137,7 @@ export default function CollectionModal({
                     <FormControl isInvalid={!!errors.description}>
                         <FormLabel>Description</FormLabel>
                         <Textarea
-                            placeholder="Description..."
+                            placeholder="Description"
                             {...register("description")}
                         />
                         <FormErrorMessage>
@@ -174,3 +189,103 @@ export default function CollectionModal({
         </Dialog>
     );
 }
+
+const UploadButtons = ({
+    onFiles
+}: {
+    onFiles: (files: File[], folderName?: string) => void;
+}) => {
+    const [currentFiles, setCurrentFiles] = useState<File[]>([]);
+    const folderInputRef = useRef<HTMLInputElement | null>(null);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+    const handleFilesSelected = (
+        e: ChangeEvent<HTMLInputElement>,
+        isFolder?: boolean
+    ) => {
+        const files = Array.from(e.target.files || []);
+        const folderName = isFolder
+            ? files[0]?.webkitRelativePath.split("/")[0]
+            : undefined;
+        onFiles(files, folderName);
+        setCurrentFiles(files);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
+        if (folderInputRef.current) {
+            folderInputRef.current.value = "";
+        }
+    };
+
+    const handleClearFiles = () => {
+        onFiles([]);
+        setCurrentFiles([]);
+    };
+
+    return (
+        <>
+            {currentFiles.length === 0 && (
+                <Flex
+                    justifyContent="center"
+                    alignItems="center"
+                    gap={5}
+                    pb={8}>
+                    <Button
+                        variant="outline"
+                        leftIcon={<Icon path={mdiFolderUpload} size={0.7} />}
+                        onClick={() => folderInputRef?.current?.click()}>
+                        Select folder
+                    </Button>
+                    <Box color="gray.500">or</Box>
+                    <Button
+                        variant="outline"
+                        leftIcon={<Icon path={mdiUpload} size={0.7} />}
+                        onClick={() => fileInputRef?.current?.click()}>
+                        Select files
+                    </Button>
+                </Flex>
+            )}
+
+            {currentFiles.length > 0 && (
+                <Flex
+                    justifyContent="center"
+                    alignItems="center"
+                    gap={2}
+                    pb={8}>
+                    <Box color="gray.500">
+                        {currentFiles.length === 1
+                            ? `1 file selected`
+                            : `${currentFiles.length} files selected`}
+                    </Box>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        title="Clear files"
+                        onClick={handleClearFiles}>
+                        Clear
+                    </Button>
+                </Flex>
+            )}
+
+            <input
+                ref={folderInputRef}
+                type="file"
+                style={{ display: "none" }}
+                {...{
+                    webkitdirectory: "true",
+                    mozdirectory: "true",
+                    directory: "true"
+                }}
+                onChange={(e) => handleFilesSelected(e, true)}
+            />
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                style={{ display: "none" }}
+                multiple
+                onChange={handleFilesSelected}
+            />
+        </>
+    );
+};

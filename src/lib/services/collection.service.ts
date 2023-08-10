@@ -263,7 +263,11 @@ export class CollectionService {
     async uploadFiles(
         collectionId: string,
         req: IncomingMessage
-    ): Promise<{ files: CollectionFileDto[]; errors: string[] }> {
+    ): Promise<{
+        collection: CollectionDto;
+        files: CollectionFileDto[];
+        errors: string[];
+    }> {
         const db = await Database.getInstance();
         const transaction = await db.transaction();
         await this.throwIfNotUserCollection(collectionId);
@@ -324,7 +328,21 @@ export class CollectionService {
             );
             await fileSystem.mergeTempDirToCollectionDir(collectionId);
             await transaction.commit();
+
+            const collection = await db.models.Collection.findByPk(
+                collectionId,
+                {
+                    include: [db.models.CollectionFile, db.models.Tag]
+                }
+            );
+            if (!collection) {
+                throw new NotFoundError(
+                    `Collection '${collectionId}' not found`
+                );
+            }
+
             return {
+                collection: collection.toDto(),
                 files: insertedRows.map((row) => row.toDto()),
                 errors: errors
             };

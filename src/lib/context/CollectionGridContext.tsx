@@ -33,10 +33,11 @@ interface CollectionGridState {
         sort: (sort: GridSort) => void;
         filterTags: (tags: string[]) => void;
         search: (query: string) => void;
-        upload: (files: File[], collectionName?: string) => Promise<void>;
+        upload: (files: File[]) => Promise<void>;
         saveCollection: (
             formData: CollectionFormData,
-            id?: string
+            id?: string,
+            files?: File[]
         ) => Promise<{ nameError: string } | CollectionDto>;
         deleteCollection: (id: string) => Promise<void>;
         editFile: (
@@ -106,8 +107,7 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         editFile
     } = useCollectionFiles();
 
-    const { uploadCollection, uploadCollectionFiles, isUploading } =
-        useUpload();
+    const { uploadCollectionFiles, isUploading } = useUpload();
 
     useEffect(() => {
         updateItemsToRender();
@@ -116,14 +116,27 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
 
     const handleSaveCollection = async (
         formData: CollectionFormData,
-        id?: string
+        id?: string,
+        files?: File[]
     ) => {
-        const result = id
+        let result = id
             ? await editCollection(formData, id)
             : await createCollection(formData);
         if ("nameError" in result) {
             return result;
         }
+
+        if (files?.length) {
+            try {
+                const { collection, files: collectionFiles } =
+                    await uploadCollectionFiles(files, result.id);
+                result = collection;
+            } catch (error) {
+                await deleteCollection(result);
+                throw error;
+            }
+        }
+
         if (id) {
             updateItem({ ...result, type: "collection" });
         } else {
@@ -162,46 +175,23 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         deleteItem(id);
     };
 
-    const uploadFiles = async (files: File[], collectionName?: string) => {
+    const uploadFiles = async (files: File[]) => {
         if (files.length === 0) {
             return;
         }
-        const isCreatingNew = !!collectionName;
-        if (isCreatingNew) {
-            let deduplicatedName = collectionName;
-            let isDuplicate = allItems.some(
-                (item) =>
-                    item.type === "collection" && item.name === deduplicatedName
-            );
-            let duplicateCount = 1;
-            while (isDuplicate) {
-                deduplicatedName = `${collectionName} (${++duplicateCount})`;
-                isDuplicate = allItems.some(
-                    (item) =>
-                        item.type === "collection" &&
-                        item.name === deduplicatedName
-                );
-            }
-
-            const collection = await uploadCollection(files, deduplicatedName);
-            addItem({ ...collection, type: "collection" });
-        } else {
-            const collectionFiles = await uploadCollectionFiles(
-                files,
-                collectionId
-            );
-            addItem(
-                ...collectionFiles.map(
-                    (cf) =>
-                        ({
-                            ...cf,
-                            type: cf.mimeType.includes("image")
-                                ? "image"
-                                : "video"
-                        } as CollectionGridItem)
-                )
-            );
-        }
+        const { files: collectionFiles } = await uploadCollectionFiles(
+            files,
+            collectionId
+        );
+        addItem(
+            ...collectionFiles.map(
+                (cf) =>
+                    ({
+                        ...cf,
+                        type: cf.mimeType.includes("image") ? "image" : "video"
+                    } as CollectionGridItem)
+            )
+        );
     };
 
     const addItem = (...newItems: CollectionGridItem[]) => {

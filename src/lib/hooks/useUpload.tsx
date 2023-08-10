@@ -9,65 +9,10 @@ export function useUpload() {
     const toast = useToast();
     const toastIdRef = useRef<ToastId | null>(null);
 
-    const uploadCollection = async (
-        files: File[],
-        collectionName: string
-    ): Promise<CollectionDto> => {
-        try {
-            const response = await upload(
-                files,
-                `/api/collections/upload?name=${encodeURIComponent(
-                    collectionName
-                )}`,
-                "POST"
-            );
-            if (response.status === "error" || response.error) {
-                throw new Error(response.error);
-            }
-            const { collection, errors } = response as {
-                collection: CollectionDto;
-                errors?: string[];
-            };
-            if (errors && errors.length > 0) {
-                toast({
-                    description: (
-                        <Flex direction="column">
-                            <span>
-                                Collection &apos;{collection.name}&apos;
-                                uploaded with errors
-                            </span>
-                            <ul>
-                                {errors.map((error, i) => (
-                                    <li key={i}>{error}</li>
-                                ))}
-                            </ul>
-                        </Flex>
-                    ),
-                    status: "warning"
-                });
-            } else {
-                toast({
-                    description: `Collection '${collection.name}' uploaded`,
-                    status: "success"
-                });
-            }
-
-            return collection;
-        } catch (error) {
-            toast({
-                description: `Could not upload collection: ${getErrorMessage(
-                    error
-                )}`,
-                status: "error"
-            });
-            throw error;
-        }
-    };
-
     const uploadCollectionFiles = async (
         files: File[],
         collectionId: string
-    ): Promise<CollectionFileDto[]> => {
+    ): Promise<{ collection: CollectionDto; files: CollectionFileDto[] }> => {
         try {
             const response = await upload(
                 files,
@@ -77,7 +22,12 @@ export function useUpload() {
             if (response.status === "error" || response.error) {
                 throw new Error(response.error);
             }
-            const { files: collectionFiles, errors } = response as {
+            const {
+                collection,
+                files: collectionFiles,
+                errors
+            } = response as {
+                collection: CollectionDto;
                 files: CollectionFileDto[];
                 errors?: string[];
             };
@@ -103,7 +53,7 @@ export function useUpload() {
                     status: "success"
                 });
             }
-            return collectionFiles;
+            return { collection, files: collectionFiles };
         } catch (error) {
             toast({
                 description: `Could not upload files: ${getErrorMessage(
@@ -173,5 +123,5 @@ export function useUpload() {
         });
     };
 
-    return { uploadCollection, uploadCollectionFiles, isUploading };
+    return { uploadCollectionFiles, isUploading };
 }

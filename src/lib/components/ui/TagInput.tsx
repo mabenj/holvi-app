@@ -115,7 +115,7 @@ export default function TagInput({ value, onChange, onBlur }: TagInputProps) {
                 <Box minW="1rem" flexGrow="1">
                     <Input
                         variant="unstyled"
-                        placeholder="Enter tags..."
+                        placeholder="Tags"
                         value={inputValue}
                         onChange={(e) => handleInputChange(e.target.value)}
                         onKeyDown={handleInputKeyDown}
