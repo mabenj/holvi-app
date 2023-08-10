@@ -1,3 +1,4 @@
+import { useFileDragAndDrop } from "@/lib/hooks/useFileDragAndDrop";
 import { CollectionDto } from "@/lib/types/collection-dto";
 import {
     Box,
@@ -15,7 +16,7 @@ import {
 import { zodResolver } from "@hookform/resolvers/zod";
 import { mdiFolderUpload, mdiUpload } from "@mdi/js";
 import Icon from "@mdi/react";
-import React, { ChangeEvent, useRef, useState } from "react";
+import React, { ChangeEvent, useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
     CollectionFormData,
@@ -39,6 +40,7 @@ interface CollectionModalProps {
     >;
     isSaving: boolean;
     initialCollection?: CollectionDto;
+    fileDragAndDrop?: boolean;
 }
 
 export default function CollectionModal({
@@ -46,10 +48,13 @@ export default function CollectionModal({
     trigger,
     onSave,
     isSaving,
-    initialCollection
+    initialCollection,
+    fileDragAndDrop = false
 }: CollectionModalProps) {
     const { isOpen, onOpen, onClose } = useDisclosure();
     const [files, setFiles] = useState<File[]>([]);
+    const { droppedFiles, droppedFolderName } =
+        useFileDragAndDrop(fileDragAndDrop);
 
     const {
         register,
@@ -67,6 +72,17 @@ export default function CollectionModal({
         },
         resolver: zodResolver(CollectionValidator)
     });
+
+    useEffect(() => {
+        if (!droppedFiles || droppedFiles.length === 0) {
+            return;
+        }
+        setValue("name", droppedFolderName);
+        setFiles(droppedFiles);
+        onOpen();
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [droppedFiles, droppedFolderName]);
 
     const onSubmit = async (formData: CollectionFormData) => {
         const result = await onSave(formData, initialCollection?.id, files);
@@ -98,6 +114,7 @@ export default function CollectionModal({
         setValue("name", initialCollection?.name || "");
         setValue("tags", initialCollection?.tags || []);
         setValue("description", initialCollection?.description);
+        setFiles([]);
     };
 
     const onFiles = (files: File[], folderName?: string) => {
@@ -119,7 +136,9 @@ export default function CollectionModal({
                     {mode === "edit" ? "Edit collection" : "Create collection"}
                 </Heading>
             }>
-            {mode === "create" && <UploadButtons onFiles={onFiles} />}
+            {mode === "create" && (
+                <UploadButtons files={files} onFiles={onFiles} />
+            )}
             <form id="create-collection-form" onSubmit={handleSubmit(onSubmit)}>
                 <Flex direction="column" gap={5}>
                     <FormControl isInvalid={!!errors.name}>
@@ -191,11 +210,12 @@ export default function CollectionModal({
 }
 
 const UploadButtons = ({
+    files,
     onFiles
 }: {
+    files: File[];
     onFiles: (files: File[], folderName?: string) => void;
 }) => {
-    const [currentFiles, setCurrentFiles] = useState<File[]>([]);
     const folderInputRef = useRef<HTMLInputElement | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -208,7 +228,6 @@ const UploadButtons = ({
             ? files[0]?.webkitRelativePath.split("/")[0]
             : undefined;
         onFiles(files, folderName);
-        setCurrentFiles(files);
         if (fileInputRef.current) {
             fileInputRef.current.value = "";
         }
@@ -219,12 +238,11 @@ const UploadButtons = ({
 
     const handleClearFiles = () => {
         onFiles([]);
-        setCurrentFiles([]);
     };
 
     return (
         <>
-            {currentFiles.length === 0 && (
+            {files.length === 0 && (
                 <Flex
                     justifyContent="center"
                     alignItems="center"
@@ -246,16 +264,16 @@ const UploadButtons = ({
                 </Flex>
             )}
 
-            {currentFiles.length > 0 && (
+            {files.length > 0 && (
                 <Flex
                     justifyContent="center"
                     alignItems="center"
                     gap={2}
                     pb={8}>
                     <Box color="gray.500">
-                        {currentFiles.length === 1
+                        {files.length === 1
                             ? `1 file selected`
-                            : `${currentFiles.length} files selected`}
+                            : `${files.length} files selected`}
                     </Box>
                     <Button
                         size="sm"

@@ -236,6 +236,7 @@ const UploadFilesBtn = () => {
 
 const CreateCollectionBtn = () => {
     const {
+        collectionId,
         actions: { saveCollection },
         flags: { isSavingCollection, isLoading, isUploading }
     } = useCollectionGrid();
@@ -253,6 +254,7 @@ const CreateCollectionBtn = () => {
                     Create
                 </Button>
             }
+            fileDragAndDrop={collectionId === "root"}
         />
     );
 };
