@@ -84,7 +84,16 @@ export class ApiRoute {
                     : withUser(handler);
 
             if (validator) {
-                const parsed = validator.safeParse(JSON.parse(req.body));
+                const parsed = req.body
+                    ? validator.safeParse(JSON.parse(req.body))
+                    : undefined;
+                if (!parsed) {
+                    res.status(400).json({
+                        status: "error",
+                        error: "Missing request body"
+                    });
+                    return;
+                }
                 if (!parsed.success) {
                     const errors = parsed.error.flatten();
                     res.status(400).json({

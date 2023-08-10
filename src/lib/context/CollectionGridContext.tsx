@@ -3,6 +3,7 @@ import { useCollectionFiles } from "../hooks/useCollectionFiles";
 import { useCollectionItems } from "../hooks/useCollectionItems";
 import { useCollectionSearch } from "../hooks/useCollectionSearch";
 import { useCollections } from "../hooks/useCollections";
+import { useItemSelect } from "../hooks/useItemSelect";
 import { useUpload } from "../hooks/useUpload";
 import { CollectionDto } from "../types/collection-dto";
 import { CollectionFileDto } from "../types/collection-file-dto";
@@ -20,14 +21,16 @@ interface CollectionGridState {
         isSavingCollection: boolean;
         isDeletingCollection: boolean;
         isSavingFile: boolean;
-        isDeletingFile: boolean;
+        isDeletingSelection: boolean;
         isFetchingTags: boolean;
+        isSelectModeOn: boolean;
     };
     items: {
         collections: CollectionGridItem[];
         files: CollectionGridItem[];
     };
     tags: string[];
+    selection: { [id: string]: boolean };
     searchRequest: SearchRequest;
     actions: {
         sort: (sort: GridSort) => void;
@@ -44,7 +47,9 @@ interface CollectionGridState {
             formData: CollectionFileFormData,
             id: string
         ) => Promise<CollectionFileDto>;
-        deleteFile: (id: string) => Promise<void>;
+        toggleSelectMode: () => void;
+        toggleSelection: (id: string) => void;
+        deleteSelected: () => Promise<void>;
     };
 }
 
@@ -89,7 +94,7 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         isFetchingTags,
         addCollectionItem,
         updateCollectionItem,
-        deleteCollectionItem
+        deleteCollectionItems
     } = useCollectionItems(collectionId, searchRequest.sort);
 
     const {
@@ -100,14 +105,18 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         deleteCollection
     } = useCollections();
 
-    const {
-        isSaving: isSavingFile,
-        isDeleting: isDeletingFile,
-        deleteFile,
-        editFile
-    } = useCollectionFiles();
+    const { isSaving: isSavingFile, editFile } = useCollectionFiles();
 
     const { uploadCollectionFiles, isUploading } = useUpload();
+
+    const {
+        isSelectModeOn,
+        toggleSelectMode,
+        toggleSelected,
+        selection,
+        deleteSelected,
+        isDeleting: isDeletingSelection
+    } = useItemSelect();
 
     useEffect(() => {
         updateItemsToRender();
@@ -151,7 +160,7 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
             return Promise.reject("Collection not found");
         }
         await deleteCollection(item);
-        deleteItem(id);
+        deleteItems(id);
     };
 
     const handleEditFile = async (
@@ -166,13 +175,9 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         return edited;
     };
 
-    const handleDeleteFile = async (id: string) => {
-        const item = (searchResult || allItems).find((item) => item.id === id);
-        if (!item || item.type === "collection") {
-            return Promise.reject("File not found");
-        }
-        await deleteFile(item);
-        deleteItem(id);
+    const handleDeleteSelected = async () => {
+        const deletedIds = await deleteSelected();
+        deleteItems(...deletedIds);
     };
 
     const uploadFiles = async (files: File[]) => {
@@ -208,10 +213,11 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
         );
     };
 
-    const deleteItem = (id: string) => {
-        deleteCollectionItem(id);
+    const deleteItems = (...ids: string[]) => {
+        deleteCollectionItems(...ids);
         setSearchResult(
-            searchResult?.filter((prevItem) => prevItem.id !== id) || null
+            searchResult?.filter((prevItem) => !ids.includes(prevItem.id)) ||
+                null
         );
     };
 
@@ -258,12 +264,14 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
             isSavingCollection: isSavingCollection,
             isDeletingCollection: isDeletingCollection,
             isSavingFile: isSavingFile,
-            isDeletingFile: isDeletingFile,
+            isDeletingSelection: isDeletingSelection,
             isUploading: isUploading,
-            isFetchingTags: isFetchingTags
+            isFetchingTags: isFetchingTags,
+            isSelectModeOn: isSelectModeOn
         },
         items: itemsToRender,
         tags: allTags,
+        selection: selection,
         searchRequest: searchRequest,
         actions: {
             sort: sortItems,
@@ -273,7 +281,9 @@ function useCollectionGridState(collectionId: string): CollectionGridState {
             saveCollection: handleSaveCollection,
             deleteCollection: handleDeleteCollection,
             editFile: handleEditFile,
-            deleteFile: handleDeleteFile
+            toggleSelectMode: toggleSelectMode,
+            toggleSelection: toggleSelected,
+            deleteSelected: handleDeleteSelected
         }
     };
 }
@@ -285,15 +295,17 @@ const CollectionGridContext = createContext<CollectionGridState>({
         isSavingCollection: false,
         isDeletingCollection: false,
         isSavingFile: false,
-        isDeletingFile: false,
+        isDeletingSelection: false,
         isUploading: false,
-        isFetchingTags: false
+        isFetchingTags: false,
+        isSelectModeOn: false
     },
     items: {
         collections: [],
         files: []
     },
     tags: [],
+    selection: {},
     searchRequest: {
         query: "",
         tags: [],
@@ -308,6 +320,8 @@ const CollectionGridContext = createContext<CollectionGridState>({
         saveCollection: () => Promise.reject(),
         deleteCollection: () => Promise.reject(),
         editFile: () => Promise.reject(),
-        deleteFile: () => Promise.reject()
+        toggleSelectMode: () => null,
+        toggleSelection: () => null,
+        deleteSelected: () => Promise.reject()
     }
 });

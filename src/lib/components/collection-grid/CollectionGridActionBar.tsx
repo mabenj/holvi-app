@@ -1,4 +1,5 @@
 import { useCollectionGrid } from "@/lib/context/CollectionGridContext";
+import { CollectionGridItem } from "@/lib/types/collection-grid-item";
 import { SearchIcon } from "@chakra-ui/icons";
 import {
     Box,
@@ -16,10 +17,21 @@ import {
     MenuOptionGroup,
     Tag
 } from "@chakra-ui/react";
-import { mdiFilterVariant, mdiFolderUpload, mdiSort, mdiUpload } from "@mdi/js";
+import {
+    mdiCheckboxBlankOffOutline,
+    mdiCheckboxOutline,
+    mdiDelete,
+    mdiFilterVariant,
+    mdiFolderUpload,
+    mdiSort,
+    mdiSquareEditOutline,
+    mdiUpload
+} from "@mdi/js";
 import Icon from "@mdi/react";
 import { ChangeEvent, useEffect, useRef, useState } from "react";
+import CollectionFileModal from "../modals/CollectionFileModal";
 import CollectionModal from "../modals/CollectionModal";
+import AreYouSureDialog from "../ui/AreYouSureDialog";
 import TagChip from "../ui/TagChip";
 
 interface CollectionGridActionBarProps {
@@ -29,6 +41,10 @@ interface CollectionGridActionBarProps {
 export default function CollectionGridActionBar({
     collectionId
 }: CollectionGridActionBarProps) {
+    const {
+        flags: { isSelectModeOn }
+    } = useCollectionGrid();
+
     const canFilter = collectionId === "root";
     const canUploadFiles = collectionId !== "root";
     const canCreateCollection = collectionId === "root";
@@ -45,6 +61,9 @@ export default function CollectionGridActionBar({
                     <SearchBar />
                 </Box>
                 <Flex alignItems="center" gap={2}>
+                    {isSelectModeOn && <EditItemBtn />}
+                    {isSelectModeOn && <DeleteItemsBtn />}
+                    <SelectItemsBtn />
                     {canFilter && <FilterBtn />}
                     <SortBtn />
                     {canUploadFiles && <UploadFilesBtn />}
@@ -257,4 +276,145 @@ const SearchBar = () => {
             />
         </InputGroup>
     );
+};
+
+const SelectItemsBtn = () => {
+    const {
+        flags: { isSelectModeOn },
+        actions: { toggleSelectMode }
+    } = useCollectionGrid();
+
+    return (
+        <IconButton
+            variant="ghost"
+            aria-label={isSelectModeOn ? "Unselect all" : "Select items"}
+            title={isSelectModeOn ? "Unselect all" : "Select items"}
+            icon={
+                <Icon
+                    path={
+                        isSelectModeOn
+                            ? mdiCheckboxBlankOffOutline
+                            : mdiCheckboxOutline
+                    }
+                    size={1}
+                />
+            }
+            onClick={toggleSelectMode}
+        />
+    );
+};
+
+const DeleteItemsBtn = () => {
+    const {
+        selection,
+        flags: { isDeletingSelection },
+        actions: { deleteSelected }
+    } = useCollectionGrid();
+
+    const selectionCount = Object.keys(selection).filter(
+        (id) => !!selection[id]
+    ).length;
+
+    const handleDelete = async () => {
+        await deleteSelected();
+    };
+
+    return (
+        <>
+            <AreYouSureDialog
+                confirmLabel="Delete"
+                header={
+                    selectionCount === 1
+                        ? "Delete item"
+                        : `Delete ${selectionCount} items`
+                }
+                isConfirming={isDeletingSelection}
+                onConfirm={handleDelete}
+                trigger={
+                    <IconButton
+                        variant="ghost"
+                        aria-label="Delete selected"
+                        title="Delete selected"
+                        icon={<Icon path={mdiDelete} size={1} />}
+                        isDisabled={selectionCount === 0}
+                    />
+                }>
+                Are you sure? You cannot undo this afterwards.
+            </AreYouSureDialog>
+        </>
+    );
+};
+
+const EditItemBtn = () => {
+    const [selectionCount, setSelectionCount] = useState(0);
+    const [selectedItem, setSelectedItem] = useState<CollectionGridItem | null>(
+        null
+    );
+    const {
+        selection,
+        items,
+        flags: { isSavingCollection, isSavingFile },
+        actions: { saveCollection, editFile }
+    } = useCollectionGrid();
+
+    const collectionSelected =
+        !!selectedItem && selectedItem.type === "collection";
+    const fileSelected = !!selectedItem && selectedItem.type !== "collection";
+
+    useEffect(() => {
+        const numOfSelected = Object.keys(selection).filter(
+            (id) => !!selection[id]
+        ).length;
+        setSelectionCount(numOfSelected);
+
+        if (numOfSelected !== 1) {
+            setSelectedItem(null);
+            return;
+        }
+
+        const selectedId = Object.keys(selection).find((id) => !!selection[id]);
+        const item =
+            items.collections.find(
+                (collection) => collection.id === selectedId
+            ) || items.files.find((file) => file.id === selectedId);
+
+        setSelectedItem(item || null);
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selection]);
+
+    const triggerBtn = (
+        <IconButton
+            variant="ghost"
+            aria-label="Edit selected"
+            title="Edit selected"
+            icon={<Icon path={mdiSquareEditOutline} size={1} />}
+            isDisabled={selectionCount !== 1}
+        />
+    );
+
+    if (collectionSelected) {
+        return (
+            <CollectionModal
+                onSave={saveCollection}
+                isSaving={isSavingCollection}
+                mode="edit"
+                initialCollection={selectedItem}
+                trigger={triggerBtn}
+            />
+        );
+    }
+
+    if (fileSelected) {
+        return (
+            <CollectionFileModal
+                onSave={editFile}
+                isSaving={isSavingFile}
+                initialFile={selectedItem}
+                trigger={triggerBtn}
+            />
+        );
+    }
+
+    return null;
 };

@@ -87,12 +87,14 @@ export function useCollectionItems(collectionId: string, sort: GridSort) {
         mutateTags();
     };
 
-    const deleteCollectionItem = (id: string) => {
-        const filterFn = (prevItem: CollectionGridItem) => prevItem.id !== id;
-        mutateItems(allItems.filter(filterFn), {
-            populateCache: true,
-            revalidate: false
-        });
+    const deleteCollectionItems = (...ids: string[]) => {
+        mutateItems(
+            allItems.filter((prevItem) => !ids.includes(prevItem.id)),
+            {
+                populateCache: true,
+                revalidate: false
+            }
+        );
         mutateTags();
     };
 
@@ -103,6 +105,6 @@ export function useCollectionItems(collectionId: string, sort: GridSort) {
         allTags,
         addCollectionItem,
         updateCollectionItem,
-        deleteCollectionItem
+        deleteCollectionItems
     };
 }

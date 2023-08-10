@@ -128,6 +128,58 @@ export class CollectionService {
         return collection.toDto();
     }
 
+    async multiDelete(idsToDelete: string[]) {
+        const db = await Database.getInstance();
+        const transaction = await db.transaction();
+
+        try {
+            const collections = await db.models.Collection.findAll({
+                where: {
+                    UserId: this.userId,
+                    id: {
+                        [Op.in]: idsToDelete
+                    }
+                }
+            });
+            const collectionFiles = await db.models.CollectionFile.findAll({
+                where: {
+                    id: {
+                        [Op.in]: idsToDelete
+                    }
+                },
+                include: {
+                    model: db.models.Collection,
+                    required: true,
+                    where: {
+                        UserId: this.userId
+                    }
+                }
+            });
+            await Promise.all(
+                collections.map((collection) =>
+                    collection.destroy({ transaction })
+                )
+            );
+            await Promise.all(
+                collectionFiles.map((file) => file.destroy({ transaction }))
+            );
+
+            const fileSystem = new UserFileSystem(this.userId);
+            for (let i = 0; i < collections.length; i++) {
+                await fileSystem.deleteCollectionDir(collections[i].id);
+            }
+            for (let i = 0; i < collectionFiles.length; i++) {
+                const { CollectionId, id } = collectionFiles[i];
+                await fileSystem.deleteFileAndThumbnail(CollectionId, id);
+            }
+
+            await transaction.commit();
+        } catch (error) {
+            await transaction.rollback();
+            throw new HolviError(`Error performing multi-deletion`, error);
+        }
+    }
+
     async deleteFile(collectionId: string, fileId: string) {
         const db = await Database.getInstance();
         const transaction = await db.transaction();
@@ -150,7 +202,7 @@ export class CollectionService {
 
             await transaction.commit();
         } catch (error) {
-            transaction.rollback();
+            await transaction.rollback();
             throw new HolviError(`Error deleting file '${fileId}'`, error);
         }
     }
