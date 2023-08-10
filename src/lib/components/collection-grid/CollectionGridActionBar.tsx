@@ -1,4 +1,5 @@
 import { useCollectionGrid } from "@/lib/context/CollectionGridContext";
+import { useFileDragAndDrop } from "@/lib/hooks/useFileDragAndDrop";
 import { CollectionGridItem } from "@/lib/types/collection-grid-item";
 import { SearchIcon } from "@chakra-ui/icons";
 import {
@@ -201,10 +202,21 @@ const SortBtn = () => {
 
 const UploadFilesBtn = () => {
     const {
+        collectionId,
         actions: { upload },
         flags: { isLoading, isUploading }
     } = useCollectionGrid();
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const { droppedFiles } = useFileDragAndDrop(collectionId !== "root");
+
+    useEffect(() => {
+        if (!droppedFiles || droppedFiles.length === 0) {
+            return;
+        }
+        upload(droppedFiles);
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [droppedFiles]);
 
     const handleUpload = (e: ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files || []);
