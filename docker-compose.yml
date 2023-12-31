@@ -13,6 +13,7 @@ services:
             - 5432:5432
         networks:
             - holvi-net
+        restart: always
 
     web:
         build:
@@ -33,6 +34,7 @@ services:
             - 7000:3000
         networks:
             - holvi-net
+        restart: always
 
 volumes:
     db-data:
