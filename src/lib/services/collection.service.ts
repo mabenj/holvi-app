@@ -31,28 +31,17 @@ interface GetStreamResult {
   filename: string;
 }
 
-interface ExportResult {
-  stream: NodeJS.ReadableStream;
-  filename: string;
-}
-
 export class CollectionService {
   constructor(private readonly userId: string) {}
 
-  async exportCollections(): Promise<ExportResult> {
-    const timestamp = Date.now();
-    const filename = `collections-${timestamp}.zip`;
+  async backupCollections() {
     const db = await Database.getInstance();
     const collections = await db.models.Collection.findAll({
       where: { UserId: this.userId },
       include: [db.models.Tag, db.models.CollectionFile],
     });
     const fileSystem = new UserFileSystem(this.userId);
-    const stream = await fileSystem.exportCollections(collections);
-    return {
-      stream,
-      filename,
-    };
+    await fileSystem.backupCollections(collections);
   }
 
   async getAllFiles(): Promise<CollectionFileDto[]> {

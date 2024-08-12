@@ -19,6 +19,7 @@ import {
   Tag,
 } from "@chakra-ui/react";
 import {
+  mdiBackupRestore,
   mdiCheckboxBlankOffOutline,
   mdiCheckboxOutline,
   mdiDelete,
@@ -52,7 +53,7 @@ export default function CollectionGridActionBar({
   const canFilter = collectionId === "root";
   const canUploadFiles = collectionId !== "root";
   const canCreateCollection = collectionId === "root";
-  const canExport = collectionId === "root";
+  const canBackup = collectionId === "root";
 
   return (
     <>
@@ -73,7 +74,7 @@ export default function CollectionGridActionBar({
           {canFilter && <FilterBtn />}
           <SortBtn />
           {canUploadFiles && <UploadFilesBtn />}
-          {canExport && <ExportCollectionsBtn />}
+          {canBackup && <ExportCollectionsBtn />}
           {canCreateCollection && <CreateCollectionBtn />}
         </Flex>
       </Flex>
@@ -82,24 +83,24 @@ export default function CollectionGridActionBar({
 }
 
 const ExportCollectionsBtn = () => {
-  const { exportCollections, isExporting } = useCollections();
+  const { backupCollections, isBackupLoading } = useCollections();
 
   return (
     <AreYouSureDialog
-      header="Export collections"
-      confirmLabel="Export"
-      isConfirming={isExporting}
-      onConfirm={exportCollections}
+      header="Backup collections"
+      confirmLabel="Backup"
+      isConfirming={isBackupLoading}
+      onConfirm={backupCollections}
       trigger={
         <IconButton
           variant="ghost"
-          aria-label="Export all collections"
-          title="Export all collections"
-          icon={<Icon path={mdiExport} size={1} />}
+          aria-label="Backup all collections"
+          title="Backup all collections"
+          icon={<Icon path={mdiBackupRestore} size={1} />}
         />
       }
     >
-      Are you sure you want to export all collections? This can take a while.
+      Are you sure you want to backup all collections? This can take a while.
     </AreYouSureDialog>
   );
 };

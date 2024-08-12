@@ -13,10 +13,11 @@ import {
 } from "./file-system-helpers";
 import { ImageHelper } from "./image-helper";
 import Log, { LogColor } from "./log";
-import { getErrorMessage, isValidDate } from "./utilities";
+import { getErrorMessage, isValidDate, timestamp } from "./utilities";
 import { VideoHelper } from "./video-helper";
 import JSZip from "jszip";
 import { Collection } from "@/db/models/Collection";
+import { createWriteStream } from "fs";
 
 interface ParsedFile {
   filepath: string;
@@ -56,71 +57,77 @@ export class UserFileSystem {
     this.logger = new Log("FS", LogColor.YELLOW);
   }
 
-  async exportCollections(
-    collections: Collection[]
-  ): Promise<NodeJS.ReadableStream> {
-    this.logger.info(`Exporting ${collections.length} collections`);
-    try {
-      const zip = new JSZip();
-      for (let i = 0; i < collections.length; i++) {
-        const collection = collections[i];
-        const files = collection.CollectionFiles || [];
-        const tags = collection.Tags?.map((t) => t.name) || [];
-        const collectionFolder = zip.folder(collection.id);
-        const filesFolder = collectionFolder?.folder("files");
-        collectionFolder?.file("tags.json", JSON.stringify(tags));
-        collectionFolder?.file(
-          "collection.json",
-          JSON.stringify({
-            id: collection.id,
-            name: collection.name,
-            description: collection.description,
-            createdAt: collection.createdAt,
-            updatedAt: collection.updatedAt,
-            userId: collection.UserId,
-          })
-        );
-        collectionFolder?.file(
-          "files.json",
-          JSON.stringify(
-            files.map((file) => ({
-              id: file.id,
-              name: file.name,
-              mimeType: file.mimeType,
-              width: file.width,
-              height: file.height,
-              thumbnailWidth: file.thumbnailWidth,
-              thumbnailHeight: file.thumbnailHeight,
-              takenAt: file.takenAt,
-              durationInSeconds: file.durationInSeconds,
-              gpsLatitude: file.gpsLatitude,
-              gpsLongitude: file.gpsLongitude,
-              gpsLabel: file.gpsLabel,
-              createdAt: file.createdAt,
-              updatedAt: file.updatedAt,
-              blurDataUrl: file.blurDataUrl,
-              collectionId: file.CollectionId,
-            }))
-          )
-        );
+  async backupCollections(collections: Collection[]) {
+    const outputDir = path.join(this.rootDir, "backups");
+    const outputZip = path.join(outputDir, `holvi_backup_${timestamp()}.zip`);
+    await createDirIfNotExists(outputDir);
+    this.logger.info(
+      `Backing up ${collections.length} collections to '${outputZip}'`
+    );
+    const zip = new JSZip();
+    for (let i = 0; i < collections.length; i++) {
+      const collection = collections[i];
+      const files = collection.CollectionFiles || [];
+      const tags = collection.Tags?.map((t) => t.name) || [];
+      const collectionFolder = zip.folder(collection.id);
+      const filesFolder = collectionFolder?.folder("files");
+      collectionFolder?.file("tags.json", JSON.stringify(tags));
+      collectionFolder?.file(
+        "collection.json",
+        JSON.stringify({
+          id: collection.id,
+          name: collection.name,
+          description: collection.description,
+          createdAt: collection.createdAt,
+          updatedAt: collection.updatedAt,
+          userId: collection.UserId,
+        })
+      );
+      collectionFolder?.file(
+        "files.json",
+        JSON.stringify(
+          files.map((file) => ({
+            id: file.id,
+            name: file.name,
+            mimeType: file.mimeType,
+            width: file.width,
+            height: file.height,
+            thumbnailWidth: file.thumbnailWidth,
+            thumbnailHeight: file.thumbnailHeight,
+            takenAt: file.takenAt,
+            durationInSeconds: file.durationInSeconds,
+            gpsLatitude: file.gpsLatitude,
+            gpsLongitude: file.gpsLongitude,
+            gpsLabel: file.gpsLabel,
+            createdAt: file.createdAt,
+            updatedAt: file.updatedAt,
+            blurDataUrl: file.blurDataUrl,
+            collectionId: file.CollectionId,
+          }))
+        )
+      );
 
-        for (let j = 0; j < files.length; j++) {
-          this.logger.info(
-            `Zipping collection '${collection.name}' (${i + 1}/${
-              collections.length
-            }) file ${j + 1}/${files.length}`
-          );
-          const file = files[j];
-          const fileBuffer = await this.readFile(collection.id, file.id);
-          filesFolder?.file(file.id, fileBuffer);
-        }
+      for (let j = 0; j < files.length; j++) {
+        this.logger.info(
+          `Zipping collection '${collection.name}' (${i + 1}/${
+            collections.length
+          }) file ${j + 1}/${files.length}`
+        );
+        const file = files[j];
+        const fileBuffer = await this.readFile(collection.id, file.id);
+        filesFolder?.file(file.id, fileBuffer);
       }
-
-      this.logger.info(`Generating zip file`);
-      return zip.generateNodeStream({ streamFiles: true });
-    } finally {
-      //   await deleteDirectory TODO
     }
+
+    this.logger.info(`Writing zip file`);
+    await new Promise((resolve, reject) =>
+      zip
+        .generateNodeStream({ streamFiles: true })
+        .pipe(createWriteStream(outputZip))
+        .on("finish", resolve)
+        .on("error", reject)
+    );
+    this.logger.info(`Zip file written to '${outputZip}'`);
   }
 
   async deleteFileAndThumbnail(collectionId: string, fileId: string) {

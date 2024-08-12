@@ -10,7 +10,7 @@ import contentDisposition from "content-disposition";
 export function useCollections() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
+  const [isBackupLoading, setIsBackupLoading] = useState(false);
 
   const http = useHttp();
   const toast = useToast();
@@ -85,32 +85,28 @@ export function useCollections() {
     return data.collection;
   };
 
-  const exportCollections = async () => {
-    setIsExporting(true);
-    const res = await fetch(`/api/collections/export`, {
-      method: "GET",
-    }).finally(() => setIsExporting(false));
-    const blob = await res.blob();
-    const filename = contentDisposition.parse(
-      res.headers.get("Content-Disposition")!
-    ).parameters.filename;
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.style.display = "none";
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
+  const backupCollections = async () => {
+    const res = await http.post(`/api/collections/backup`);
+    if (res.error) {
+      toast({
+        description: `Collections backup failed: ${getErrorMessage(res.error)}`,
+        status: "error",
+      });
+    } else {
+      toast({
+        description: `Collections backup started`,
+        status: "success",
+      });
+    }
   };
 
   return {
     isDeleting,
     isSaving,
-    isExporting,
+    isBackupLoading,
     createCollection,
     editCollection,
     deleteCollection,
-    exportCollections,
+    backupCollections,
   };
 }
