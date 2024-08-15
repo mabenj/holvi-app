@@ -10,6 +10,7 @@ import {
   deleteDirectory,
   moveDirectoryContents,
   tryReadFile,
+  writeFile,
 } from "./file-system-helpers";
 import { ImageHelper } from "./image-helper";
 import Log, { LogColor } from "./log";
@@ -59,55 +60,48 @@ export class UserFileSystem {
   }
 
   async backupCollections(collections: Collection[]) {
-    const outputDir = path.join(this.rootDir, "backups");
-    const outputZip = path.join(outputDir, `holvi_backup_${timestamp()}.zip`);
+    const outputDir = path.join(
+      this.rootDir,
+      "backups",
+      `holvi_backup_${timestamp()}`
+    );
+    // const outputZip = path.join(outputDir, `holvi_backup_${timestamp()}.zip`);
     await createDirIfNotExists(outputDir);
     this.logger.info(
-      `Backing up ${collections.length} collections to '${outputZip}'`
+      `Backing up ${collections.length} collections to '${outputDir}'`
     );
-    const outputStream = createWriteStream(outputZip);
-    const archive = archiver("zip", {
-      zlib: { level: 0 },
-    });
-
-    await new Promise<void>(async (resolve, reject) => {
-      outputStream.on("close", resolve);
-      outputStream.on("end", resolve);
-      outputStream.on("error", reject);
-      outputStream.once("warning", (err) => this.logger.warn(err));
-      archive.pipe(outputStream);
-
+    try {
       for (let i = 0; i < collections.length; i++) {
         const collection = collections[i];
         const files = collection.CollectionFiles || [];
         const tags = collection.Tags?.map((t) => t.name) || [];
-        archive.append(JSON.stringify(tags), {
-          name: path.join(collection.name, "tags.json"),
-        });
-        archive.append(
+        const collectionDir = path.join(outputDir, collection.name);
+        await createDirIfNotExists(collectionDir);
+        writeFile(path.join(collectionDir, "tags.json"), JSON.stringify(tags));
+        writeFile(
+          path.join(collectionDir, "collection.json"),
           JSON.stringify({
             name: collection.name,
             description: collection.description,
             createdAt: collection.createdAt,
             updatedAt: collection.updatedAt,
-          }),
-          { name: path.join(collection.name, "collection.json") }
+          })
         );
-        archive.append(
+        writeFile(
+          path.join(collectionDir, "files.json"),
           JSON.stringify(
             files.map((file) => ({
               name: file.name,
               createdAt: file.createdAt,
               updatedAt: file.updatedAt,
             }))
-          ),
-          { name: path.join(collection.name, "files.json") }
+          )
         );
 
         for (let j = 0; j < files.length; j++) {
           const file = files[j];
           this.logger.info(
-            `Appending collection '${collection.name}' (${i + 1}/${
+            `Backing up collection '${collection.name}' (${i + 1}/${
               collections.length
             }) file '${file.name}' (${j + 1}/${files.length})`
           );
@@ -117,21 +111,41 @@ export class UserFileSystem {
             0,
             Number.POSITIVE_INFINITY
           );
-          archive.append(stream as Readable, {
-            name: path.join(collection.name, "files", file.name),
+          await createDirIfNotExists(path.join(collectionDir, "files"));
+          const writeStream = createWriteStream(
+            path.join(collectionDir, "files", file.name)
+          );
+          stream.pipe(writeStream);
+          await new Promise((resolve, reject) => {
+            writeStream.on("close", resolve);
+            writeStream.on("error", reject);
           });
         }
       }
 
-      this.logger.info(`Writing zip file`);
-      archive.finalize();
-    });
+      this.logger.info(`Writing zip file to '${outputDir}.zip'`);
+      const outputStream = createWriteStream(outputDir + ".zip");
+      const archive = archiver("zip", {
+        zlib: { level: 0 },
+      });
+      await new Promise((resolve, reject) => {
+        outputStream.on("close", resolve);
+        outputStream.on("end", resolve);
+        archive.on("error", reject);
+        archive.on("warning", reject);
+        archive.pipe(outputStream);
+        archive.directory(outputDir, false);
+        archive.finalize();
+      });
 
-    this.logger.info(
-      `Done creating backup archive (${prettyBytes(
-        archive.pointer()
-      )} total bytes)`
-    );
+      this.logger.info(
+        `Done creating backup archive (${prettyBytes(
+          archive.pointer()
+        )} total bytes)`
+      );
+    } finally {
+      await deleteDirectory(outputDir);
+    }
   }
 
   async deleteFileAndThumbnail(collectionId: string, fileId: string) {

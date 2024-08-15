@@ -1,4 +1,13 @@
-import { mkdir, readFile, readdir, rename, rm, rmdir, stat } from "fs/promises";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  rmdir,
+  stat,
+  writeFile as writeFileFs,
+} from "fs/promises";
 import path from "path";
 
 export function tryReadFile(path: string) {
@@ -7,6 +16,10 @@ export function tryReadFile(path: string) {
   } catch {
     return null;
   }
+}
+
+export function writeFile(path: string, data: string) {
+  return writeFileFs(path, data, { encoding: "utf8" });
 }
 
 export function deleteDirectory(path: string) {
