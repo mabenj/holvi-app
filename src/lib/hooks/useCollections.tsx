@@ -5,12 +5,11 @@ import { getErrorMessage, isUuidv4 } from "../common/utilities";
 import { CollectionDto } from "../types/collection-dto";
 import { CollectionFormData } from "../validators/collection.validator";
 import { useHttp } from "./useHttp";
-import contentDisposition from "content-disposition";
 
 export function useCollections() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isBackupLoading, setIsBackupLoading] = useState(false);
+  const [isBackingUp, setIsBackingUp] = useState(false);
 
   const http = useHttp();
   const toast = useToast();
@@ -86,7 +85,10 @@ export function useCollections() {
   };
 
   const backupCollections = async () => {
-    const res = await http.post(`/api/collections/backup`);
+    setIsBackingUp(true);
+    const res = await http
+      .post(`/api/collections/backup`)
+      .finally(() => setIsBackingUp(false));
     if (res.error) {
       toast({
         description: `Collections backup failed: ${getErrorMessage(res.error)}`,
@@ -94,7 +96,7 @@ export function useCollections() {
       });
     } else {
       toast({
-        description: `Collections backup started`,
+        description: `Collections backed up`,
         status: "success",
       });
     }
@@ -103,7 +105,7 @@ export function useCollections() {
   return {
     isDeleting,
     isSaving,
-    isBackupLoading,
+    isBackingUp,
     createCollection,
     editCollection,
     deleteCollection,

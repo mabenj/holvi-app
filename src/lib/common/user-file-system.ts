@@ -15,9 +15,10 @@ import { ImageHelper } from "./image-helper";
 import Log, { LogColor } from "./log";
 import { getErrorMessage, isValidDate, timestamp } from "./utilities";
 import { VideoHelper } from "./video-helper";
-import JSZip from "jszip";
 import { Collection } from "@/db/models/Collection";
 import { createWriteStream } from "fs";
+import archiver from "archiver";
+import { Readable } from "stream";
 
 interface ParsedFile {
   filepath: string;
@@ -64,70 +65,73 @@ export class UserFileSystem {
     this.logger.info(
       `Backing up ${collections.length} collections to '${outputZip}'`
     );
-    const zip = new JSZip();
-    for (let i = 0; i < collections.length; i++) {
-      const collection = collections[i];
-      const files = collection.CollectionFiles || [];
-      const tags = collection.Tags?.map((t) => t.name) || [];
-      const collectionFolder = zip.folder(collection.id);
-      const filesFolder = collectionFolder?.folder("files");
-      collectionFolder?.file("tags.json", JSON.stringify(tags));
-      collectionFolder?.file(
-        "collection.json",
-        JSON.stringify({
-          id: collection.id,
-          name: collection.name,
-          description: collection.description,
-          createdAt: collection.createdAt,
-          updatedAt: collection.updatedAt,
-          userId: collection.UserId,
-        })
-      );
-      collectionFolder?.file(
-        "files.json",
-        JSON.stringify(
-          files.map((file) => ({
-            id: file.id,
-            name: file.name,
-            mimeType: file.mimeType,
-            width: file.width,
-            height: file.height,
-            thumbnailWidth: file.thumbnailWidth,
-            thumbnailHeight: file.thumbnailHeight,
-            takenAt: file.takenAt,
-            durationInSeconds: file.durationInSeconds,
-            gpsLatitude: file.gpsLatitude,
-            gpsLongitude: file.gpsLongitude,
-            gpsLabel: file.gpsLabel,
-            createdAt: file.createdAt,
-            updatedAt: file.updatedAt,
-            blurDataUrl: file.blurDataUrl,
-            collectionId: file.CollectionId,
-          }))
-        )
-      );
+    const outputStream = createWriteStream(outputZip);
+    const archive = archiver("zip", {
+      zlib: { level: 0 },
+    });
 
-      for (let j = 0; j < files.length; j++) {
-        this.logger.info(
-          `Zipping collection '${collection.name}' (${i + 1}/${
-            collections.length
-          }) file ${j + 1}/${files.length}`
+    await new Promise<void>(async (resolve, reject) => {
+      outputStream.on("close", resolve);
+      outputStream.on("end", resolve);
+      outputStream.on("error", reject);
+      outputStream.once("warning", (err) => this.logger.warn(err));
+      archive.pipe(outputStream);
+
+      for (let i = 0; i < collections.length; i++) {
+        const collection = collections[i];
+        const files = collection.CollectionFiles || [];
+        const tags = collection.Tags?.map((t) => t.name) || [];
+        archive.append(JSON.stringify(tags), {
+          name: path.join(collection.name, "tags.json"),
+        });
+        archive.append(
+          JSON.stringify({
+            name: collection.name,
+            description: collection.description,
+            createdAt: collection.createdAt,
+            updatedAt: collection.updatedAt,
+          }),
+          { name: path.join(collection.name, "collection.json") }
         );
-        const file = files[j];
-        const fileBuffer = await this.readFile(collection.id, file.id);
-        filesFolder?.file(file.id, fileBuffer);
-      }
-    }
+        archive.append(
+          JSON.stringify(
+            files.map((file) => ({
+              name: file.name,
+              createdAt: file.createdAt,
+              updatedAt: file.updatedAt,
+            }))
+          ),
+          { name: path.join(collection.name, "files.json") }
+        );
 
-    this.logger.info(`Writing zip file`);
-    await new Promise((resolve, reject) =>
-      zip
-        .generateNodeStream({ streamFiles: true })
-        .pipe(createWriteStream(outputZip))
-        .on("finish", resolve)
-        .on("error", reject)
+        for (let j = 0; j < files.length; j++) {
+          const file = files[j];
+          this.logger.info(
+            `Appending collection '${collection.name}' (${i + 1}/${
+              collections.length
+            }) file '${file.name}' (${j + 1}/${files.length})`
+          );
+          const { stream } = await this.getFileStream(
+            collection.id,
+            file.id,
+            0,
+            Number.POSITIVE_INFINITY
+          );
+          archive.append(stream as Readable, {
+            name: path.join(collection.name, "files", file.name),
+          });
+        }
+      }
+
+      this.logger.info(`Writing zip file`);
+      archive.finalize();
+    });
+
+    this.logger.info(
+      `Done creating backup archive (${prettyBytes(
+        archive.pointer()
+      )} total bytes)`
     );
-    this.logger.info(`Zip file written to '${outputZip}'`);
   }
 
   async deleteFileAndThumbnail(collectionId: string, fileId: string) {
@@ -155,11 +159,16 @@ export class UserFileSystem {
     }
   }
 
-  async getFileStream(collectionId: string, fileId: string, offset: number) {
+  async getFileStream(
+    collectionId: string,
+    fileId: string,
+    offset: number,
+    chunkSize?: number
+  ) {
     try {
       const filePath = path.join(this.rootDir, collectionId, fileId);
       const { stream, size, totalSize } =
-        await Cryptography.getDecryptedStreamChunk(filePath, offset);
+        await Cryptography.getDecryptedStreamChunk(filePath, offset, chunkSize);
 
       return {
         stream,
@@ -409,4 +418,15 @@ async function parseForm(
       lastModified: isValidDate(lastModified) ? lastModified : null,
     }));
   });
+}
+
+// https://stackoverflow.com/a/28120564
+function prettyBytes(bytes: number): string {
+  if (bytes == 0) {
+    return "0.00 B";
+  }
+  var e = Math.floor(Math.log(bytes) / Math.log(1024));
+  return (
+    (bytes / Math.pow(1024, e)).toFixed(2) + " " + " KMGTP".charAt(e) + "B"
+  );
 }

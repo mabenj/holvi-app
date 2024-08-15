@@ -1,4 +1,4 @@
-FROM postgres:14
+FROM postgres:15
 
 RUN echo "create extension if not exists citext;" > /docker-entrypoint-initdb.d/init.sql
 

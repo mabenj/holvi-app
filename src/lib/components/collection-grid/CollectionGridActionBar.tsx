@@ -83,13 +83,13 @@ export default function CollectionGridActionBar({
 }
 
 const ExportCollectionsBtn = () => {
-  const { backupCollections, isBackupLoading } = useCollections();
+  const { backupCollections, isBackingUp } = useCollections();
 
   return (
     <AreYouSureDialog
       header="Backup collections"
       confirmLabel="Backup"
-      isConfirming={isBackupLoading}
+      isConfirming={isBackingUp}
       onConfirm={backupCollections}
       trigger={
         <IconButton
