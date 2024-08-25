@@ -1,57 +1,29 @@
-# Holvi app
+# Create T3 App
 
-## Deploy Docker
+This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app`.
 
-Adjust `docker-compose.yml` as desired and run:
+## What's next? How do I make an app with this?
 
-```bash
-docker-compose up -d
-```
+We try to keep this project as simple as possible, so you can start with just the scaffolding we set up for you, and add additional things later when they become necessary.
 
-## Development
+If you are not familiar with the different technologies used in this project, please refer to the respective docs. If you still are in the wind, please join our [Discord](https://t3.gg/discord) and ask for help.
 
-### Setup database
+- [Next.js](https://nextjs.org)
+- [NextAuth.js](https://next-auth.js.org)
+- [Prisma](https://prisma.io)
+- [Drizzle](https://orm.drizzle.team)
+- [Tailwind CSS](https://tailwindcss.com)
+- [tRPC](https://trpc.io)
 
-Setup database by building and spawning a database container.
+## Learn More
 
-```bash
-docker build -t holvi-db-dev ./src/db
-```
+To learn more about the [T3 Stack](https://create.t3.gg/), take a look at the following resources:
 
-```bash
-docker run -d --name holvi-db-dev -p 5432:5432 -v holvi-db-data-dev:/var/lib/postgresql/data -e POSTGRES_USER=admin -e POSTGRES_PASSWORD=<db password> -e POSTGRES_DB=holvi holvi-db-dev
-```
+- [Documentation](https://create.t3.gg/)
+- [Learn the T3 Stack](https://create.t3.gg/en/faq#what-learning-resources-are-currently-available) — Check out these awesome tutorials
 
-### Setup environment variables
+You can check out the [create-t3-app GitHub repository](https://github.com/t3-oss/create-t3-app) — your feedback and contributions are welcome!
 
-Create a `.env.local` file in the root of the project and add the following variables:
+## How do I deploy this?
 
-`HOLVI_DB_CONNECTION_STRING=postgres://admin:<db_password>@localhost:5432/holvi`
-
-`HOLVI_DATA_DIR=<directory to hold app data>`
-
-`HOLVI_SESSION_PASSWORD=<32 character long session password>`
-
-`HOLVI_GEO_API_KEY=<reverse geocoding API key (https://www.bigdatacloud.com/packages/reverse-geocoding)>`
-
-`HOLVI_ENCRYPTION_KEY=<32 character long encryption key>`
-
-### Install dependencies
-
-```bash
-yarn install
-# or
-npm install
-```
-
-### Start dev server
-
-```bash
-yarn dev
-# or
-npm dev
-```
-
-### Open browser
-
-Open [http://localhost:3000](http://localhost:3000) and start coding.
+Follow our deployment guides for [Vercel](https://create.t3.gg/en/deployment/vercel), [Netlify](https://create.t3.gg/en/deployment/netlify) and [Docker](https://create.t3.gg/en/deployment/docker) for more information.
