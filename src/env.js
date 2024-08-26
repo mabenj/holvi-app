@@ -11,6 +11,17 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
+    SESSION_PASSWORD: z.string().min(32),
+    SESSION_TTL_SECONDS: z.coerce.number().default(7200), // 2 hours
+    SESSION_HTTPS: z.coerce.boolean().default(false),
+    ENCRYPTION_KEY: z.string(),
+    DATA_DIR: z.string(),
+    MAX_FILE_SIZE_KB: z.coerce.number().default(4_294_967_296), // 4GB
+    MAX_TOTAL_FILE_SIZE_KB: z.coerce.number().default(17_179_869_184), // 16GB
+    GEO_API_KEY: z.string().optional(),
+    STREAM_CHUNK_SIZE_KB: z.coerce.number().default(3_000_000), // 3MB
+    THUMBNAIL_MAX_WIDTH: z.coerce.number().default(600),
+    THUMBNAIL_MAX_HEIGHT: z.coerce.number().default(600),
   },
 
   /**
@@ -29,6 +40,17 @@ export const env = createEnv({
   runtimeEnv: {
     DATABASE_URL: process.env.DATABASE_URL,
     NODE_ENV: process.env.NODE_ENV,
+    SESSION_PASSWORD: process.env.SESSION_PASSWORD,
+    SESSION_TTL_SECONDS: process.env.SESSION_TTL_SECONDS,
+    SESSION_HTTPS: process.env.SESSION_HTTPS,
+    ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,
+    DATA_DIR: process.env.DATA_DIR,
+    MAX_FILE_SIZE_KB: process.env.MAX_FILE_SIZE_KB,
+    MAX_TOTAL_FILE_SIZE_KB: process.env.MAX_TOTAL_FILE_SIZE_KB,
+    GEO_API_KEY: process.env.GEO_API_KEY,
+    STREAM_CHUNK_SIZE_KB: process.env.STREAM_CHUNK_SIZE_KB,
+    THUMBNAIL_MAX_WIDTH: process.env.THUMBNAIL_MAX_WIDTH,
+    THUMBNAIL_MAX_HEIGHT: process.env.THUMBNAIL_MAX_HEIGHT,
     // NEXT_PUBLIC_CLIENTVAR: process.env.NEXT_PUBLIC_CLIENTVAR,
   },
   /**
