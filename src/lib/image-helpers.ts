@@ -2,11 +2,11 @@ import { readFile } from "fs/promises";
 import ExifParser from "exif-parser";
 import { env } from "~/env";
 import Log, { LogColor } from "./log";
-import { getErrorMessage, removeSubstring } from "~/utilities";
 import path from "path";
 import { createDirIfNotExists } from "./file-system-helpers";
 import { promisify } from "util";
 import { getPlaiceholder } from "plaiceholder";
+import { getErrorMessage, removeSubstring } from "./utils";
 
 const LOGGER = new Log("IMG", LogColor.YELLOW);
 

@@ -14,12 +14,12 @@ import {
 import Log, { LogColor } from "./log";
 import { env } from "~/env";
 import { generateBlur, generateImageThumbnail, getExif } from "./image-helpers";
-import { getErrorMessage, isValidDate } from "~/utilities";
 import {
   convertToMov,
   generateVideoThumbnail,
   getVideoMetadata,
 } from "./video-helpers";
+import { getErrorMessage } from "./utils";
 
 interface ParsedFile {
   filepath: string;

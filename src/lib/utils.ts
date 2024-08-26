@@ -1,3 +1,6 @@
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
+
 const FORMATTER = new Intl.RelativeTimeFormat("en", {
   localeMatcher: "best fit",
   numeric: "auto",
@@ -17,6 +20,10 @@ const DIVISIONS = [
 ];
 
 export const EMPTY_UUIDV4 = "00000000-0000-0000-0000-000000000000";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 export function isUuidv4(uuid?: string) {
   if (!uuid) {
