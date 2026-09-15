@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { createWriteStream, existsSync } from "fs";
 import { appendFile, mkdir, truncate, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { Readable } from "stream";
@@ -27,7 +28,7 @@ import appConfig from "../common/app-config";
 import { NotFoundError } from "../common/errors";
 import { UserFileSystem } from "../common/user-file-system";
 import { isActiveBackupJobStatus } from "../types/backup-job-dto";
-import { BackupService } from "./backup.service";
+import { BackupFileRef, BackupService } from "./backup.service";
 
 function sha256(data: Buffer) {
     return crypto.createHash("sha256").update(data).digest("hex");
@@ -448,35 +449,181 @@ describe("BackupService (integration)", () => {
         expect(await listFiles(appConfig.dataDir)).toEqual(dataDirBefore);
     });
 
-    it("fails the job and removes the partial zip when the disk runs out of space", async () => {
-        const user = await createUser("alice");
-        const holiday = await createCollection(user.id, "Holiday");
-        await addFile(user.id, holiday.id, "a.jpg", crypto.randomBytes(1_000));
-        await addFile(user.id, holiday.id, "b.jpg", crypto.randomBytes(1_000));
-        const service = new BackupService(user.id, {
-            openDecryptedFile: () =>
-                new Readable({
-                    read() {
-                        this.push(crypto.randomBytes(500));
-                        this.destroy(
-                            Object.assign(
-                                new Error("ENOSPC: no space left on device"),
-                                { code: "ENOSPC" }
-                            )
-                        );
-                    }
-                })
+    describe("whole-job failures", () => {
+        /** A user with two files and a completed backup, which no failure may touch */
+        async function createUserWithBackup() {
+            const user = await createUser("alice");
+            const holiday = await createCollection(user.id, "Holiday");
+            const a = await addFile(
+                user.id,
+                holiday.id,
+                "a.jpg",
+                crypto.randomBytes(100_000)
+            );
+            const b = await addFile(
+                user.id,
+                holiday.id,
+                "b.jpg",
+                crypto.randomBytes(50_000)
+            );
+            const previous = await runBackup(new BackupService(user.id));
+            expect(previous.status).toBe("completed");
+            return { user, files: [a, b], previous };
+        }
+
+        async function expectOnlyPreviousBackup(
+            service: BackupService,
+            userId: string,
+            previous: { id: string; zipFileName: string | null }
+        ) {
+            expect(await listUserBackupDir(userId)).toEqual([previous.zipFileName]);
+            const { filePath } = await service.openDownload(previous.id);
+            expect((await readZip(filePath)).at(-1)!.name).toBe("manifest.json");
+        }
+
+        function openRealDecryptedFile(ref: BackupFileRef) {
+            return new UserFileSystem(ref.userId).openDecryptedFile(
+                ref.collectionId,
+                ref.fileId
+            );
+        }
+
+        it("fails the job before writing anything when the backup directory lacks free space, stating space needed vs available", async () => {
+            const { user, previous } = await createUserWithBackup();
+            const openedFiles: BackupFileRef[] = [];
+            const checkedDirs: string[] = [];
+            const service = new BackupService(user.id, {
+                openDecryptedFile: (ref) => {
+                    openedFiles.push(ref);
+                    return openRealDecryptedFile(ref);
+                },
+                getFreeSpace: async (dir) => {
+                    checkedDirs.push(dir);
+                    return 5_000;
+                }
+            });
+
+            const job = await runBackup(service);
+
+            expect(job.status).toBe("failed");
+            expect(job.errorMessage).toMatch(/not enough free space/i);
+            expect(job.errorMessage).toMatch(/[\d.]+ [KMGT]?B needed/);
+            expect(job.errorMessage).toContain("4.9 KB available");
+            expect(job.zipFileName).toBeNull();
+            expect(checkedDirs).toEqual([appConfig.backupDir]);
+            expect(openedFiles).toEqual([]);
+            await expectOnlyPreviousBackup(service, user.id, previous);
+            await expect(service.openDownload(job.id)).rejects.toThrow(NotFoundError);
         });
 
-        const job = await runBackup(service);
+        it("runs normally when the backup directory has enough free space", async () => {
+            const { user } = await createUserWithBackup();
+            const checkedDirs: string[] = [];
+            const service = new BackupService(user.id, {
+                getFreeSpace: async (dir) => {
+                    checkedDirs.push(dir);
+                    return 1_000_000_000_000;
+                }
+            });
 
-        expect(job.status).toBe("failed");
-        expect(job.errorMessage).toMatch(/no space left/);
-        expect(job.zipFileName).toBeNull();
-        expect(await listUserBackupDir(user.id)).toEqual([]);
-        await expect(service.openDownload(job.id)).rejects.toThrow(
-            NotFoundError
-        );
+            const job = await runBackup(service);
+
+            expect(job.status).toBe("completed");
+            expect(checkedDirs).toEqual([appConfig.backupDir]);
+            expect(await listUserBackupDir(user.id)).toContain(job.zipFileName);
+        });
+
+        it("fails the job, removes the partial zip and keeps the previous backup when the disk runs out of space", async () => {
+            const { user, previous } = await createUserWithBackup();
+            const service = new BackupService(user.id, {
+                openDecryptedFile: () =>
+                    new Readable({
+                        read() {
+                            this.push(crypto.randomBytes(500));
+                            this.destroy(
+                                Object.assign(
+                                    new Error("ENOSPC: no space left on device"),
+                                    { code: "ENOSPC" }
+                                )
+                            );
+                        }
+                    })
+            });
+
+            const job = await runBackup(service);
+
+            expect(job.status).toBe("failed");
+            expect(job.errorMessage).toMatch(/no space left/);
+            expect(job.zipFileName).toBeNull();
+            await expectOnlyPreviousBackup(service, user.id, previous);
+            await expect(service.openDownload(job.id)).rejects.toThrow(NotFoundError);
+        });
+
+        it("fails the job, removes the partial zip and keeps the previous backup when the zip cannot be written", async () => {
+            const { user, previous } = await createUserWithBackup();
+            let partialZipExistedOnFailure = false;
+            const service = new BackupService(user.id, {
+                openZipOutput: (partialZipPath) => {
+                    const output = createWriteStream(partialZipPath, { flags: "wx" });
+                    const writeError = Object.assign(new Error("EIO: i/o error, write"), {
+                        code: "EIO"
+                    });
+                    // Fails once part of the first file has been written
+                    let bytesWritten = 0;
+                    const failsAfter = (count: number) => {
+                        bytesWritten += count;
+                        if (bytesWritten > 10_000) {
+                            partialZipExistedOnFailure = existsSync(partialZipPath);
+                            return true;
+                        }
+                        return false;
+                    };
+                    const write = output._write.bind(output);
+                    const writev = output._writev!.bind(output);
+                    output._write = (chunk, encoding, callback) =>
+                        failsAfter(chunk.length)
+                            ? callback(writeError)
+                            : write(chunk, encoding, callback);
+                    output._writev = (chunks, callback) => {
+                        const count = chunks.reduce(
+                            (sum, { chunk }) => sum + chunk.length,
+                            0
+                        );
+                        return failsAfter(count)
+                            ? callback(writeError)
+                            : writev(chunks, callback);
+                    };
+                    return output;
+                }
+            });
+
+            const job = await runBackup(service);
+
+            expect(job.status).toBe("failed");
+            expect(job.errorMessage).toMatch(/i\/o error, write/);
+            expect(job.zipFileName).toBeNull();
+            expect(partialZipExistedOnFailure).toBe(true);
+            await expectOnlyPreviousBackup(service, user.id, previous);
+        });
+
+        it("fails the job, removes the partial zip and keeps the previous backup on an unexpected error", async () => {
+            const { user, files, previous } = await createUserWithBackup();
+            const service = new BackupService(user.id, {
+                openDecryptedFile: (ref) => {
+                    if (ref.fileId === files[1].id) {
+                        throw new Error("Unexpected failure opening b.jpg");
+                    }
+                    return openRealDecryptedFile(ref);
+                }
+            });
+
+            const job = await runBackup(service);
+
+            expect(job.status).toBe("failed");
+            expect(job.errorMessage).toBe("Unexpected failure opening b.jpg");
+            expect(job.zipFileName).toBeNull();
+            await expectOnlyPreviousBackup(service, user.id, previous);
+        });
     });
 
     describe("backup paths", () => {

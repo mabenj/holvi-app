@@ -5,8 +5,8 @@ import { CollectionFile } from "@/db/models/CollectionFile";
 import { Tag } from "@/db/models/Tag";
 import archiver, { Archiver } from "archiver";
 import crypto from "crypto";
-import { createWriteStream } from "fs";
-import { mkdir, open, readdir, rename, rm, stat } from "fs/promises";
+import { createWriteStream, WriteStream } from "fs";
+import { mkdir, open, readdir, rename, rm, stat, statfs } from "fs/promises";
 import path from "path";
 import { InferAttributes, Transaction } from "sequelize";
 import { Readable } from "stream";
@@ -15,7 +15,12 @@ import { UniqueSafeNames } from "../common/backup-paths";
 import { NotFoundError } from "../common/errors";
 import Log, { LogColor } from "../common/log";
 import { UserFileSystem } from "../common/user-file-system";
-import { getErrorMessage, isUuidv4, timestamp } from "../common/utilities";
+import {
+    formatBytes,
+    getErrorMessage,
+    isUuidv4,
+    timestamp
+} from "../common/utilities";
 import {
     BackupJobDto,
     BackupJobStatus,
@@ -25,6 +30,15 @@ import {
 
 const BACKUP_FORMAT_VERSION = 1;
 const PROGRESS_SAVE_INTERVAL_MS = 1_000;
+const MEBIBYTE = 1_024 * 1_024;
+/** Local and central directory headers of one entry, with ZIP64 fields and a long path */
+const ZIP_ENTRY_OVERHEAD_BYTES = 1_024;
+/** One file's uncompressed JSON in its collection's metadata, and in the manifest if it is a problem file */
+const FILE_METADATA_BYTES = 4_096;
+/** The manifest's own fields and the end-of-central-directory records */
+const ZIP_FIXED_OVERHEAD_BYTES = 64 * 1_024;
+/** Required beyond the estimated zip size, for the estimate's error and other writers on the volume */
+const FREE_SPACE_MARGIN_BYTES = 100 * MEBIBYTE;
 
 export interface BackupFileRef {
     userId: string;
@@ -35,8 +49,23 @@ export interface BackupFileRef {
 /** Opens a file's whole decrypted content. Failures must be emitted as stream errors. */
 export type DecryptedFileOpener = (file: BackupFileRef) => Readable;
 
+/** Free space in bytes on the volume holding a directory */
+export type FreeSpaceCheck = (dir: string) => Promise<number>;
+
+/** Creates the partial zip for writing, failing if the file already exists */
+export type ZipOutputOpener = (partialZipPath: string) => WriteStream;
+
 interface BackupServiceOptions {
     openDecryptedFile?: DecryptedFileOpener;
+    getFreeSpace?: FreeSpaceCheck;
+    openZipOutput?: ZipOutputOpener;
+}
+
+/** The file system a job works with: the real one unless a test injected replacements */
+interface BackupJobDependencies {
+    openDecryptedFile: DecryptedFileOpener;
+    getFreeSpace: FreeSpaceCheck;
+    openZipOutput: ZipOutputOpener;
 }
 
 interface BackupDownload {
@@ -64,14 +93,19 @@ type BackupJobFields = Partial<InferAttributes<BackupJob>>;
 const logger = new Log("BACKUP", LogColor.GREEN);
 
 export class BackupService {
-    private readonly openDecryptedFile: DecryptedFileOpener;
+    private readonly dependencies: BackupJobDependencies;
 
     constructor(
         private readonly userId: string,
         options: BackupServiceOptions = {}
     ) {
-        this.openDecryptedFile =
-            options.openDecryptedFile ?? openDecryptedFileFromDataDir;
+        this.dependencies = {
+            openDecryptedFile:
+                options.openDecryptedFile ?? realDependencies.openDecryptedFile,
+            getFreeSpace: options.getFreeSpace ?? realDependencies.getFreeSpace,
+            openZipOutput:
+                options.openZipOutput ?? realDependencies.openZipOutput
+        };
     }
 
     /**
@@ -104,7 +138,7 @@ export class BackupService {
                 },
                 { transaction }
             );
-            getRunner().setOpener(job.id, this.openDecryptedFile);
+            getRunner().setDependencies(job.id, this.dependencies);
             await transaction.commit();
         } catch (error) {
             await transaction.rollback();
@@ -203,6 +237,21 @@ function openDecryptedFileFromDataDir({
     return new UserFileSystem(userId).openDecryptedFile(collectionId, fileId);
 }
 
+async function getFreeSpaceFromFileSystem(dir: string) {
+    const { bavail, bsize } = await statfs(dir);
+    return bavail * bsize;
+}
+
+function openZipOutputFile(partialZipPath: string) {
+    return createWriteStream(partialZipPath, { flags: "wx" });
+}
+
+const realDependencies: BackupJobDependencies = {
+    openDecryptedFile: openDecryptedFileFromDataDir,
+    getFreeSpace: getFreeSpaceFromFileSystem,
+    openZipOutput: openZipOutputFile
+};
+
 function getUserBackupDir(userId: string) {
     return path.join(appConfig.backupDir, userId);
 }
@@ -233,12 +282,12 @@ class BackupJobRunner {
         resolve: () => void;
         reject: (error: unknown) => void;
     }[] = [];
-    /** Openers injected by the service that queued each job; others use the real decryption */
-    private readonly openers = new Map<string, DecryptedFileOpener>();
+    /** Dependencies injected by the service that queued each job; others use the real file system */
+    private readonly dependencies = new Map<string, BackupJobDependencies>();
 
-    /** Must be called before the job is committed, so no queue pass can claim it without its opener */
-    setOpener(jobId: string, openFile: DecryptedFileOpener) {
-        this.openers.set(jobId, openFile);
+    /** Must be called before the job is committed, so no queue pass can claim it without its dependencies */
+    setDependencies(jobId: string, dependencies: BackupJobDependencies) {
+        this.dependencies.set(jobId, dependencies);
     }
 
     /**
@@ -246,7 +295,7 @@ class BackupJobRunner {
      * it has stopped. Returns false if this runner does not have the job.
      */
     async cancel(jobId: string) {
-        this.openers.delete(jobId);
+        this.dependencies.delete(jobId);
         const current = this.current;
         if (current?.jobId !== jobId) {
             return false;
@@ -319,11 +368,11 @@ class BackupJobRunner {
                 { status: "running" },
                 { where: { id: job.id, status: "queued" } }
             );
-            const openFile =
-                this.openers.get(job.id) ?? openDecryptedFileFromDataDir;
-            this.openers.delete(job.id);
+            const dependencies =
+                this.dependencies.get(job.id) ?? realDependencies;
+            this.dependencies.delete(job.id);
             if (claimed > 0) {
-                await runBackupJob(job, openFile, controller.signal);
+                await runBackupJob(job, dependencies, controller.signal);
             }
         } finally {
             this.current = null;
@@ -405,7 +454,7 @@ function throwIfAborted(signal: AbortSignal) {
 /** Runs a job already marked running; aborting `signal` cancels it */
 async function runBackupJob(
     job: BackupJob,
-    openFile: DecryptedFileOpener,
+    dependencies: BackupJobDependencies,
     signal: AbortSignal
 ) {
     const progress: WriteProgress = {
@@ -441,6 +490,11 @@ async function runBackupJob(
         });
         logger.info(`Backup job '${job.id}' started`);
 
+        await checkFreeSpace(
+            estimateZipSize(snapshot, fileSizes),
+            dependencies.getFreeSpace
+        );
+        throwIfAborted(signal);
         await mkdir(userBackupDir, { recursive: true });
         progressSaver.start();
         const { finishedAt, outcome, problems } = await writeBackupZip(
@@ -448,7 +502,7 @@ async function runBackupJob(
             snapshot,
             fileSizes,
             startedAt,
-            openFile,
+            dependencies,
             progress,
             signal
         );
@@ -583,6 +637,49 @@ async function measureFileSizes(
 }
 
 /**
+ * A generous estimate of a backup zip's size: each file's decrypted content
+ * (its encrypted size minus the IV), stored uncompressed, plus zip structures
+ * and JSON metadata. Files that could not be measured count only as metadata.
+ */
+function estimateZipSize(
+    { collections }: Snapshot,
+    fileSizes: Map<string, number>
+) {
+    let bytes = ZIP_FIXED_OVERHEAD_BYTES;
+    for (const collection of collections) {
+        // Its metadata document and, if empty, its folder entry
+        bytes += 2 * ZIP_ENTRY_OVERHEAD_BYTES;
+        for (const file of collection.CollectionFiles ?? []) {
+            bytes +=
+                ZIP_ENTRY_OVERHEAD_BYTES +
+                FILE_METADATA_BYTES +
+                (fileSizes.get(file.id) ?? 0);
+        }
+    }
+    return bytes;
+}
+
+/**
+ * Fails the job before any backup data is written if the backup directory's
+ * volume cannot hold the zip. Creates the backup directory, so its volume can be queried.
+ */
+async function checkFreeSpace(
+    estimatedZipSize: number,
+    getFreeSpace: FreeSpaceCheck
+) {
+    await mkdir(appConfig.backupDir, { recursive: true });
+    const available = await getFreeSpace(appConfig.backupDir);
+    const needed = estimatedZipSize + FREE_SPACE_MARGIN_BYTES;
+    if (available < needed) {
+        throw new Error(
+            `Not enough free space in the backup directory: about ${formatBytes(
+                needed
+            )} needed, ${formatBytes(available)} available`
+        );
+    }
+}
+
+/**
  * Writes the zip to `partialZipPath`, flushed to disk, and returns the finish
  * time, outcome and problem files recorded in its manifest. On failure or abort
  * the partial zip is removed, unless it could not be created (e.g. another job owns it).
@@ -592,7 +689,7 @@ async function writeBackupZip(
     snapshot: Snapshot,
     fileSizes: Map<string, number>,
     startedAt: Date,
-    openFile: DecryptedFileOpener,
+    { openDecryptedFile, openZipOutput }: BackupJobDependencies,
     progress: WriteProgress,
     signal: AbortSignal
 ): Promise<{
@@ -600,7 +697,7 @@ async function writeBackupZip(
     outcome: BackupJobStatus;
     problems: BackupProblem[];
 }> {
-    const output = createWriteStream(partialZipPath, { flags: "wx" });
+    const output = openZipOutput(partialZipPath);
     let created = false;
     output.once("open", () => (created = true));
     const outputClosed = new Promise<void>((resolve) =>
@@ -675,7 +772,7 @@ async function writeBackupZip(
                     file.mimeType
                 )}`;
                 content = measureContent(
-                    openFile(ref),
+                    openDecryptedFile(ref),
                     (count) => (progress.bytesDone += count)
                 );
                 await appendEntry(archive, writeFailure, content.stream, {
