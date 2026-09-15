@@ -1,4 +1,4 @@
-import Database from "@/db/Database";
+import { CollectionFile } from "@/db/models/CollectionFile";
 import appConfig from "@/lib/common/app-config";
 import Cryptography from "@/lib/common/cryptography";
 import { UserFileSystem } from "@/lib/common/user-file-system";
@@ -9,15 +9,86 @@ import { Readable } from "stream";
 import yauzl from "yauzl";
 import { getTestDatabase } from "./database";
 
-export async function createUser(username: string) {
+export const TEST_PASSWORD_HASH = "test-password-hash-6f1d2c";
+export const TEST_PASSWORD_SALT = "test-password-salt-9a8b7c";
+
+export async function createUser(
+    username: string,
+    options: { requireSignIn?: boolean } = {}
+) {
     const db = await getTestDatabase();
-    return db.models.User.create({ username, hash: "hash", salt: "salt" });
+    return db.models.User.create({
+        username,
+        hash: TEST_PASSWORD_HASH,
+        salt: TEST_PASSWORD_SALT,
+        ...options
+    });
 }
 
-export async function createCollection(userId: string, name: string) {
+export async function createCollection(
+    userId: string,
+    name: string,
+    options: { description?: string; tags?: string[] } = {}
+) {
     const db = await getTestDatabase();
-    return db.models.Collection.create({ name, UserId: userId });
+    const collection = await db.models.Collection.create({
+        name,
+        description: options.description ?? null,
+        UserId: userId
+    });
+    if (options.tags) {
+        await setCollectionTags(collection.id, options.tags);
+    }
+    return collection;
 }
+
+export async function setCollectionTags(collectionId: string, tags: string[]) {
+    const db = await getTestDatabase();
+    await createTags(tags);
+    await db.models.CollectionTag.destroy({
+        where: { CollectionId: collectionId }
+    });
+    await db.models.CollectionTag.bulkCreate(
+        tags.map((tag) => ({ TagName: tag, CollectionId: collectionId }))
+    );
+}
+
+export async function setFileTags(fileId: string, tags: string[]) {
+    const db = await getTestDatabase();
+    await createTags(tags);
+    await db.models.CollectionFileTag.destroy({
+        where: { CollectionFileId: fileId }
+    });
+    await db.models.CollectionFileTag.bulkCreate(
+        tags.map((tag) => ({ TagName: tag, CollectionFileId: fileId }))
+    );
+}
+
+async function createTags(tags: string[]) {
+    const db = await getTestDatabase();
+    await db.models.Tag.bulkCreate(
+        tags.map((tag) => ({ name: tag })),
+        { ignoreDuplicates: true }
+    );
+}
+
+type FileMetadata = Partial<
+    Pick<
+        CollectionFile,
+        | "mimeType"
+        | "width"
+        | "height"
+        | "thumbnailWidth"
+        | "thumbnailHeight"
+        | "takenAt"
+        | "durationInSeconds"
+        | "gpsLatitude"
+        | "gpsLongitude"
+        | "gpsAltitude"
+        | "gpsLabel"
+        | "blurDataUrl"
+    >
+> & { tags?: string[] };
 
 /** Creates a file row and its encrypted content in the data directory, the way uploads store them. */
 export async function addFile(
@@ -25,23 +96,46 @@ export async function addFile(
     collectionId: string,
     name: string,
     plaintext: Buffer,
-    mimeType = "image/jpeg"
+    { tags, ...metadata }: FileMetadata = {}
 ) {
     const db = await getTestDatabase();
     const file = await db.models.CollectionFile.create({
         name,
-        mimeType,
+        mimeType: "image/jpeg",
         width: null,
         height: null,
         thumbnailWidth: null,
         thumbnailHeight: null,
+        ...metadata,
         CollectionId: collectionId
     });
+    if (tags) {
+        await setFileTags(file.id, tags);
+    }
     const filepath = path.join(appConfig.dataDir, userId, collectionId, file.id);
     await mkdir(path.dirname(filepath), { recursive: true });
     await writeFile(filepath, plaintext);
     await Cryptography.encryptFile(filepath);
     return file;
+}
+
+/** Stores an encrypted thumbnail for a file, the way uploads store them. */
+export async function addThumbnail(
+    userId: string,
+    collectionId: string,
+    fileId: string,
+    plaintext: Buffer
+) {
+    const filepath = path.join(
+        appConfig.dataDir,
+        userId,
+        collectionId,
+        "tn",
+        fileId
+    );
+    await mkdir(path.dirname(filepath), { recursive: true });
+    await writeFile(filepath, plaintext);
+    await Cryptography.encryptFile(filepath);
 }
 
 /** Paths of every file under a directory, relative to it */

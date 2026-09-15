@@ -1,7 +1,10 @@
 import Database from "@/db/Database";
 import { BackupJob } from "@/db/models/BackupJob";
 import { Collection } from "@/db/models/Collection";
+import { CollectionFile } from "@/db/models/CollectionFile";
+import { Tag } from "@/db/models/Tag";
 import archiver, { Archiver } from "archiver";
+import crypto from "crypto";
 import { createWriteStream } from "fs";
 import { mkdir, open, rename, rm, stat } from "fs/promises";
 import path from "path";
@@ -38,7 +41,7 @@ interface BackupDownload {
 
 interface Snapshot {
     snapshotAt: Date;
-    user: { id: string; username: string };
+    user: { id: string; username: string; requireSignIn: boolean };
     collections: Collection[];
 }
 
@@ -161,9 +164,10 @@ async function runBackupJob(job: BackupJob, openFile: DecryptedFileOpener) {
         const zipFileName = `holvi-backup-${username}-${timestamp()}.zip`;
         const zipPath = path.join(userBackupDir, zipFileName);
 
+        const startedAt = new Date();
         await updateJob(job.id, {
             status: "running",
-            startedAt: new Date(),
+            startedAt,
             collectionsTotal: snapshot.collections.length,
             filesTotal: snapshot.collections.reduce(
                 (sum, collection) => sum + countFiles(collection),
@@ -175,7 +179,13 @@ async function runBackupJob(job: BackupJob, openFile: DecryptedFileOpener) {
 
         await mkdir(userBackupDir, { recursive: true });
         progressSaver.start();
-        await writeBackupZip(`${zipPath}.partial`, snapshot, openFile, progress);
+        const finishedAt = await writeBackupZip(
+            `${zipPath}.partial`,
+            snapshot,
+            startedAt,
+            openFile,
+            progress
+        );
         await progressSaver.stop();
         await rename(`${zipPath}.partial`, zipPath);
         const { size } = await stat(zipPath);
@@ -183,7 +193,7 @@ async function runBackupJob(job: BackupJob, openFile: DecryptedFileOpener) {
         await updateJob(job.id, {
             ...progress,
             status: "completed",
-            finishedAt: new Date(),
+            finishedAt,
             currentFileName: null,
             zipFileName,
             zipSizeBytes: size
@@ -219,7 +229,13 @@ async function readSnapshot(userId: string): Promise<Snapshot> {
         });
         const collections = await db.models.Collection.findAll({
             where: { UserId: userId },
-            include: db.models.CollectionFile,
+            include: [
+                db.models.Tag,
+                {
+                    model: db.models.CollectionFile,
+                    include: [db.models.Tag]
+                }
+            ],
             order: [
                 ["name", "ASC"],
                 [db.models.CollectionFile, "name", "ASC"]
@@ -229,7 +245,11 @@ async function readSnapshot(userId: string): Promise<Snapshot> {
         await transaction.commit();
         return {
             snapshotAt,
-            user: { id: user.id, username: user.username },
+            user: {
+                id: user.id,
+                username: user.username,
+                requireSignIn: user.requireSignIn
+            },
             collections
         };
     } catch (error) {
@@ -256,15 +276,17 @@ async function getTotalBytes({ user, collections }: Snapshot) {
 }
 
 /**
- * Writes the zip to `partialZipPath`, flushed to disk. On failure the partial
- * zip is removed, unless it could not be created (e.g. another job owns it).
+ * Writes the zip to `partialZipPath`, flushed to disk, and returns the finish
+ * time recorded in its manifest. On failure the partial zip is removed, unless
+ * it could not be created (e.g. another job owns it).
  */
 async function writeBackupZip(
     partialZipPath: string,
     snapshot: Snapshot,
+    startedAt: Date,
     openFile: DecryptedFileOpener,
     progress: WriteProgress
-) {
+): Promise<Date> {
     const output = createWriteStream(partialZipPath, { flags: "wx" });
     let created = false;
     output.once("open", () => (created = true));
@@ -285,50 +307,81 @@ async function writeBackupZip(
     archive.pipe(output);
 
     try {
+        const manifestCollections = [];
+        const totals = { files: 0, bytes: 0 };
         for (const collection of snapshot.collections) {
+            const folder = collection.name;
+            const metadataPath = `metadata/${folder}.json`;
+            const filesMetadata = [];
             for (const file of collection.CollectionFiles ?? []) {
                 progress.currentFileName = file.name;
+                const backupPath = `files/${folder}/${file.name}`;
+                const measurer = measureContent(
+                    (count) => (progress.bytesDone += count)
+                );
                 const content = pipeline(
                     openFile({
                         userId: snapshot.user.id,
                         collectionId: collection.id,
                         fileId: file.id
                     }),
-                    countBytes((count) => (progress.bytesDone += count)),
+                    measurer.stream,
                     () => {
-                        // Errors are forwarded to the byte counter and observed by appendEntry
+                        // Errors are forwarded to the measurer and observed by appendEntry
                     }
                 );
                 await appendEntry(archive, writeFailure, content, {
-                    name: `files/${collection.name}/${file.name}`,
+                    name: backupPath,
                     store: true
                 });
+                filesMetadata.push(
+                    toFileMetadata(file, backupPath, measurer.result())
+                );
                 progress.filesDone += 1;
+            }
+            await appendEntry(
+                archive,
+                writeFailure,
+                toJsonBuffer(toCollectionMetadata(collection, filesMetadata)),
+                { name: metadataPath }
+            );
+            manifestCollections.push({
+                id: collection.id,
+                name: collection.name,
+                folder,
+                metadataPath,
+                fileCount: filesMetadata.length
+            });
+            for (const file of filesMetadata) {
+                totals.files += 1;
+                totals.bytes += file.sizeBytes;
             }
             progress.collectionsDone += 1;
         }
 
+        const finishedAt = new Date();
         const manifest = {
             formatVersion: BACKUP_FORMAT_VERSION,
             schemaVersion: Database.version,
             snapshotAt: snapshot.snapshotAt.toISOString(),
+            startedAt: startedAt.toISOString(),
+            finishedAt: finishedAt.toISOString(),
+            outcome: "completed",
             user: snapshot.user,
-            collections: snapshot.collections.map((collection) => ({
-                id: collection.id,
-                name: collection.name,
-                fileCount: countFiles(collection)
-            }))
+            collections: manifestCollections,
+            totals
         };
         await appendEntry(
             archive,
             writeFailure,
-            Buffer.from(JSON.stringify(manifest, null, 2)),
+            toJsonBuffer(manifest),
             { name: "manifest.json" }
         );
 
         await archive.finalize();
         await outputClosed;
         await flushToDisk(partialZipPath);
+        return finishedAt;
     } catch (error) {
         archive.abort();
         output.destroy();
@@ -378,13 +431,93 @@ async function flushToDisk(filePath: string) {
     }
 }
 
-function countBytes(onCount: (count: number) => void) {
-    return new Transform({
+/** Passes content through, counting its bytes and computing its SHA-256 */
+function measureContent(onBytes: (count: number) => void) {
+    const hash = crypto.createHash("sha256");
+    let sizeBytes = 0;
+    const stream = new Transform({
         transform(chunk: Buffer, _encoding, callback) {
-            onCount(chunk.length);
+            hash.update(chunk);
+            sizeBytes += chunk.length;
+            onBytes(chunk.length);
             callback(null, chunk);
         }
     });
+    return {
+        stream,
+        /** Only valid once the stream has ended */
+        result: (): ContentMeasurement => ({
+            sizeBytes,
+            sha256: hash.digest("hex")
+        })
+    };
+}
+
+interface ContentMeasurement {
+    sizeBytes: number;
+    sha256: string;
+}
+
+function toJsonBuffer(value: unknown) {
+    return Buffer.from(JSON.stringify(value, null, 2));
+}
+
+function toCollectionMetadata(
+    collection: Collection,
+    files: ReturnType<typeof toFileMetadata>[]
+) {
+    return {
+        id: collection.id,
+        name: collection.name,
+        description: collection.description ?? null,
+        createdAt: toIsoString(collection.createdAt),
+        updatedAt: toIsoString(collection.updatedAt),
+        tags: toTagNames(collection.Tags),
+        files
+    };
+}
+
+function toFileMetadata(
+    file: CollectionFile,
+    backupPath: string,
+    { sizeBytes, sha256 }: ContentMeasurement
+) {
+    return {
+        id: file.id,
+        name: file.name,
+        backupPath,
+        status: "included",
+        mimeType: file.mimeType,
+        sizeBytes,
+        sha256,
+        width: file.width ?? null,
+        height: file.height ?? null,
+        thumbnailWidth: file.thumbnailWidth ?? null,
+        thumbnailHeight: file.thumbnailHeight ?? null,
+        takenAt: toIsoString(file.takenAt),
+        durationInSeconds: file.durationInSeconds ?? null,
+        // Postgres returns DECIMAL as a string
+        gpsLatitude: toNumberOrNull(file.gpsLatitude),
+        gpsLongitude: toNumberOrNull(file.gpsLongitude),
+        gpsAltitude: toNumberOrNull(file.gpsAltitude),
+        gpsLabel: file.gpsLabel ?? null,
+        blurDataUrl: file.blurDataUrl ?? null,
+        tags: toTagNames(file.Tags),
+        createdAt: toIsoString(file.createdAt),
+        updatedAt: toIsoString(file.updatedAt)
+    };
+}
+
+function toIsoString(date: Date | null | undefined) {
+    return date ? date.toISOString() : null;
+}
+
+function toNumberOrNull(value: number | string | null | undefined) {
+    return value === null || value === undefined ? null : Number(value);
+}
+
+function toTagNames(tags: Tag[] | undefined) {
+    return (tags ?? []).map((tag) => tag.name).sort();
 }
 
 /** Persists a running job's in-memory progress periodically instead of per chunk */
