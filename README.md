@@ -30,6 +30,8 @@ Create a `.env.local` file in the root of the project and add the following vari
 
 `HOLVI_DATA_DIR=<directory to hold app data>`
 
+`HOLVI_BACKUP_DIR=<directory to write backups to (optional, defaults to a backups directory inside HOLVI_DATA_DIR)>`
+
 `HOLVI_SESSION_PASSWORD=<32 character long session password>`
 
 `HOLVI_GEO_API_KEY=<reverse geocoding API key (https://www.bigdatacloud.com/packages/reverse-geocoding)>`

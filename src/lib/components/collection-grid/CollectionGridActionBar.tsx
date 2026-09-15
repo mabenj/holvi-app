@@ -19,7 +19,6 @@ import {
   Tag,
 } from "@chakra-ui/react";
 import {
-  mdiBackupRestore,
   mdiCheckboxBlankOffOutline,
   mdiCheckboxOutline,
   mdiDelete,
@@ -32,12 +31,12 @@ import {
 } from "@mdi/js";
 import Icon from "@mdi/react";
 import { ChangeEvent, useEffect, useRef, useState } from "react";
+import BackupsPanel from "../backups/BackupsPanel";
 import CollectionFileModal from "../modals/CollectionFileModal";
 import CollectionModal from "../modals/CollectionModal";
 import AreYouSureDialog from "../ui/AreYouSureDialog";
 import TagChip from "../ui/TagChip";
 import { useCollection } from "@/lib/hooks/useCollection";
-import { useCollections } from "@/lib/hooks/useCollections";
 
 interface CollectionGridActionBarProps {
   collectionId: string;
@@ -74,36 +73,13 @@ export default function CollectionGridActionBar({
           {canFilter && <FilterBtn />}
           <SortBtn />
           {canUploadFiles && <UploadFilesBtn />}
-          {canBackup && <ExportCollectionsBtn />}
+          {canBackup && <BackupsPanel />}
           {canCreateCollection && <CreateCollectionBtn />}
         </Flex>
       </Flex>
     </>
   );
 }
-
-const ExportCollectionsBtn = () => {
-  const { backupCollections, isBackingUp } = useCollections();
-
-  return (
-    <AreYouSureDialog
-      header="Backup collections"
-      confirmLabel="Backup"
-      isConfirming={isBackingUp}
-      onConfirm={backupCollections}
-      trigger={
-        <IconButton
-          variant="ghost"
-          aria-label="Backup all collections"
-          title="Backup all collections"
-          icon={<Icon path={mdiBackupRestore} size={1} />}
-        />
-      }
-    >
-      Are you sure you want to backup all collections? This can take a while.
-    </AreYouSureDialog>
-  );
-};
 
 const FilterBtn = () => {
   const {

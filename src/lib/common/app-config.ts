@@ -1,6 +1,10 @@
+import path from "path";
+
 const MEGABYTE = 1_000_000;
 const GIGABYTE = 1_000 * MEGABYTE;
 const HOUR = 60 * 60;
+
+const dataDir = getEnvVariable("HOLVI_DATA_DIR");
 
 const appConfig = {
     connectionString: getEnvVariable("HOLVI_DB_CONNECTION_STRING"),
@@ -14,7 +18,12 @@ const appConfig = {
         "number",
         16 * GIGABYTE
     ),
-    dataDir: getEnvVariable("HOLVI_DATA_DIR"),
+    dataDir: dataDir,
+    backupDir: getEnvVariable(
+        "HOLVI_BACKUP_DIR",
+        "string",
+        path.join(dataDir, "backups")
+    ),
     sessionOptions: {
         password: getEnvVariable("HOLVI_SESSION_PASSWORD"),
         cookieName: "holviapp",

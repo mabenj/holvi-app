@@ -16,7 +16,8 @@ export default class DatabaseUpgrade {
     private static readonly upgradeFunctions: Record<number, UpgradeFunction> =
         {
             1: DatabaseUpgrade.performUpgrade1,
-            2: DatabaseUpgrade.performUpgrade2
+            2: DatabaseUpgrade.performUpgrade2,
+            3: DatabaseUpgrade.performUpgrade3
         };
 
     static async upgrade(from: number, to: number, db: Database) {
@@ -167,5 +168,10 @@ export default class DatabaseUpgrade {
             await copyFile(originalPath, backupPath);
             await Cryptography.encryptFile(originalPath);
         }
+    }
+
+    private static async performUpgrade3(): Promise<boolean> {
+        // Version 4 adds the BackupJobs table, which model sync creates; no data to migrate
+        return true;
     }
 }

@@ -34,16 +34,6 @@ interface GetStreamResult {
 export class CollectionService {
   constructor(private readonly userId: string) {}
 
-  async backupCollections() {
-    const db = await Database.getInstance();
-    const collections = await db.models.Collection.findAll({
-      where: { UserId: this.userId },
-      include: [db.models.Tag, db.models.CollectionFile],
-    });
-    const fileSystem = new UserFileSystem(this.userId);
-    await fileSystem.backupCollections(collections);
-  }
-
   async getAllFiles(): Promise<CollectionFileDto[]> {
     const db = await Database.getInstance();
     const files = await db.models.CollectionFile.findAll({

@@ -63,9 +63,11 @@
     "@types/fluent-ffmpeg": "^2.1.21",
     "@types/formidable": "^3.4.0",
     "@types/react-linkify": "^1.0.1",
+    "@types/yauzl": "^3.4.0",
     "sass": "^1.63.6",
     "vite": "^8.3.0",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.1",
+    "yauzl": "^3"
   },
   "resolutions": {
     "string-width": "4.2.3"

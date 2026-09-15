@@ -9,7 +9,6 @@ import { useHttp } from "./useHttp";
 export function useCollections() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isBackingUp, setIsBackingUp] = useState(false);
 
   const http = useHttp();
   const toast = useToast();
@@ -84,31 +83,11 @@ export function useCollections() {
     return data.collection;
   };
 
-  const backupCollections = async () => {
-    setIsBackingUp(true);
-    const res = await http
-      .post(`/api/collections/backup`)
-      .finally(() => setIsBackingUp(false));
-    if (res.error) {
-      toast({
-        description: `Collections backup failed: ${getErrorMessage(res.error)}`,
-        status: "error",
-      });
-    } else {
-      toast({
-        description: `Collections backed up`,
-        status: "success",
-      });
-    }
-  };
-
   return {
     isDeleting,
     isSaving,
-    isBackingUp,
     createCollection,
     editCollection,
     deleteCollection,
-    backupCollections,
   };
 }
