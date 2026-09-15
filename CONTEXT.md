@@ -29,7 +29,7 @@ _Avoid_: export
 One run of producing a backup. Waits as queued until no other backup job is running on the instance, then runs in the background, reports progress, and ends as completed, completed with errors, failed, or cancelled. Only completed jobs (with or without errors) leave a backup behind.
 
 **Manifest**:
-The top-level metadata document inside a backup: the format version, the user, the list of collections it contains, the outcome of the backup job, and any skipped files. Each collection's own metadata (the collection, its files and their tags) lives in a separate document per collection that the manifest points to.
+The top-level metadata document inside a backup: the format version, the user, the list of collections it contains, the outcome of the backup job, and any problem files. Each collection's own metadata (the collection, its files and their tags) lives in a separate document per collection that the manifest points to.
 
 **Backup path**:
 The readable location of a file inside a backup, derived from the collection name and file name but made safe and unique. Never assumed to equal the original names; the originals are kept in the metadata.
@@ -40,6 +40,9 @@ A file that could not be included in a backup (missing, unreadable, or deleted d
 **Damaged file**:
 A file whose content failed partway through being written into a backup, so the backup holds an incomplete copy of it. Recorded in the manifest and its collection's metadata; does not fail the backup job.
 _Avoid_: corrupt file (ambiguous with damage in the encrypted original)
+
+**Problem file**:
+A Skipped file or a Damaged file. A backup job with any problem files ends as completed with errors, and lists them for the user.
 
 **Current backup**:
 The most recent completed backup for a user. It is the only one kept; it replaces the previous one when it completes.

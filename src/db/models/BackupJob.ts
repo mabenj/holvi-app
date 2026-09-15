@@ -1,4 +1,8 @@
-import { BackupJobDto, BackupJobStatus } from "@/lib/types/backup-job-dto";
+import {
+    BackupJobDto,
+    BackupJobStatus,
+    BackupProblem
+} from "@/lib/types/backup-job-dto";
 import {
     CreationOptional,
     DataTypes,
@@ -28,6 +32,9 @@ export class BackupJob extends Model<
     declare currentFileName: CreationOptional<string | null>;
     declare zipFileName: CreationOptional<string | null>;
     declare zipSizeBytes: CreationOptional<number | null>;
+    declare skippedCount: CreationOptional<number>;
+    declare damagedCount: CreationOptional<number>;
+    declare problems: CreationOptional<BackupProblem[]>;
     declare errorMessage: CreationOptional<string | null>;
 
     declare createdAt: CreationOptional<Date>;
@@ -84,6 +91,13 @@ export class BackupJob extends Model<
                         return value === null ? null : Number(value);
                     }
                 },
+                skippedCount: counter(),
+                damagedCount: counter(),
+                problems: {
+                    type: DataTypes.JSONB,
+                    allowNull: false,
+                    defaultValue: []
+                },
                 errorMessage: DataTypes.TEXT,
                 createdAt: DataTypes.DATE,
                 updatedAt: DataTypes.DATE
@@ -112,6 +126,9 @@ export class BackupJob extends Model<
             },
             zipFileName: this.zipFileName,
             zipSizeBytes: this.zipSizeBytes,
+            skippedCount: this.skippedCount,
+            damagedCount: this.damagedCount,
+            problems: this.problems,
             errorMessage: this.errorMessage
         };
     }

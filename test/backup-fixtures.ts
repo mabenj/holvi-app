@@ -90,6 +90,15 @@ type FileMetadata = Partial<
     >
 > & { tags?: string[] };
 
+/** Where a file's encrypted content is stored in the data directory */
+export function encryptedFilePath(
+    userId: string,
+    collectionId: string,
+    fileId: string
+) {
+    return path.join(appConfig.dataDir, userId, collectionId, fileId);
+}
+
 /** Creates a file row and its encrypted content in the data directory, the way uploads store them. */
 export async function addFile(
     userId: string,

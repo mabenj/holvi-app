@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { appendFile, truncate, unlink } from "fs/promises";
 import path from "path";
 import { Readable } from "stream";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -8,6 +9,7 @@ import {
     createCollection,
     createHoldingOpener,
     createUser,
+    encryptedFilePath,
     extractZip,
     hasZip64EndOfCentralDirectory,
     listFiles,
@@ -22,6 +24,7 @@ import {
 import { getTestDatabase, resetDatabase } from "../../../test/database";
 import appConfig from "../common/app-config";
 import { NotFoundError } from "../common/errors";
+import { UserFileSystem } from "../common/user-file-system";
 import { isActiveBackupJobStatus } from "../types/backup-job-dto";
 import { BackupService } from "./backup.service";
 
@@ -96,7 +99,7 @@ describe("BackupService (integration)", () => {
         const isoUtc = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
         expect(manifest).toEqual({
             formatVersion: 1,
-            schemaVersion: 4,
+            schemaVersion: 5,
             snapshotAt: expect.stringMatching(isoUtc),
             startedAt: new Date(job.startedAt!).toISOString(),
             finishedAt: new Date(job.finishedAt!).toISOString(),
@@ -125,7 +128,14 @@ describe("BackupService (integration)", () => {
                     fileCount: 1
                 }
             ],
-            totals: { files: 3, bytes: 8_500 }
+            totals: { files: 3, bytes: 8_500 },
+            problems: []
+        });
+        expect(job).toMatchObject({
+            status: "completed",
+            skippedCount: 0,
+            damagedCount: 0,
+            problems: []
         });
         expect(Date.parse(manifest.snapshotAt)).toBeLessThanOrEqual(
             Date.parse(manifest.startedAt)
@@ -749,6 +759,288 @@ describe("BackupService (integration)", () => {
             });
             const { dir } = await extract();
             expect(await listFiles(path.join(dir, "files", "Empty_"))).toEqual([]);
+        });
+    });
+
+    describe("skipped and damaged files", () => {
+        async function readBackup(service: BackupService, jobId: string) {
+            const entries = await readZip((await service.openDownload(jobId)).filePath);
+            const entry = (name: string) =>
+                entries.find((candidate) => candidate.name === name);
+            const json = (name: string) =>
+                JSON.parse(entry(name)!.data.toString("utf8"));
+            return { entries, entry, json, manifest: json("manifest.json") };
+        }
+
+        it("skips a file whose encrypted content is missing and completes with errors, keeping other files intact", async () => {
+            const user = await createUser("alice");
+            const holiday = await createCollection(user.id, "Holiday");
+            const a = crypto.randomBytes(1_000);
+            const c = crypto.randomBytes(3_000);
+            await addFile(user.id, holiday.id, "a.jpg", a);
+            const missing = await addFile(user.id, holiday.id, "b.jpg", crypto.randomBytes(2_000));
+            await addFile(user.id, holiday.id, "c.jpg", c);
+            await unlink(encryptedFilePath(user.id, holiday.id, missing.id));
+            const service = new BackupService(user.id);
+
+            const job = await runBackup(service);
+
+            expect(job.status).toBe("completedWithErrors");
+            expect(job.skippedCount).toBe(1);
+            expect(job.damagedCount).toBe(0);
+            expect(job.problems).toEqual([
+                {
+                    fileId: missing.id,
+                    collectionId: holiday.id,
+                    name: "b.jpg",
+                    kind: "skipped",
+                    reason: expect.stringMatching(/missing/i),
+                    bytesWritten: null,
+                    bytesExpected: null
+                }
+            ]);
+            const { entries, entry, json, manifest } = await readBackup(service, job.id);
+            expect(entries.map((zipEntry) => zipEntry.name)).toEqual([
+                "files/Holiday/a.jpg",
+                "files/Holiday/c.jpg",
+                "metadata/Holiday.json",
+                "manifest.json"
+            ]);
+            expect(entry("files/Holiday/a.jpg")!.data.equals(a)).toBe(true);
+            expect(entry("files/Holiday/c.jpg")!.data.equals(c)).toBe(true);
+            expect(manifest.outcome).toBe("completedWithErrors");
+            expect(manifest.problems).toEqual(job.problems);
+            expect(manifest.totals).toEqual({ files: 2, bytes: 4_000 });
+            expect(manifest.collections[0].fileCount).toBe(3);
+            const { files } = json("metadata/Holiday.json");
+            expect(files[1]).toMatchObject({
+                id: missing.id,
+                name: "b.jpg",
+                status: "skipped",
+                backupPath: null,
+                sizeBytes: null,
+                sha256: null
+            });
+            expect(files.map((file: { status: string }) => file.status)).toEqual([
+                "included",
+                "skipped",
+                "included"
+            ]);
+        });
+
+        it("skips files whose encrypted content is too short or changed size after the job started", async () => {
+            const user = await createUser("alice");
+            const holiday = await createCollection(user.id, "Holiday");
+            const a = crypto.randomBytes(200_000);
+            await addFile(user.id, holiday.id, "a.jpg", a);
+            const grown = await addFile(user.id, holiday.id, "b.jpg", crypto.randomBytes(2_000));
+            const truncated = await addFile(user.id, holiday.id, "c.jpg", crypto.randomBytes(2_000));
+            await truncate(encryptedFilePath(user.id, holiday.id, truncated.id), 10);
+            const opener = createHoldingOpener();
+            const service = new BackupService(user.id, {
+                openDecryptedFile: opener.openDecryptedFile
+            });
+
+            const started = await service.start();
+            await waitFor(
+                () => service.getJob(started.id),
+                (job) => job.progress.bytesDone > 0
+            );
+            await appendFile(
+                encryptedFilePath(user.id, holiday.id, grown.id),
+                crypto.randomBytes(100)
+            );
+            opener.release();
+            const job = await waitFor(
+                () => service.getJob(started.id),
+                (current) => !isActiveBackupJobStatus(current.status)
+            );
+
+            expect(job.status).toBe("completedWithErrors");
+            expect(job.skippedCount).toBe(2);
+            expect(job.problems).toEqual([
+                expect.objectContaining({
+                    fileId: grown.id,
+                    kind: "skipped",
+                    reason: expect.stringMatching(/2000 .*2100 bytes/)
+                }),
+                expect.objectContaining({
+                    fileId: truncated.id,
+                    kind: "skipped",
+                    reason: expect.stringMatching(/too short/)
+                })
+            ]);
+            const { entries, entry, json } = await readBackup(service, job.id);
+            expect(entries.map((zipEntry) => zipEntry.name)).toEqual([
+                "files/Holiday/a.jpg",
+                "metadata/Holiday.json",
+                "manifest.json"
+            ]);
+            expect(entry("files/Holiday/a.jpg")!.data.equals(a)).toBe(true);
+            expect(
+                json("metadata/Holiday.json").files.map(
+                    (file: { status: string }) => file.status
+                )
+            ).toEqual(["included", "skipped", "skipped"]);
+        });
+
+        it("skips a file deleted while the job runs, recording it as it was in the snapshot", async () => {
+            const user = await createUser("alice");
+            const holiday = await createCollection(user.id, "Holiday");
+            const a = crypto.randomBytes(200_000);
+            const c = crypto.randomBytes(3_000);
+            await addFile(user.id, holiday.id, "a.jpg", a);
+            const deleted = await addFile(user.id, holiday.id, "b.jpg", crypto.randomBytes(2_000), {
+                tags: ["gone"]
+            });
+            await addThumbnail(user.id, holiday.id, deleted.id, crypto.randomBytes(100));
+            await addFile(user.id, holiday.id, "c.jpg", c);
+            const opener = createHoldingOpener();
+            const service = new BackupService(user.id, {
+                openDecryptedFile: opener.openDecryptedFile
+            });
+
+            const started = await service.start();
+            await waitFor(
+                () => service.getJob(started.id),
+                (job) => job.progress.bytesDone > 0
+            );
+            const db = await getTestDatabase();
+            await db.models.CollectionFile.destroy({ where: { id: deleted.id } });
+            await new UserFileSystem(user.id).deleteFileAndThumbnail(holiday.id, deleted.id);
+            opener.release();
+            const job = await waitFor(
+                () => service.getJob(started.id),
+                (current) => !isActiveBackupJobStatus(current.status)
+            );
+
+            expect(job.status).toBe("completedWithErrors");
+            expect(job.problems).toEqual([
+                expect.objectContaining({ fileId: deleted.id, name: "b.jpg", kind: "skipped" })
+            ]);
+            const { entry, json, manifest } = await readBackup(service, job.id);
+            expect(entry("files/Holiday/a.jpg")!.data.equals(a)).toBe(true);
+            expect(entry("files/Holiday/c.jpg")!.data.equals(c)).toBe(true);
+            expect(entry("files/Holiday/b.jpg")).toBeUndefined();
+            expect(manifest.problems).toEqual(job.problems);
+            expect(json("metadata/Holiday.json").files[1]).toMatchObject({
+                id: deleted.id,
+                name: "b.jpg",
+                status: "skipped",
+                backupPath: null,
+                tags: ["gone"]
+            });
+        });
+
+        it("records a file whose stream fails partway as damaged, with bytes written vs expected, and backs up later files", async () => {
+            const user = await createUser("alice");
+            const holiday = await createCollection(user.id, "Holiday");
+            const a = crypto.randomBytes(1_000);
+            const b = crypto.randomBytes(5_000);
+            const c = crypto.randomBytes(3_000);
+            await addFile(user.id, holiday.id, "a.jpg", a);
+            const damaged = await addFile(user.id, holiday.id, "b.jpg", b);
+            await addFile(user.id, holiday.id, "c.jpg", c);
+            const service = new BackupService(user.id, {
+                openDecryptedFile: (ref) => {
+                    const real = new UserFileSystem(ref.userId).openDecryptedFile(
+                        ref.collectionId,
+                        ref.fileId
+                    );
+                    if (ref.fileId !== damaged.id) {
+                        return real;
+                    }
+                    return Readable.from(
+                        (async function* () {
+                            let content = Buffer.alloc(0);
+                            for await (const chunk of real) {
+                                content = Buffer.concat([content, chunk]);
+                            }
+                            yield content.subarray(0, 1_000);
+                            throw Object.assign(new Error("EIO: i/o error, read"), {
+                                code: "EIO"
+                            });
+                        })()
+                    );
+                }
+            });
+
+            const job = await runBackup(service);
+
+            expect(job.status).toBe("completedWithErrors");
+            expect(job.skippedCount).toBe(0);
+            expect(job.damagedCount).toBe(1);
+            expect(job.problems).toEqual([
+                {
+                    fileId: damaged.id,
+                    collectionId: holiday.id,
+                    name: "b.jpg",
+                    kind: "damaged",
+                    reason: expect.stringMatching(/i\/o error/),
+                    bytesWritten: 1_000,
+                    bytesExpected: 5_000
+                }
+            ]);
+            const { entries, entry, json, manifest } = await readBackup(service, job.id);
+            expect(entries.map((zipEntry) => zipEntry.name)).toEqual([
+                "files/Holiday/a.jpg",
+                "files/Holiday/b.jpg",
+                "files/Holiday/c.jpg",
+                "metadata/Holiday.json",
+                "manifest.json"
+            ]);
+            expect(entry("files/Holiday/a.jpg")!.data.equals(a)).toBe(true);
+            expect(entry("files/Holiday/b.jpg")!.data.equals(b.subarray(0, 1_000))).toBe(true);
+            expect(entry("files/Holiday/c.jpg")!.data.equals(c)).toBe(true);
+            expect(manifest.outcome).toBe("completedWithErrors");
+            expect(manifest.problems).toEqual(job.problems);
+            expect(manifest.totals).toEqual({ files: 2, bytes: 4_000 });
+            expect(json("metadata/Holiday.json").files[1]).toMatchObject({
+                id: damaged.id,
+                status: "damaged",
+                backupPath: "files/Holiday/b.jpg",
+                sizeBytes: 1_000,
+                sha256: null
+            });
+        });
+
+        it("records a file whose stream ends early without an error as damaged", async () => {
+            const user = await createUser("alice");
+            const holiday = await createCollection(user.id, "Holiday");
+            const b = crypto.randomBytes(5_000);
+            const c = crypto.randomBytes(3_000);
+            const shortened = await addFile(user.id, holiday.id, "b.jpg", b);
+            await addFile(user.id, holiday.id, "c.jpg", c);
+            const service = new BackupService(user.id, {
+                openDecryptedFile: (ref) =>
+                    ref.fileId === shortened.id
+                        ? Readable.from([b.subarray(0, 1_000)], { objectMode: false })
+                        : new UserFileSystem(ref.userId).openDecryptedFile(
+                              ref.collectionId,
+                              ref.fileId
+                          )
+            });
+
+            const job = await runBackup(service);
+
+            expect(job.status).toBe("completedWithErrors");
+            expect(job.problems).toEqual([
+                expect.objectContaining({
+                    fileId: shortened.id,
+                    kind: "damaged",
+                    reason: expect.stringMatching(/ended after 1000 of 5000 bytes/),
+                    bytesWritten: 1_000,
+                    bytesExpected: 5_000
+                })
+            ]);
+            const { entry, json } = await readBackup(service, job.id);
+            expect(entry("files/Holiday/c.jpg")!.data.equals(c)).toBe(true);
+            expect(json("metadata/Holiday.json").files[0]).toMatchObject({
+                id: shortened.id,
+                status: "damaged",
+                sizeBytes: 1_000,
+                sha256: null
+            });
         });
     });
 

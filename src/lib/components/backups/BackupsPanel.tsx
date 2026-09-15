@@ -2,16 +2,21 @@ import { useBackups } from "@/lib/hooks/useBackups";
 import {
     BackupJobDto,
     BackupJobStatus,
-    isActiveBackupJobStatus
+    BackupProblem,
+    isActiveBackupJobStatus,
+    isCompletedBackupJobStatus
 } from "@/lib/types/backup-job-dto";
 import {
     Button,
+    Collapse,
     Flex,
     Heading,
     IconButton,
+    ListItem,
     Progress,
     Spinner,
     Text,
+    UnorderedList,
     useDisclosure
 } from "@chakra-ui/react";
 import { mdiBackupRestore, mdiDownload } from "@mdi/js";
@@ -146,12 +151,11 @@ function FinishedJob({ job }: { job: BackupJobDto }) {
     const finishedAt = job.finishedAt
         ? new Date(job.finishedAt).toLocaleString()
         : null;
+    const hasBackup = isCompletedBackupJobStatus(job.status);
     return (
         <Flex direction="column" gap={2}>
             <Heading size="md">
-                {job.status === "completed"
-                    ? "Current backup"
-                    : "Last backup job"}
+                {hasBackup ? "Current backup" : "Last backup job"}
             </Heading>
             <Text>
                 {STATUS_LABELS[job.status]}
@@ -160,7 +164,14 @@ function FinishedJob({ job }: { job: BackupJobDto }) {
                     ` · ${formatBytes(job.zipSizeBytes)}`}
             </Text>
             {job.errorMessage && <Text color="red.400">{job.errorMessage}</Text>}
-            {job.status === "completed" && (
+            {job.problems.length > 0 && (
+                <ProblemList
+                    problems={job.problems}
+                    skippedCount={job.skippedCount}
+                    damagedCount={job.damagedCount}
+                />
+            )}
+            {hasBackup && (
                 <Button
                     as="a"
                     href={`/api/backups/${job.id}/download`}
@@ -169,6 +180,48 @@ function FinishedJob({ job }: { job: BackupJobDto }) {
                     Download
                 </Button>
             )}
+        </Flex>
+    );
+}
+
+function ProblemList({
+    problems,
+    skippedCount,
+    damagedCount
+}: {
+    problems: BackupProblem[];
+    skippedCount: number;
+    damagedCount: number;
+}) {
+    const { isOpen, onToggle } = useDisclosure();
+    return (
+        <Flex direction="column" gap={2}>
+            <Text color="orange.400">
+                {problems.length} problem{problems.length === 1 ? "" : "s"} (
+                {skippedCount} skipped, {damagedCount} damaged)
+            </Text>
+            <Button size="sm" variant="outline" onClick={onToggle}>
+                {isOpen ? "Hide problems" : "Show problems"}
+            </Button>
+            <Collapse in={isOpen} animateOpacity>
+                <UnorderedList spacing={1} fontSize="sm">
+                    {problems.map((problem) => (
+                        <ListItem key={problem.fileId}>
+                            <Text as="span" fontWeight="semibold">
+                                {problem.name}
+                            </Text>{" "}
+                            · {problem.kind === "skipped" ? "Skipped" : "Damaged"}{" "}
+                            · {problem.reason}
+                            {problem.kind === "damaged" &&
+                                ` · ${formatBytes(problem.bytesWritten ?? 0)} of ${
+                                    problem.bytesExpected === null
+                                        ? "unknown size"
+                                        : formatBytes(problem.bytesExpected)
+                                } written`}
+                        </ListItem>
+                    ))}
+                </UnorderedList>
+            </Collapse>
         </Flex>
     );
 }

@@ -9,14 +9,19 @@ import { createWriteStream } from "fs";
 import { mkdir, open, rename, rm, stat } from "fs/promises";
 import path from "path";
 import { InferAttributes, Transaction } from "sequelize";
-import { Readable, Transform, pipeline } from "stream";
+import { Readable } from "stream";
 import appConfig from "../common/app-config";
 import { UniqueSafeNames } from "../common/backup-paths";
 import { NotFoundError } from "../common/errors";
 import Log, { LogColor } from "../common/log";
 import { UserFileSystem } from "../common/user-file-system";
 import { getErrorMessage, isUuidv4, timestamp } from "../common/utilities";
-import { BackupJobDto } from "../types/backup-job-dto";
+import {
+    BackupJobDto,
+    BackupJobStatus,
+    BackupProblem,
+    isCompletedBackupJobStatus
+} from "../types/backup-job-dto";
 
 const BACKUP_FORMAT_VERSION = 1;
 const PROGRESS_SAVE_INTERVAL_MS = 1_000;
@@ -99,7 +104,7 @@ export class BackupService {
     /** Locates a completed job's backup zip for download */
     async openDownload(jobId: string): Promise<BackupDownload> {
         const job = await this.findUserJob(jobId);
-        if (job.status !== "completed" || !job.zipFileName) {
+        if (!isCompletedBackupJobStatus(job.status) || !job.zipFileName) {
             throw new NotFoundError(
                 `Backup job '${jobId}' has no backup to download`
             );
@@ -166,6 +171,9 @@ async function runBackupJob(job: BackupJob, openFile: DecryptedFileOpener) {
         const zipPath = path.join(userBackupDir, zipFileName);
 
         const startedAt = new Date();
+        const fileSizes = await measureFileSizes(snapshot);
+        let bytesTotal = 0;
+        fileSizes.forEach((size) => (bytesTotal += size));
         await updateJob(job.id, {
             status: "running",
             startedAt,
@@ -174,15 +182,16 @@ async function runBackupJob(job: BackupJob, openFile: DecryptedFileOpener) {
                 (sum, collection) => sum + countFiles(collection),
                 0
             ),
-            bytesTotal: await getTotalBytes(snapshot)
+            bytesTotal
         });
         logger.info(`Backup job '${job.id}' started`);
 
         await mkdir(userBackupDir, { recursive: true });
         progressSaver.start();
-        const finishedAt = await writeBackupZip(
+        const { finishedAt, outcome, problems } = await writeBackupZip(
             `${zipPath}.partial`,
             snapshot,
+            fileSizes,
             startedAt,
             openFile,
             progress
@@ -193,13 +202,18 @@ async function runBackupJob(job: BackupJob, openFile: DecryptedFileOpener) {
 
         await updateJob(job.id, {
             ...progress,
-            status: "completed",
+            status: outcome,
             finishedAt,
             currentFileName: null,
             zipFileName,
-            zipSizeBytes: size
+            zipSizeBytes: size,
+            skippedCount: countProblems(problems, "skipped"),
+            damagedCount: countProblems(problems, "damaged"),
+            problems
         });
-        logger.info(`Backup job '${job.id}' completed (${size} bytes)`);
+        logger.info(
+            `Backup job '${job.id}' ${outcome} (${size} bytes, ${problems.length} problem files)`
+        );
     } catch (error) {
         await progressSaver.stop();
         logger.error(`Backup job '${job.id}' failed`, error);
@@ -268,31 +282,40 @@ function countFiles(collection: Collection) {
     return collection.CollectionFiles?.length ?? 0;
 }
 
-async function getTotalBytes({ user, collections }: Snapshot) {
+/** Decrypted size of each file by id, as it is when the job starts; unreadable files are left out */
+async function measureFileSizes({ user, collections }: Snapshot) {
     const fileSystem = new UserFileSystem(user.id);
-    let total = 0;
+    const sizes = new Map<string, number>();
     for (const collection of collections) {
         for (const file of collection.CollectionFiles ?? []) {
-            total += await fileSystem
+            const size = await fileSystem
                 .getDecryptedFileSize(collection.id, file.id)
-                .catch(() => 0);
+                .catch(() => null);
+            if (size !== null) {
+                sizes.set(file.id, size);
+            }
         }
     }
-    return total;
+    return sizes;
 }
 
 /**
  * Writes the zip to `partialZipPath`, flushed to disk, and returns the finish
- * time recorded in its manifest. On failure the partial zip is removed, unless
- * it could not be created (e.g. another job owns it).
+ * time, outcome and problem files recorded in its manifest. On failure the
+ * partial zip is removed, unless it could not be created (e.g. another job owns it).
  */
 async function writeBackupZip(
     partialZipPath: string,
     snapshot: Snapshot,
+    fileSizes: Map<string, number>,
     startedAt: Date,
     openFile: DecryptedFileOpener,
     progress: WriteProgress
-): Promise<Date> {
+): Promise<{
+    finishedAt: Date;
+    outcome: BackupJobStatus;
+    problems: BackupProblem[];
+}> {
     const output = createWriteStream(partialZipPath, { flags: "wx" });
     let created = false;
     output.once("open", () => (created = true));
@@ -314,6 +337,8 @@ async function writeBackupZip(
 
     try {
         const manifestCollections = [];
+        const problems: BackupProblem[] = [];
+        // Only files included whole
         const totals = { files: 0, bytes: 0 };
         const folders = new UniqueSafeNames();
         for (const collection of snapshot.collections) {
@@ -323,31 +348,85 @@ async function writeBackupZip(
             const fileNames = new UniqueSafeNames();
             for (const file of collection.CollectionFiles ?? []) {
                 progress.currentFileName = file.name;
+                const ref: BackupFileRef = {
+                    userId: snapshot.user.id,
+                    collectionId: collection.id,
+                    fileId: file.id
+                };
+                const skipReason = await getSkipReason(
+                    ref,
+                    fileSizes.get(file.id)
+                );
+                if (skipReason) {
+                    problems.push({
+                        fileId: file.id,
+                        collectionId: collection.id,
+                        name: file.name,
+                        kind: "skipped",
+                        reason: skipReason,
+                        bytesWritten: null,
+                        bytesExpected: null
+                    });
+                    filesMetadata.push(
+                        toFileMetadata(file, {
+                            status: "skipped",
+                            backupPath: null,
+                            sizeBytes: null,
+                            sha256: null
+                        })
+                    );
+                    progress.filesDone += 1;
+                    continue;
+                }
                 const backupPath = `files/${folder}/${fileNames.claim(
                     file.name,
                     file.mimeType
                 )}`;
-                const measurer = measureContent(
+                const content = measureContent(
+                    openFile(ref),
                     (count) => (progress.bytesDone += count)
                 );
-                const content = pipeline(
-                    openFile({
-                        userId: snapshot.user.id,
-                        collectionId: collection.id,
-                        fileId: file.id
-                    }),
-                    measurer.stream,
-                    () => {
-                        // Errors are forwarded to the measurer and observed by appendEntry
-                    }
-                );
-                await appendEntry(archive, writeFailure, content, {
+                await appendEntry(archive, writeFailure, content.stream, {
                     name: backupPath,
                     store: true
                 });
-                filesMetadata.push(
-                    toFileMetadata(file, backupPath, measurer.result())
-                );
+                const { sizeBytes, sha256, failure } = content.result();
+                const expectedSize = fileSizes.get(file.id);
+                const damageReason = failure
+                    ? getErrorMessage(failure)
+                    : expectedSize !== undefined && sizeBytes < expectedSize
+                    ? `Content ended after ${sizeBytes} of ${expectedSize} bytes`
+                    : null;
+                if (damageReason) {
+                    problems.push({
+                        fileId: file.id,
+                        collectionId: collection.id,
+                        name: file.name,
+                        kind: "damaged",
+                        reason: damageReason,
+                        bytesWritten: sizeBytes,
+                        bytesExpected: expectedSize ?? null
+                    });
+                    filesMetadata.push(
+                        toFileMetadata(file, {
+                            status: "damaged",
+                            backupPath,
+                            sizeBytes,
+                            sha256: null
+                        })
+                    );
+                } else {
+                    filesMetadata.push(
+                        toFileMetadata(file, {
+                            status: "included",
+                            backupPath,
+                            sizeBytes,
+                            sha256
+                        })
+                    );
+                    totals.files += 1;
+                    totals.bytes += sizeBytes;
+                }
                 progress.filesDone += 1;
             }
             if (filesMetadata.length === 0) {
@@ -369,24 +448,23 @@ async function writeBackupZip(
                 metadataPath,
                 fileCount: filesMetadata.length
             });
-            for (const file of filesMetadata) {
-                totals.files += 1;
-                totals.bytes += file.sizeBytes;
-            }
             progress.collectionsDone += 1;
         }
 
         const finishedAt = new Date();
+        const outcome: BackupJobStatus =
+            problems.length > 0 ? "completedWithErrors" : "completed";
         const manifest = {
             formatVersion: BACKUP_FORMAT_VERSION,
             schemaVersion: Database.version,
             snapshotAt: snapshot.snapshotAt.toISOString(),
             startedAt: startedAt.toISOString(),
             finishedAt: finishedAt.toISOString(),
-            outcome: "completed",
+            outcome,
             user: snapshot.user,
             collections: manifestCollections,
-            totals
+            totals,
+            problems
         };
         await appendEntry(
             archive,
@@ -398,7 +476,7 @@ async function writeBackupZip(
         await archive.finalize();
         await outputClosed;
         await flushToDisk(partialZipPath);
-        return finishedAt;
+        return { finishedAt, outcome, problems };
     } catch (error) {
         archive.abort();
         output.destroy();
@@ -414,6 +492,45 @@ async function writeBackupZip(
         }
         throw error;
     }
+}
+
+/**
+ * Why a file's encrypted content cannot be backed up, or null if it can.
+ * `expectedSize` is its decrypted size when the job started, if it was readable then.
+ */
+async function getSkipReason(
+    { userId, collectionId, fileId }: BackupFileRef,
+    expectedSize: number | undefined
+): Promise<string | null> {
+    try {
+        const size = await new UserFileSystem(userId).getDecryptedFileSize(
+            collectionId,
+            fileId
+        );
+        if (expectedSize !== undefined && size !== expectedSize) {
+            return `Decrypted size changed from ${expectedSize} to ${size} bytes after the backup started`;
+        }
+        return null;
+    } catch (error) {
+        if (getErrorCode(error) === "ENOENT") {
+            return "Encrypted file is missing";
+        }
+        return `Encrypted file could not be read (${getErrorMessage(error)})`;
+    }
+}
+
+function getErrorCode(error: unknown) {
+    return error instanceof Error && "code" in error ? error.code : undefined;
+}
+
+/** A full disk fails the whole job instead of damaging one file */
+function isOutOfSpace(error: unknown) {
+    const code = getErrorCode(error);
+    return code === "ENOSPC" || code === "EDQUOT";
+}
+
+function countProblems(problems: BackupProblem[], kind: BackupProblem["kind"]) {
+    return problems.filter((problem) => problem.kind === kind).length;
 }
 
 /** Appends one entry and waits until it is fully written, so only one source is open at a time */
@@ -449,24 +566,40 @@ async function flushToDisk(filePath: string) {
     }
 }
 
-/** Passes content through, counting its bytes and computing its SHA-256 */
-function measureContent(onBytes: (count: number) => void) {
+/**
+ * Passes a file's content through, counting its bytes and computing its SHA-256.
+ * A read failure ends the content early and is reported as `failure` rather
+ * than failing the zip, except running out of disk space, which fails the stream.
+ */
+function measureContent(source: Readable, onBytes: (count: number) => void) {
     const hash = crypto.createHash("sha256");
     let sizeBytes = 0;
-    const stream = new Transform({
-        transform(chunk: Buffer, _encoding, callback) {
-            hash.update(chunk);
-            sizeBytes += chunk.length;
-            onBytes(chunk.length);
-            callback(null, chunk);
-        }
-    });
+    let failure: unknown = null;
+    const stream = Readable.from(
+        (async function* () {
+            try {
+                for await (const chunk of source) {
+                    hash.update(chunk);
+                    sizeBytes += chunk.length;
+                    onBytes(chunk.length);
+                    yield chunk;
+                }
+            } catch (error) {
+                if (isOutOfSpace(error)) {
+                    throw error;
+                }
+                failure = error;
+            }
+        })(),
+        { objectMode: false }
+    );
     return {
         stream,
         /** Only valid once the stream has ended */
         result: (): ContentMeasurement => ({
             sizeBytes,
-            sha256: hash.digest("hex")
+            sha256: hash.digest("hex"),
+            failure
         })
     };
 }
@@ -474,6 +607,8 @@ function measureContent(onBytes: (count: number) => void) {
 interface ContentMeasurement {
     sizeBytes: number;
     sha256: string;
+    /** Why the content ended early, if it did */
+    failure: unknown;
 }
 
 function toJsonBuffer(value: unknown) {
@@ -495,16 +630,23 @@ function toCollectionMetadata(
     };
 }
 
+/** What a backup holds of one file; everything is null for a skipped file */
+interface FileEntry {
+    status: "included" | "skipped" | "damaged";
+    backupPath: string | null;
+    sizeBytes: number | null;
+    sha256: string | null;
+}
+
 function toFileMetadata(
     file: CollectionFile,
-    backupPath: string,
-    { sizeBytes, sha256 }: ContentMeasurement
+    { status, backupPath, sizeBytes, sha256 }: FileEntry
 ) {
     return {
         id: file.id,
         name: file.name,
         backupPath,
-        status: "included",
+        status,
         mimeType: file.mimeType,
         sizeBytes,
         sha256,
