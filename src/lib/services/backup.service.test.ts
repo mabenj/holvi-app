@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import path from "path";
 import { Readable } from "stream";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
@@ -7,6 +8,7 @@ import {
     createCollection,
     createHoldingOpener,
     createUser,
+    extractZip,
     hasZip64EndOfCentralDirectory,
     listFiles,
     listUserBackupDir,
@@ -460,6 +462,294 @@ describe("BackupService (integration)", () => {
         await expect(service.openDownload(job.id)).rejects.toThrow(
             NotFoundError
         );
+    });
+
+    describe("backup paths", () => {
+        interface FileMetadata {
+            id: string;
+            name: string;
+            backupPath: string;
+        }
+
+        async function backupZip(service: BackupService) {
+            const job = await runBackup(service);
+            expect(job.status).toBe("completed");
+            const { filePath } = await service.openDownload(job.id);
+            const entries = await readZip(filePath);
+            const entry = (name: string) =>
+                entries.find((candidate) => candidate.name === name);
+            const json = (name: string) =>
+                JSON.parse(entry(name)!.data.toString("utf8"));
+            /** Extracts the zip onto the real file system and lists the extracted files as zip paths */
+            const extract = async () => {
+                const dir = path.join(appConfig.backupDir, "..", `extracted-${job.id}`);
+                const files = await extractZip(filePath, dir);
+                return {
+                    dir,
+                    files: files.map((file) => file.split(path.sep).join("/")).sort()
+                };
+            };
+            const fileEntryNames = entries
+                .map((zipEntry) => zipEntry.name)
+                .filter((name) => !name.endsWith("/"))
+                .sort();
+            return {
+                entries,
+                entry,
+                json,
+                manifest: json("manifest.json"),
+                extract,
+                fileEntryNames
+            };
+        }
+
+        function backupPathsByName(files: FileMetadata[]) {
+            return Object.fromEntries(files.map((file) => [file.name, file.backupPath]));
+        }
+
+        it("gives files with the same name, even differing only in case or Unicode normalisation, distinct paths in their collection folder", async () => {
+            const user = await createUser("alice");
+            const holiday = await createCollection(user.id, "Holiday");
+            const composedCafe = `caf${String.fromCodePoint(0xe9)}.jpg`;
+            const decomposedCafe = `cafe${String.fromCodePoint(0x301)}.jpg`;
+            const originals = [
+                ["beach.jpg", crypto.randomBytes(1_000)],
+                ["BEACH.jpg", crypto.randomBytes(1_001)],
+                ["beach.jpg", crypto.randomBytes(1_002)],
+                [composedCafe, crypto.randomBytes(1_003)],
+                [decomposedCafe, crypto.randomBytes(1_004)]
+            ] as const;
+            for (const [name, content] of originals) {
+                await addFile(user.id, holiday.id, name, content);
+            }
+            const service = new BackupService(user.id);
+
+            const { entry, json, extract, fileEntryNames } = await backupZip(service);
+
+            const { files }: { files: FileMetadata[] } = json("metadata/Holiday.json");
+            expect(files.map((file) => file.backupPath.toLowerCase()).sort()).toEqual([
+                "files/holiday/beach (2).jpg",
+                "files/holiday/beach (3).jpg",
+                "files/holiday/beach.jpg",
+                `files/holiday/caf${String.fromCodePoint(0xe9)} (2).jpg`,
+                `files/holiday/caf${String.fromCodePoint(0xe9)}.jpg`
+            ]);
+            // Every original's bytes are in the zip under the path its metadata records
+            const contents = files.map((file) => entry(file.backupPath)!.data);
+            for (const [, original] of originals) {
+                expect(contents.filter((data) => data.equals(original))).toHaveLength(1);
+            }
+            expect(files.map((file) => file.name).sort()).toEqual(
+                originals.map(([name]) => name).sort()
+            );
+            expect((await extract()).files).toEqual(fileEntryNames);
+        });
+
+        it("makes collection and file names with illegal characters, reserved names and trailing dots or spaces safe to extract", async () => {
+            const user = await createUser("alice");
+            const trip = await createCollection(user.id, 'Trip: 1/2 <"best"> | ok?*');
+            const reserved = await createCollection(user.id, "CON");
+            const dots = await createCollection(user.id, "..");
+            const trailing = await createCollection(user.id, "Notes. . ");
+            // Reserved once truncation drops everything after the spaces
+            const reservedWhenTruncated = await createCollection(
+                user.id,
+                `PRN${" ".repeat(200)}x`
+            );
+            const controlCharacterName = `tab\there${String.fromCharCode(1)}.jpg`;
+            const truncatedToReservedName = `aux${" ".repeat(200)}x`;
+            const unsafeNames = [
+                "a\\b.jpg",
+                controlCharacterName,
+                "nul.jpg",
+                "COM1.mov",
+                "CON .jpg",
+                truncatedToReservedName,
+                "...jpg",
+                "photo.jpg. ",
+                "lpt9.backup.png"
+            ];
+            for (const name of unsafeNames) {
+                await addFile(user.id, trip.id, name, crypto.randomBytes(10));
+            }
+            await addFile(user.id, reserved.id, "x.jpg", crypto.randomBytes(10));
+            await addFile(user.id, dots.id, "y.jpg", crypto.randomBytes(10));
+            await addFile(user.id, trailing.id, "z.jpg", crypto.randomBytes(10));
+            await addFile(user.id, reservedWhenTruncated.id, "w.jpg", crypto.randomBytes(10));
+            const service = new BackupService(user.id);
+
+            const { json, manifest, extract, fileEntryNames } = await backupZip(service);
+
+            expect(
+                manifest.collections.map(
+                    (collection: { name: string; folder: string; metadataPath: string }) => [
+                        collection.name,
+                        collection.folder,
+                        collection.metadataPath
+                    ]
+                )
+            ).toEqual([
+                ["..", "_", "metadata/_.json"],
+                ["CON", "CON_", "metadata/CON_.json"],
+                ["Notes. . ", "Notes", "metadata/Notes.json"],
+                [`PRN${" ".repeat(200)}x`, "PRN_", "metadata/PRN_.json"],
+                [
+                    'Trip: 1/2 <"best"> | ok?*',
+                    "Trip_ 1_2 __best__ _ ok__",
+                    "metadata/Trip_ 1_2 __best__ _ ok__.json"
+                ]
+            ]);
+            const folder = "files/Trip_ 1_2 __best__ _ ok__";
+            expect(
+                backupPathsByName(json("metadata/Trip_ 1_2 __best__ _ ok__.json").files)
+            ).toEqual({
+                "a\\b.jpg": `${folder}/a_b.jpg`,
+                [controlCharacterName]: `${folder}/tab_here_.jpg`,
+                "nul.jpg": `${folder}/nul_.jpg`,
+                "COM1.mov": `${folder}/COM1_.mov`,
+                "CON .jpg": `${folder}/CON_ .jpg`,
+                [truncatedToReservedName]: `${folder}/aux_.jpg`,
+                "...jpg": `${folder}/...jpg`,
+                "photo.jpg. ": `${folder}/photo.jpg`,
+                "lpt9.backup.png": `${folder}/lpt9_.backup.png`
+            });
+            expect((await extract()).files).toEqual(fileEntryNames);
+        });
+
+        it("gives collections whose names match after sanitisation or in a different case distinct folders", async () => {
+            const user = await createUser("alice");
+            const question = await createCollection(user.id, "Trip?");
+            const star = await createCollection(user.id, "Trip*");
+            const lower = await createCollection(user.id, "trip_");
+            const questionPhoto = crypto.randomBytes(10);
+            const starPhoto = crypto.randomBytes(11);
+            const lowerPhoto = crypto.randomBytes(12);
+            await addFile(user.id, question.id, "photo.jpg", questionPhoto);
+            await addFile(user.id, star.id, "photo.jpg", starPhoto);
+            await addFile(user.id, lower.id, "photo.jpg", lowerPhoto);
+            const service = new BackupService(user.id);
+
+            const { entry, json, manifest, extract, fileEntryNames } = await backupZip(service);
+
+            const collections: { id: string; folder: string; metadataPath: string }[] =
+                manifest.collections;
+            expect(collections.map((collection) => collection.folder.toLowerCase()).sort()).toEqual([
+                "trip_",
+                "trip_ (2)",
+                "trip_ (3)"
+            ]);
+            for (const [collection, photo] of [
+                [question, questionPhoto],
+                [star, starPhoto],
+                [lower, lowerPhoto]
+            ] as const) {
+                const { folder, metadataPath } = collections.find(
+                    (candidate) => candidate.id === collection.id
+                )!;
+                expect(metadataPath).toBe(`metadata/${folder}.json`);
+                const metadata = json(metadataPath);
+                expect(metadata.id).toBe(collection.id);
+                expect(metadata.files[0].backupPath).toBe(`files/${folder}/photo.jpg`);
+                expect(entry(`files/${folder}/photo.jpg`)!.data.equals(photo)).toBe(true);
+            }
+            expect((await extract()).files).toEqual(fileEntryNames);
+        });
+
+        it("truncates very long names to 100 bytes, keeping the extension and uniqueness", async () => {
+            const user = await createUser("alice");
+            const longCollectionName = "C".repeat(300);
+            const collection = await createCollection(user.id, longCollectionName);
+            const longName = `${"x".repeat(300)}.jpg`;
+            const multibyteName = `${"é".repeat(200)}.png`;
+            const first = await addFile(user.id, collection.id, longName, crypto.randomBytes(10));
+            const second = await addFile(user.id, collection.id, longName, crypto.randomBytes(10));
+            const multibyte = await addFile(user.id, collection.id, multibyteName, crypto.randomBytes(10));
+            const service = new BackupService(user.id);
+
+            const { json, manifest, extract, fileEntryNames } = await backupZip(service);
+
+            const folder = "C".repeat(100);
+            expect(manifest.collections[0]).toMatchObject({
+                name: longCollectionName,
+                folder,
+                metadataPath: `metadata/${folder}.json`
+            });
+            const { files }: { files: FileMetadata[] } = json(`metadata/${folder}.json`);
+            const byId = Object.fromEntries(files.map((file) => [file.id, file]));
+            expect([byId[first.id].backupPath, byId[second.id].backupPath].sort()).toEqual([
+                `files/${folder}/${"x".repeat(92)} (2).jpg`,
+                `files/${folder}/${"x".repeat(96)}.jpg`
+            ]);
+            expect(byId[first.id].name).toBe(longName);
+            expect(byId[multibyte.id]).toMatchObject({
+                name: multibyteName,
+                backupPath: `files/${folder}/${"é".repeat(48)}.png`
+            });
+            expect((await extract()).files).toEqual(fileEntryNames);
+        });
+
+        it("adds an extension from the MIME type only to file names without one", async () => {
+            const user = await createUser("alice");
+            const holiday = await createCollection(user.id, "Holiday");
+            const withoutExtension = [
+                ["IMG_0001", "image/jpeg", "IMG_0001.jpg"],
+                ["screenshot", "image/png", "screenshot.png"],
+                ["clip", "video/mp4", "clip.mp4"],
+                ["movie", "video/quicktime", "movie.mov"],
+                ["mystery", "application/x-unknown", "mystery"],
+                // A dot inside a name does not start an extension
+                ["IMG 1.5", "image/jpeg", "IMG 1.5.jpg"],
+                ["Photo by J. Smith", "image/png", "Photo by J. Smith.png"]
+            ];
+            const withExtension = [
+                // A converted video keeps its original name
+                ["converted.avi", "video/quicktime", "converted.avi"],
+                ["photo.JPEG", "image/jpeg", "photo.JPEG"],
+                ["archive.tar.gz", "image/png", "archive.tar.gz"],
+                [".jpg", "image/png", ".jpg"]
+            ];
+            for (const [name, mimeType] of [...withoutExtension, ...withExtension]) {
+                await addFile(user.id, holiday.id, name, crypto.randomBytes(10), { mimeType });
+            }
+            const service = new BackupService(user.id);
+
+            const { json, extract, fileEntryNames } = await backupZip(service);
+
+            expect(backupPathsByName(json("metadata/Holiday.json").files)).toEqual(
+                Object.fromEntries(
+                    [...withoutExtension, ...withExtension].map(([name, , fileName]) => [
+                        name,
+                        `files/Holiday/${fileName}`
+                    ])
+                )
+            );
+            expect((await extract()).files).toEqual(fileEntryNames);
+        });
+
+        it("includes empty collections as an empty folder alongside their metadata", async () => {
+            const user = await createUser("alice");
+            await createCollection(user.id, "Empty?");
+            const holiday = await createCollection(user.id, "Holiday");
+            await addFile(user.id, holiday.id, "beach.jpg", crypto.randomBytes(10));
+            const service = new BackupService(user.id);
+
+            const { entries, manifest, extract } = await backupZip(service);
+
+            expect(entries.map((entry) => entry.name).sort()).toEqual([
+                "files/Empty_/",
+                "files/Holiday/beach.jpg",
+                "manifest.json",
+                "metadata/Empty_.json",
+                "metadata/Holiday.json"
+            ]);
+            expect(manifest.collections[0]).toMatchObject({
+                name: "Empty?",
+                folder: "Empty_",
+                fileCount: 0
+            });
+            const { dir } = await extract();
+            expect(await listFiles(path.join(dir, "files", "Empty_"))).toEqual([]);
+        });
     });
 
     it("lists a user's jobs latest first and hides them from other users", async () => {

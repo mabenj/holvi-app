@@ -231,6 +231,27 @@ export function readZip(zipPath: string): Promise<ZipEntry[]> {
     });
 }
 
+/**
+ * Extracts a zip onto the real file system, refusing entries that would land
+ * outside the target directory, and returns the extracted paths.
+ */
+export async function extractZip(zipPath: string, targetDir: string) {
+    const root = path.resolve(targetDir);
+    for (const entry of await readZip(zipPath)) {
+        const destination = path.resolve(root, entry.name);
+        if (!destination.startsWith(root + path.sep)) {
+            throw new Error(`Zip entry '${entry.name}' escapes the target directory`);
+        }
+        if (entry.name.endsWith("/")) {
+            await mkdir(destination, { recursive: true });
+        } else {
+            await mkdir(path.dirname(destination), { recursive: true });
+            await writeFile(destination, entry.data, { flag: "wx" });
+        }
+    }
+    return listFiles(root);
+}
+
 export async function waitFor<T>(
     read: () => Promise<T>,
     isDone: (value: T) => boolean,

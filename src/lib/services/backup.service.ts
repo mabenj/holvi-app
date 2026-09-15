@@ -11,6 +11,7 @@ import path from "path";
 import { InferAttributes, Transaction } from "sequelize";
 import { Readable, Transform, pipeline } from "stream";
 import appConfig from "../common/app-config";
+import { UniqueSafeNames } from "../common/backup-paths";
 import { NotFoundError } from "../common/errors";
 import Log, { LogColor } from "../common/log";
 import { UserFileSystem } from "../common/user-file-system";
@@ -236,9 +237,14 @@ async function readSnapshot(userId: string): Promise<Snapshot> {
                     include: [db.models.Tag]
                 }
             ],
+            // Fully ordered, so de-duplicated backup paths are stable between backups
             order: [
                 ["name", "ASC"],
-                [db.models.CollectionFile, "name", "ASC"]
+                ["createdAt", "ASC"],
+                ["id", "ASC"],
+                [db.models.CollectionFile, "name", "ASC"],
+                [db.models.CollectionFile, "createdAt", "ASC"],
+                [db.models.CollectionFile, "id", "ASC"]
             ],
             transaction
         });
@@ -309,13 +315,18 @@ async function writeBackupZip(
     try {
         const manifestCollections = [];
         const totals = { files: 0, bytes: 0 };
+        const folders = new UniqueSafeNames();
         for (const collection of snapshot.collections) {
-            const folder = collection.name;
+            const folder = folders.claim(collection.name);
             const metadataPath = `metadata/${folder}.json`;
             const filesMetadata = [];
+            const fileNames = new UniqueSafeNames();
             for (const file of collection.CollectionFiles ?? []) {
                 progress.currentFileName = file.name;
-                const backupPath = `files/${folder}/${file.name}`;
+                const backupPath = `files/${folder}/${fileNames.claim(
+                    file.name,
+                    file.mimeType
+                )}`;
                 const measurer = measureContent(
                     (count) => (progress.bytesDone += count)
                 );
@@ -338,6 +349,12 @@ async function writeBackupZip(
                     toFileMetadata(file, backupPath, measurer.result())
                 );
                 progress.filesDone += 1;
+            }
+            if (filesMetadata.length === 0) {
+                await appendEntry(archive, writeFailure, Buffer.alloc(0), {
+                    name: `files/${folder}/`,
+                    type: "directory"
+                });
             }
             await appendEntry(
                 archive,
@@ -404,7 +421,8 @@ async function appendEntry(
     archive: Archiver,
     writeFailure: Promise<never>,
     source: Readable | Buffer,
-    entry: archiver.EntryData & { store?: boolean }
+    // Missing from archiver's types, though supported
+    entry: archiver.EntryData & { store?: boolean; type?: "directory" }
 ) {
     let onEntry = () => {};
     const written = new Promise<void>((resolve, reject) => {
