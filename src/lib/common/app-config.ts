@@ -1,4 +1,4 @@
-import path from "path";
+// Imported by the middleware, which runs on the edge runtime: no Node.js modules here
 
 const MEGABYTE = 1_000_000;
 const GIGABYTE = 1_000 * MEGABYTE;
@@ -22,7 +22,7 @@ const appConfig = {
     backupDir: getEnvVariable(
         "HOLVI_BACKUP_DIR",
         "string",
-        path.join(dataDir, "backups")
+        `${dataDir.replace(/[\\/]+$/, "")}/backups`
     ),
     sessionOptions: {
         password: getEnvVariable("HOLVI_SESSION_PASSWORD"),
