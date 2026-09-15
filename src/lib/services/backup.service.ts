@@ -6,7 +6,7 @@ import { Tag } from "@/db/models/Tag";
 import archiver, { Archiver } from "archiver";
 import crypto from "crypto";
 import { createWriteStream } from "fs";
-import { mkdir, open, rename, rm, stat } from "fs/promises";
+import { mkdir, open, readdir, rename, rm, stat } from "fs/promises";
 import path from "path";
 import { InferAttributes, Transaction } from "sequelize";
 import { Readable } from "stream";
@@ -74,16 +74,52 @@ export class BackupService {
             options.openDecryptedFile ?? openDecryptedFileFromDataDir;
     }
 
-    /** Starts a backup job in the background and returns it immediately. */
+    /**
+     * Queues a backup job to run in the background and returns it immediately,
+     * or returns the user's job that is already queued or running.
+     */
     async start(): Promise<BackupJobDto> {
         const db = await Database.getInstance();
-        const job = await db.models.BackupJob.create({
-            UserId: this.userId,
-            status: "queued",
-            queuedAt: new Date()
-        });
-        void runBackupJob(job, this.openDecryptedFile);
+        const transaction = await db.transaction();
+        let job: BackupJob;
+        try {
+            // Serialises starts per user, so concurrent requests cannot both create a job
+            await db.models.BackupJob.sequelize!.query(
+                "SELECT pg_advisory_xact_lock(hashtext(:userId))",
+                { replacements: { userId: this.userId }, transaction }
+            );
+            const activeJob = await db.models.BackupJob.findOne({
+                where: { UserId: this.userId, status: ["queued", "running"] },
+                transaction
+            });
+            if (activeJob) {
+                await transaction.commit();
+                return activeJob.toDto();
+            }
+            job = await db.models.BackupJob.create(
+                {
+                    UserId: this.userId,
+                    status: "queued",
+                    queuedAt: new Date()
+                },
+                { transaction }
+            );
+            getRunner().setOpener(job.id, this.openDecryptedFile);
+            await transaction.commit();
+        } catch (error) {
+            await transaction.rollback();
+            throw error;
+        }
+        getRunner().kick();
         return job.toDto();
+    }
+
+    /**
+     * Run once on server start: fails jobs a previous process left running,
+     * removes partial zips and starts queued jobs in order. Nothing is resumed.
+     */
+    static recover(): Promise<void> {
+        return getRunner().recover();
     }
 
     /** The user's backup jobs, latest first */
@@ -99,6 +135,31 @@ export class BackupService {
     async getJob(jobId: string): Promise<BackupJobDto> {
         const job = await this.findUserJob(jobId);
         return job.toDto();
+    }
+
+    /**
+     * Cancels a queued job, or stops a running one and deletes its partial zip,
+     * waiting until it has stopped. A finished job is returned unchanged.
+     */
+    async cancel(jobId: string): Promise<BackupJobDto> {
+        const job = await this.findUserJob(jobId);
+        const db = await Database.getInstance();
+        if (job.status === "queued") {
+            // Conditional, so a job the runner claims meanwhile is stopped below instead
+            await db.models.BackupJob.update(
+                { status: "cancelled", finishedAt: new Date() },
+                { where: { id: job.id, status: "queued" } }
+            );
+        }
+        const stopped = await getRunner().cancel(job.id);
+        if (!stopped) {
+            // Running but not in this process: left over from before a restart
+            await db.models.BackupJob.update(
+                { status: "cancelled", finishedAt: new Date() },
+                { where: { id: job.id, status: "running" } }
+            );
+        }
+        return (await this.findUserJob(jobId)).toDto();
     }
 
     /** Locates a completed job's backup zip for download */
@@ -155,7 +216,198 @@ async function updateJob(jobId: string, fields: BackupJobFields) {
     await db.models.BackupJob.update(fields, { where: { id: jobId } });
 }
 
-async function runBackupJob(job: BackupJob, openFile: DecryptedFileOpener) {
+/** The job a runner is claiming or running */
+interface CurrentJob {
+    jobId: string;
+    controller: AbortController;
+    /** Resolves once the runner has let go of the job */
+    done: Promise<void>;
+}
+
+/** Runs queued backup jobs one at a time across the whole instance, in queue order */
+class BackupJobRunner {
+    private draining = false;
+    private queueChanged = false;
+    private current: CurrentJob | null = null;
+    private recoveryRequests: {
+        resolve: () => void;
+        reject: (error: unknown) => void;
+    }[] = [];
+    /** Openers injected by the service that queued each job; others use the real decryption */
+    private readonly openers = new Map<string, DecryptedFileOpener>();
+
+    /** Must be called before the job is committed, so no queue pass can claim it without its opener */
+    setOpener(jobId: string, openFile: DecryptedFileOpener) {
+        this.openers.set(jobId, openFile);
+    }
+
+    /**
+     * Aborts the job if this runner is claiming or running it, and waits until
+     * it has stopped. Returns false if this runner does not have the job.
+     */
+    async cancel(jobId: string) {
+        this.openers.delete(jobId);
+        const current = this.current;
+        if (current?.jobId !== jobId) {
+            return false;
+        }
+        current.controller.abort();
+        await current.done;
+        return true;
+    }
+
+    /**
+     * Recovers from a previous server process once no job of this runner is
+     * running, then goes on to run queued jobs. Resolves once recovery is done.
+     */
+    recover() {
+        const recovered = new Promise<void>((resolve, reject) =>
+            this.recoveryRequests.push({ resolve, reject })
+        );
+        this.kick();
+        return recovered;
+    }
+
+    /** Starts running queued jobs unless they are already being run */
+    kick() {
+        this.queueChanged = true;
+        if (this.draining) {
+            return;
+        }
+        this.draining = true;
+        void this.drain();
+    }
+
+    private async drain() {
+        try {
+            // A job queued while the last lookup was in flight must not be missed
+            while (this.queueChanged) {
+                this.queueChanged = false;
+                while (await this.runNextQueuedJob()) {}
+            }
+        } catch (error) {
+            logger.error("Backup job queue stopped", error);
+        } finally {
+            // Synchronous with the last check above, so no kick is lost
+            this.draining = false;
+        }
+    }
+
+    /** Claims and runs the oldest queued job; returns false if none is queued */
+    private async runNextQueuedJob() {
+        // Between jobs, so recovery never touches a job this process is running
+        await this.runRequestedRecovery();
+        const db = await Database.getInstance();
+        const job = await db.models.BackupJob.findOne({
+            where: { status: "queued" },
+            order: [
+                ["queuedAt", "ASC"],
+                ["createdAt", "ASC"]
+            ]
+        });
+        if (!job) {
+            return false;
+        }
+        let markDone = () => {};
+        const done = new Promise<void>((resolve) => (markDone = resolve));
+        const controller = new AbortController();
+        // Registered before claiming, so a cancel that finds the job running can abort it
+        this.current = { jobId: job.id, controller, done };
+        try {
+            // Conditional, so a job cancelled meanwhile is not started
+            const [claimed] = await db.models.BackupJob.update(
+                { status: "running" },
+                { where: { id: job.id, status: "queued" } }
+            );
+            const openFile =
+                this.openers.get(job.id) ?? openDecryptedFileFromDataDir;
+            this.openers.delete(job.id);
+            if (claimed > 0) {
+                await runBackupJob(job, openFile, controller.signal);
+            }
+        } finally {
+            this.current = null;
+            markDone();
+        }
+        return true;
+    }
+
+    private async runRequestedRecovery() {
+        const requests = this.recoveryRequests.splice(0);
+        if (requests.length === 0) {
+            return;
+        }
+        try {
+            await recoverInterruptedJobs();
+            requests.forEach((request) => request.resolve());
+        } catch (error) {
+            logger.error("Could not recover backup jobs", error);
+            requests.forEach((request) => request.reject(error));
+        }
+    }
+}
+
+/** Fails jobs a previous server process left running and removes every partial zip */
+async function recoverInterruptedJobs() {
+    const db = await Database.getInstance();
+    const [failedCount] = await db.models.BackupJob.update(
+        {
+            status: "failed",
+            finishedAt: new Date(),
+            currentFileName: null,
+            errorMessage: "Server restarted while the backup job was running"
+        },
+        { where: { status: "running" } }
+    );
+    const userDirs = await readdir(appConfig.backupDir, {
+        withFileTypes: true
+    }).catch((error) => {
+        if (getErrorCode(error) === "ENOENT") {
+            return [];
+        }
+        throw error;
+    });
+    let removedCount = 0;
+    for (const userDir of userDirs.filter((entry) => entry.isDirectory())) {
+        const dir = path.join(appConfig.backupDir, userDir.name);
+        for (const fileName of await readdir(dir)) {
+            if (fileName.endsWith(".partial")) {
+                await rm(path.join(dir, fileName), { force: true });
+                removedCount++;
+            }
+        }
+    }
+    logger.info(
+        `Recovered backup jobs: ${failedCount} interrupted jobs failed, ${removedCount} partial zips removed`
+    );
+}
+
+declare global {
+    // eslint-disable-next-line no-var
+    var holviBackupJobRunner: BackupJobRunner | undefined;
+}
+
+/**
+ * The instance's one runner. Kept on globalThis because Next.js may load this
+ * module more than once (per API route bundle, instrumentation, hot reload).
+ */
+function getRunner() {
+    globalThis.holviBackupJobRunner ??= new BackupJobRunner();
+    return globalThis.holviBackupJobRunner;
+}
+
+function throwIfAborted(signal: AbortSignal) {
+    if (signal.aborted) {
+        throw signal.reason;
+    }
+}
+
+/** Runs a job already marked running; aborting `signal` cancels it */
+async function runBackupJob(
+    job: BackupJob,
+    openFile: DecryptedFileOpener,
+    signal: AbortSignal
+) {
     const progress: WriteProgress = {
         collectionsDone: 0,
         filesDone: 0,
@@ -163,7 +415,10 @@ async function runBackupJob(job: BackupJob, openFile: DecryptedFileOpener) {
         currentFileName: null
     };
     const progressSaver = new ProgressSaver(job.id, progress);
+    // Set once the partial zip is complete and so only removed by this function
+    let finishedPartialZipPath: string | null = null;
     try {
+        throwIfAborted(signal);
         const snapshot = await readSnapshot(job.UserId);
         const userBackupDir = getUserBackupDir(job.UserId);
         const username = snapshot.user.username.replace(/[^\w-]/g, "_");
@@ -171,11 +426,11 @@ async function runBackupJob(job: BackupJob, openFile: DecryptedFileOpener) {
         const zipPath = path.join(userBackupDir, zipFileName);
 
         const startedAt = new Date();
-        const fileSizes = await measureFileSizes(snapshot);
+        const fileSizes = await measureFileSizes(snapshot, signal);
         let bytesTotal = 0;
         fileSizes.forEach((size) => (bytesTotal += size));
+        throwIfAborted(signal);
         await updateJob(job.id, {
-            status: "running",
             startedAt,
             collectionsTotal: snapshot.collections.length,
             filesTotal: snapshot.collections.reduce(
@@ -194,10 +449,14 @@ async function runBackupJob(job: BackupJob, openFile: DecryptedFileOpener) {
             fileSizes,
             startedAt,
             openFile,
-            progress
+            progress,
+            signal
         );
+        finishedPartialZipPath = `${zipPath}.partial`;
         await progressSaver.stop();
+        throwIfAborted(signal);
         await rename(`${zipPath}.partial`, zipPath);
+        finishedPartialZipPath = null;
         const { size } = await stat(zipPath);
 
         await updateJob(job.id, {
@@ -216,18 +475,38 @@ async function runBackupJob(job: BackupJob, openFile: DecryptedFileOpener) {
         );
     } catch (error) {
         await progressSaver.stop();
-        logger.error(`Backup job '${job.id}' failed`, error);
+        if (finishedPartialZipPath) {
+            await removePartialZip(finishedPartialZipPath);
+        }
+        const cancelled = signal.aborted;
+        if (cancelled) {
+            logger.info(`Backup job '${job.id}' cancelled`);
+        } else {
+            logger.error(`Backup job '${job.id}' failed`, error);
+        }
         await updateJob(job.id, {
-            status: "failed",
+            status: cancelled ? "cancelled" : "failed",
             finishedAt: new Date(),
-            errorMessage: getErrorMessage(error)
+            currentFileName: null,
+            errorMessage: cancelled ? null : getErrorMessage(error)
         }).catch((updateError) =>
             logger.error(
-                `Could not mark backup job '${job.id}' failed`,
+                `Could not mark backup job '${job.id}' ${
+                    cancelled ? "cancelled" : "failed"
+                }`,
                 updateError
             )
         );
     }
+}
+
+async function removePartialZip(partialZipPath: string) {
+    await rm(partialZipPath, { force: true }).catch((rmError) =>
+        logger.error(
+            `Could not delete partial backup '${partialZipPath}'`,
+            rmError
+        )
+    );
 }
 
 /** Reads everything the backup contains in one consistent snapshot */
@@ -283,11 +562,15 @@ function countFiles(collection: Collection) {
 }
 
 /** Decrypted size of each file by id, as it is when the job starts; unreadable files are left out */
-async function measureFileSizes({ user, collections }: Snapshot) {
+async function measureFileSizes(
+    { user, collections }: Snapshot,
+    signal: AbortSignal
+) {
     const fileSystem = new UserFileSystem(user.id);
     const sizes = new Map<string, number>();
     for (const collection of collections) {
         for (const file of collection.CollectionFiles ?? []) {
+            throwIfAborted(signal);
             const size = await fileSystem
                 .getDecryptedFileSize(collection.id, file.id)
                 .catch(() => null);
@@ -301,8 +584,8 @@ async function measureFileSizes({ user, collections }: Snapshot) {
 
 /**
  * Writes the zip to `partialZipPath`, flushed to disk, and returns the finish
- * time, outcome and problem files recorded in its manifest. On failure the
- * partial zip is removed, unless it could not be created (e.g. another job owns it).
+ * time, outcome and problem files recorded in its manifest. On failure or abort
+ * the partial zip is removed, unless it could not be created (e.g. another job owns it).
  */
 async function writeBackupZip(
     partialZipPath: string,
@@ -310,7 +593,8 @@ async function writeBackupZip(
     fileSizes: Map<string, number>,
     startedAt: Date,
     openFile: DecryptedFileOpener,
-    progress: WriteProgress
+    progress: WriteProgress,
+    signal: AbortSignal
 ): Promise<{
     finishedAt: Date;
     outcome: BackupJobStatus;
@@ -323,17 +607,25 @@ async function writeBackupZip(
         output.once("close", resolve)
     );
     const archive = archiver("zip", { forceZip64: true });
-    // Rejects as soon as the zip can no longer be written; never resolves
+    // Rejects as soon as the zip can no longer be written or the job is aborted; never resolves
     const writeFailure = new Promise<never>((_, reject) => {
         archive.on("error", reject);
         output.on("error", reject);
         output.once("close", () =>
             reject(new Error("Zip file closed before it was finalised"))
         );
+        if (signal.aborted) {
+            reject(signal.reason);
+        }
+        signal.addEventListener("abort", () => reject(signal.reason), {
+            once: true
+        });
     });
     // Observed by whichever append is waiting; late rejections are expected
     writeFailure.catch(() => {});
     archive.pipe(output);
+    // The file being appended, released on failure so a held stream cannot keep the job alive
+    let content: ReturnType<typeof measureContent> | null = null;
 
     try {
         const manifestCollections = [];
@@ -382,7 +674,7 @@ async function writeBackupZip(
                     file.name,
                     file.mimeType
                 )}`;
-                const content = measureContent(
+                content = measureContent(
                     openFile(ref),
                     (count) => (progress.bytesDone += count)
                 );
@@ -391,6 +683,7 @@ async function writeBackupZip(
                     store: true
                 });
                 const { sizeBytes, sha256, failure } = content.result();
+                content = null;
                 const expectedSize = fileSizes.get(file.id);
                 const damageReason = failure
                     ? getErrorMessage(failure)
@@ -478,17 +771,13 @@ async function writeBackupZip(
         await flushToDisk(partialZipPath);
         return { finishedAt, outcome, problems };
     } catch (error) {
+        content?.destroy();
         archive.abort();
         output.destroy();
         // The file handle must be released before the file can be deleted (Windows)
         await outputClosed;
         if (created) {
-            await rm(partialZipPath, { force: true }).catch((rmError) =>
-                logger.error(
-                    `Could not delete partial backup '${partialZipPath}'`,
-                    rmError
-                )
-            );
+            await removePartialZip(partialZipPath);
         }
         throw error;
     }
@@ -595,6 +884,11 @@ function measureContent(source: Readable, onBytes: (count: number) => void) {
     );
     return {
         stream,
+        /** Releases the source without waiting for a pending read to finish */
+        destroy: () => {
+            source.destroy();
+            stream.destroy();
+        },
         /** Only valid once the stream has ended */
         result: (): ContentMeasurement => ({
             sizeBytes,

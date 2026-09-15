@@ -19,7 +19,7 @@ import {
     UnorderedList,
     useDisclosure
 } from "@chakra-ui/react";
-import { mdiBackupRestore, mdiDownload } from "@mdi/js";
+import { mdiBackupRestore, mdiCancel, mdiDownload } from "@mdi/js";
 import Icon from "@mdi/react";
 import Dialog from "../ui/Dialog";
 
@@ -60,7 +60,14 @@ export default function BackupsPanel() {
 }
 
 function BackupsPanelContent() {
-    const { jobs, isLoading, isStarting, startBackup } = useBackups();
+    const {
+        jobs,
+        isLoading,
+        isStarting,
+        isCancelling,
+        startBackup,
+        cancelBackup
+    } = useBackups();
     const activeJob = jobs.find((job) => isActiveBackupJobStatus(job.status));
     const lastFinishedJob = jobs.find(
         (job) => !isActiveBackupJobStatus(job.status)
@@ -82,7 +89,11 @@ function BackupsPanelContent() {
                 close this panel while it runs.
             </Text>
             {activeJob ? (
-                <ActiveJob job={activeJob} />
+                <ActiveJob
+                    job={activeJob}
+                    onCancel={() => cancelBackup(activeJob.id)}
+                    isCancelling={isCancelling}
+                />
             ) : (
                 <Button
                     leftIcon={<Icon path={mdiBackupRestore} size={1} />}
@@ -96,11 +107,25 @@ function BackupsPanelContent() {
     );
 }
 
-function ActiveJob({ job }: { job: BackupJobDto }) {
+function ActiveJob({
+    job,
+    onCancel,
+    isCancelling
+}: {
+    job: BackupJobDto;
+    onCancel: () => void;
+    isCancelling: boolean;
+}) {
     const { progress } = job;
     return (
         <Flex direction="column" gap={3}>
             <Heading size="md">{STATUS_LABELS[job.status]}</Heading>
+            {job.status === "queued" && (
+                <Text fontSize="sm" color="gray.500">
+                    Only one backup runs on the server at a time. This one
+                    starts when the backups ahead of it have finished.
+                </Text>
+            )}
             {job.status === "running" && (
                 <>
                     <ProgressRow
@@ -123,6 +148,14 @@ function ActiveJob({ job }: { job: BackupJobDto }) {
                     </Text>
                 </>
             )}
+            <Button
+                leftIcon={<Icon path={mdiCancel} size={1} />}
+                onClick={onCancel}
+                isLoading={isCancelling}
+                variant="outline"
+                colorScheme="red">
+                Cancel backup
+            </Button>
         </Flex>
     );
 }

@@ -1,8 +1,8 @@
 import crypto from "crypto";
-import { appendFile, truncate, unlink } from "fs/promises";
+import { appendFile, mkdir, truncate, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { Readable } from "stream";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
     addFile,
     addThumbnail,
@@ -15,6 +15,7 @@ import {
     listFiles,
     listUserBackupDir,
     readZip,
+    releaseHoldingOpeners,
     setCollectionTags,
     setFileTags,
     TEST_PASSWORD_HASH,
@@ -43,6 +44,10 @@ async function runBackup(service: BackupService) {
 describe("BackupService (integration)", () => {
     beforeEach(async () => {
         await resetDatabase();
+    });
+
+    afterEach(() => {
+        releaseHoldingOpeners();
     });
 
     it("produces a zip with every file's decrypted bytes under files/<collection>/<file name>", async () => {
@@ -1041,6 +1046,337 @@ describe("BackupService (integration)", () => {
                 sizeBytes: 1_000,
                 sha256: null
             });
+        });
+    });
+
+    describe("queue", () => {
+        async function waitUntilFinished(service: BackupService, jobId: string) {
+            return waitFor(
+                () => service.getJob(jobId),
+                (job) => !isActiveBackupJobStatus(job.status)
+            );
+        }
+
+        it("runs one backup job at a time across users, starting a queued job when the running one ends", async () => {
+            const alice = await createUser("alice");
+            const bob = await createUser("bob");
+            const aliceHoliday = await createCollection(alice.id, "Holiday");
+            const bobHoliday = await createCollection(bob.id, "Holiday");
+            await addFile(alice.id, aliceHoliday.id, "a.jpg", crypto.randomBytes(200_000));
+            await addFile(bob.id, bobHoliday.id, "b.jpg", crypto.randomBytes(1_000));
+            const opener = createHoldingOpener();
+            const aliceService = new BackupService(alice.id, {
+                openDecryptedFile: opener.openDecryptedFile
+            });
+            const bobService = new BackupService(bob.id);
+
+            const aliceStarted = await aliceService.start();
+            await waitFor(
+                () => aliceService.getJob(aliceStarted.id),
+                (job) => job.progress.bytesDone > 0
+            );
+            const bobStarted = await bobService.start();
+
+            expect(bobStarted.status).toBe("queued");
+            // Still waiting well after it would have finished on its own
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            expect((await bobService.getJob(bobStarted.id)).status).toBe("queued");
+            expect((await aliceService.getJob(aliceStarted.id)).status).toBe("running");
+
+            opener.release();
+            const aliceJob = await waitUntilFinished(aliceService, aliceStarted.id);
+            const bobJob = await waitUntilFinished(bobService, bobStarted.id);
+
+            expect(aliceJob.status).toBe("completed");
+            expect(bobJob.status).toBe("completed");
+            expect(bobJob.startedAt!).toBeGreaterThanOrEqual(aliceJob.finishedAt!);
+        });
+
+        it("starts queued jobs in the order they were queued", async () => {
+            const users = [];
+            for (const username of ["alice", "bob", "carol", "dave"]) {
+                const user = await createUser(username);
+                const holiday = await createCollection(user.id, "Holiday");
+                await addFile(user.id, holiday.id, "a.jpg", crypto.randomBytes(200_000));
+                users.push(user);
+            }
+            const opener = createHoldingOpener();
+            const [aliceService, ...queuedServices] = users.map(
+                (user) =>
+                    new BackupService(user.id, {
+                        openDecryptedFile: opener.openDecryptedFile
+                    })
+            );
+
+            const aliceStarted = await aliceService.start();
+            await waitFor(
+                () => aliceService.getJob(aliceStarted.id),
+                (job) => job.progress.bytesDone > 0
+            );
+            const queued = [];
+            for (const service of queuedServices) {
+                queued.push(await service.start());
+            }
+            opener.release();
+            const finished = [];
+            for (let index = 0; index < queuedServices.length; index++) {
+                finished.push(
+                    await waitUntilFinished(queuedServices[index], queued[index].id)
+                );
+            }
+
+            expect(finished.map((job) => job.status)).toEqual([
+                "completed",
+                "completed",
+                "completed"
+            ]);
+            expect(finished[1].startedAt!).toBeGreaterThanOrEqual(finished[0].finishedAt!);
+            expect(finished[2].startedAt!).toBeGreaterThanOrEqual(finished[1].finishedAt!);
+        });
+
+        it("returns the user's queued or running job instead of starting another", async () => {
+            const alice = await createUser("alice");
+            const bob = await createUser("bob");
+            for (const user of [alice, bob]) {
+                const holiday = await createCollection(user.id, "Holiday");
+                await addFile(user.id, holiday.id, "a.jpg", crypto.randomBytes(200_000));
+            }
+            const opener = createHoldingOpener();
+            const aliceService = new BackupService(alice.id, {
+                openDecryptedFile: opener.openDecryptedFile
+            });
+            const bobService = new BackupService(bob.id);
+
+            const aliceRunning = await aliceService.start();
+            await waitFor(
+                () => aliceService.getJob(aliceRunning.id),
+                (job) => job.progress.bytesDone > 0
+            );
+            const bobQueued = await bobService.start();
+            // Concurrent requests too, as from a double click
+            const aliceAgain = await Promise.all([
+                aliceService.start(),
+                aliceService.start()
+            ]);
+            const bobAgain = await Promise.all([bobService.start(), bobService.start()]);
+
+            expect(aliceAgain.map((job) => job.id)).toEqual([
+                aliceRunning.id,
+                aliceRunning.id
+            ]);
+            expect(aliceAgain[0].status).toBe("running");
+            expect(bobAgain.map((job) => job.id)).toEqual([bobQueued.id, bobQueued.id]);
+            expect(bobAgain[0].status).toBe("queued");
+            expect(await aliceService.getJobs()).toHaveLength(1);
+            expect(await bobService.getJobs()).toHaveLength(1);
+
+            opener.release();
+            await waitUntilFinished(bobService, bobQueued.id);
+            // Once finished, a new backup can be started
+            const next = await runBackup(aliceService);
+            expect(next.id).not.toBe(aliceRunning.id);
+            expect(next.status).toBe("completed");
+        });
+    });
+
+    describe("cancellation", () => {
+        async function listBackupDirOrEmpty(userId: string) {
+            return listUserBackupDir(userId).catch(() => []);
+        }
+
+        it("cancels a queued job so that it never runs", async () => {
+            const alice = await createUser("alice");
+            const bob = await createUser("bob");
+            for (const user of [alice, bob]) {
+                const holiday = await createCollection(user.id, "Holiday");
+                await addFile(user.id, holiday.id, "a.jpg", crypto.randomBytes(200_000));
+            }
+            const opener = createHoldingOpener();
+            const aliceService = new BackupService(alice.id, {
+                openDecryptedFile: opener.openDecryptedFile
+            });
+            const bobService = new BackupService(bob.id);
+            const aliceStarted = await aliceService.start();
+            await waitFor(
+                () => aliceService.getJob(aliceStarted.id),
+                (job) => job.progress.bytesDone > 0
+            );
+            const bobQueued = await bobService.start();
+
+            const cancelled = await bobService.cancel(bobQueued.id);
+
+            expect(cancelled.status).toBe("cancelled");
+            expect(cancelled.finishedAt).not.toBeNull();
+            opener.release();
+            const aliceJob = await waitFor(
+                () => aliceService.getJob(aliceStarted.id),
+                (job) => !isActiveBackupJobStatus(job.status)
+            );
+            expect(aliceJob.status).toBe("completed");
+            // Give a wrongly started job time to show up
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            const bobJob = await bobService.getJob(bobQueued.id);
+            expect(bobJob.status).toBe("cancelled");
+            expect(bobJob.startedAt).toBeNull();
+            expect(await listBackupDirOrEmpty(bob.id)).toEqual([]);
+        });
+
+        it("stops a running job promptly, deletes its partial zip and keeps the previous backup, then runs the next queued job", async () => {
+            const alice = await createUser("alice");
+            const bob = await createUser("bob");
+            const holiday = await createCollection(alice.id, "Holiday");
+            await addFile(alice.id, holiday.id, "a.jpg", crypto.randomBytes(200_000));
+            await addFile(alice.id, holiday.id, "b.jpg", crypto.randomBytes(50_000));
+            const bobHoliday = await createCollection(bob.id, "Holiday");
+            await addFile(bob.id, bobHoliday.id, "a.jpg", crypto.randomBytes(1_000));
+            const previous = await runBackup(new BackupService(alice.id));
+            const opener = createHoldingOpener();
+            const aliceService = new BackupService(alice.id, {
+                openDecryptedFile: opener.openDecryptedFile
+            });
+            const bobService = new BackupService(bob.id);
+            const started = await aliceService.start();
+            await waitFor(
+                () => aliceService.getJob(started.id),
+                (job) => job.progress.bytesDone > 0
+            );
+            expect(await listUserBackupDir(alice.id)).toContainEqual(
+                expect.stringMatching(/\.zip\.partial$/)
+            );
+            const bobQueued = await bobService.start();
+
+            try {
+                // The held file never finishes, so only cancellation can end the job
+                const cancelled = await aliceService.cancel(started.id);
+
+                expect(cancelled.status).toBe("cancelled");
+                expect(cancelled.finishedAt).not.toBeNull();
+                expect(cancelled.zipFileName).toBeNull();
+                expect(await listUserBackupDir(alice.id)).toEqual([previous.zipFileName]);
+                const download = await aliceService.openDownload(previous.id);
+                expect((await readZip(download.filePath)).at(-1)!.name).toBe(
+                    "manifest.json"
+                );
+                await expect(aliceService.openDownload(started.id)).rejects.toThrow(
+                    NotFoundError
+                );
+                const bobJob = await waitFor(
+                    () => bobService.getJob(bobQueued.id),
+                    (job) => !isActiveBackupJobStatus(job.status)
+                );
+                expect(bobJob.status).toBe("completed");
+                expect((await aliceService.getJob(started.id)).status).toBe("cancelled");
+            } finally {
+                opener.release();
+            }
+        });
+
+        it("only lets a job's owner cancel it", async () => {
+            const alice = await createUser("alice");
+            const bob = await createUser("bob");
+            const holiday = await createCollection(alice.id, "Holiday");
+            await addFile(alice.id, holiday.id, "a.jpg", crypto.randomBytes(200_000));
+            const opener = createHoldingOpener();
+            const aliceService = new BackupService(alice.id, {
+                openDecryptedFile: opener.openDecryptedFile
+            });
+            const bobService = new BackupService(bob.id);
+            const started = await aliceService.start();
+            await waitFor(
+                () => aliceService.getJob(started.id),
+                (job) => job.progress.bytesDone > 0
+            );
+
+            await expect(bobService.cancel(started.id)).rejects.toThrow(NotFoundError);
+            await expect(bobService.cancel("not-a-uuid")).rejects.toThrow(NotFoundError);
+
+            expect((await aliceService.getJob(started.id)).status).toBe("running");
+            opener.release();
+            const job = await waitFor(
+                () => aliceService.getJob(started.id),
+                (current) => !isActiveBackupJobStatus(current.status)
+            );
+            expect(job.status).toBe("completed");
+        });
+
+        it("leaves a finished job as it is", async () => {
+            const alice = await createUser("alice");
+            await createCollection(alice.id, "Holiday");
+            const service = new BackupService(alice.id);
+            const completed = await runBackup(service);
+
+            const result = await service.cancel(completed.id);
+
+            expect(result.status).toBe("completed");
+            expect(await listUserBackupDir(alice.id)).toEqual([completed.zipFileName]);
+        });
+    });
+
+    describe("startup recovery", () => {
+        it("fails jobs left running, removes partial zips, keeps completed backups and starts queued jobs in order", async () => {
+            const db = await getTestDatabase();
+            const users = [];
+            for (const username of ["alice", "bob", "carol", "dave"]) {
+                const user = await createUser(username);
+                const holiday = await createCollection(user.id, "Holiday");
+                await addFile(user.id, holiday.id, "a.jpg", crypto.randomBytes(1_000));
+                users.push(user);
+            }
+            const [alice, bob, carol, dave] = users;
+            const previous = await runBackup(new BackupService(alice.id));
+            // Left behind by a server that stopped mid-backup
+            const interrupted = await db.models.BackupJob.create({
+                UserId: alice.id,
+                status: "running",
+                queuedAt: new Date(Date.now() - 60_000),
+                startedAt: new Date(Date.now() - 59_000),
+                filesDone: 1,
+                currentFileName: "a.jpg"
+            });
+            const aliceDir = path.join(appConfig.backupDir, alice.id);
+            const daveDir = path.join(appConfig.backupDir, dave.id);
+            await writeFile(path.join(aliceDir, "holvi-backup-alice-1.zip.partial"), "partial");
+            await mkdir(daveDir, { recursive: true });
+            await writeFile(path.join(daveDir, "holvi-backup-dave-1.zip.partial"), "stray");
+            const bobQueued = await db.models.BackupJob.create({
+                UserId: bob.id,
+                status: "queued",
+                queuedAt: new Date(Date.now() - 30_000)
+            });
+            const carolQueued = await db.models.BackupJob.create({
+                UserId: carol.id,
+                status: "queued",
+                queuedAt: new Date(Date.now() - 20_000)
+            });
+
+            await BackupService.recover();
+
+            const aliceService = new BackupService(alice.id);
+            const failed = await aliceService.getJob(interrupted.id);
+            expect(failed).toMatchObject({
+                status: "failed",
+                errorMessage: expect.stringMatching(/server restarted/i),
+                zipFileName: null,
+                progress: expect.objectContaining({ currentFileName: null })
+            });
+            expect(failed.finishedAt).not.toBeNull();
+            expect(await listUserBackupDir(alice.id)).toEqual([previous.zipFileName]);
+            expect(await listUserBackupDir(dave.id)).toEqual([]);
+            expect((await aliceService.getJob(previous.id)).status).toBe("completed");
+            const bobService = new BackupService(bob.id);
+            const carolService = new BackupService(carol.id);
+            const bobJob = await waitFor(
+                () => bobService.getJob(bobQueued.id),
+                (job) => !isActiveBackupJobStatus(job.status)
+            );
+            const carolJob = await waitFor(
+                () => carolService.getJob(carolQueued.id),
+                (job) => !isActiveBackupJobStatus(job.status)
+            );
+            expect(bobJob.status).toBe("completed");
+            expect(carolJob.status).toBe("completed");
+            expect(carolJob.startedAt!).toBeGreaterThanOrEqual(bobJob.finishedAt!);
+            expect(await listUserBackupDir(bob.id)).toEqual([bobJob.zipFileName]);
         });
     });
 

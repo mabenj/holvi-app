@@ -165,6 +165,13 @@ export function listUserBackupDir(userId: string) {
     return listFiles(path.join(appConfig.backupDir, userId));
 }
 
+const holdingOpenerReleases: (() => void)[] = [];
+
+/** Releases every holding opener, so a job held by a failed test cannot block the instance's queue */
+export function releaseHoldingOpeners() {
+    holdingOpenerReleases.splice(0).forEach((release) => release());
+}
+
 /**
  * A decrypted-file opener that passes through the first chunk of each file
  * and then holds the stream until released, to observe a backup job mid-run.
@@ -172,6 +179,7 @@ export function listUserBackupDir(userId: string) {
 export function createHoldingOpener() {
     let release!: () => void;
     const released = new Promise<void>((resolve) => (release = resolve));
+    holdingOpenerReleases.push(release);
     const openDecryptedFile = (ref: BackupFileRef) => {
         const real = new UserFileSystem(ref.userId).openDecryptedFile(
             ref.collectionId,

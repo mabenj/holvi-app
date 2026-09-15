@@ -13,6 +13,7 @@ const POLL_INTERVAL_MS = 3_000;
 
 export function useBackups() {
     const [isStarting, setIsStarting] = useState(false);
+    const [isCancelling, setIsCancelling] = useState(false);
     const http = useHttp();
     const toast = useToast();
 
@@ -55,10 +56,30 @@ export function useBackups() {
         await mutate();
     };
 
+    const cancelBackup = async (jobId: string) => {
+        setIsCancelling(true);
+        const { data, error } = await http
+            .post<ApiData<{ job?: BackupJobDto }>>(
+                `/api/backups/${jobId}/cancel`
+            )
+            .finally(() => setIsCancelling(false));
+        if (!data?.job || error) {
+            toast({
+                description: `Could not cancel backup (${getErrorMessage(
+                    error
+                )})`,
+                status: "error"
+            });
+        }
+        await mutate();
+    };
+
     return {
         jobs: jobs || [],
         isLoading,
         isStarting,
-        startBackup
+        isCancelling,
+        startBackup,
+        cancelBackup
     };
 }
