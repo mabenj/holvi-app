@@ -7,6 +7,7 @@ import {
     CollectionFileValidator
 } from "@/lib/validators/collection-file.validator";
 import contentDisposition from "content-disposition";
+import { pipeline } from "stream";
 
 async function post(
     req: ApiRequest<CollectionFileFormData>,
@@ -109,7 +110,11 @@ async function handleGetCollectionVideo(
     if (!range) {
         throw new InvalidArgumentError("Missing range header");
     }
-    const chunkStart = Number(range.replace(/\D/g, ""));
+    const rangeStart = /^bytes=(\d+)-/.exec(range)?.[1];
+    if (rangeStart === undefined) {
+        throw new InvalidArgumentError(`Unsupported range header '${range}'`);
+    }
+    const chunkStart = Number(rangeStart);
     const service = new CollectionService(req.session.user.id);
     const { stream, chunkStartEnd, totalLengthBytes, mimeType, filename } =
         await service.getVideoStream(collectionId, videoId, chunkStart);
@@ -123,7 +128,9 @@ async function handleGetCollectionVideo(
         "Content-Disposition": contentDisposition(`${filename}`)
     });
 
-    stream.pipe(res);
+    // pipeline destroys the file stream when the client aborts (e.g. on seek)
+    // and ends the response instead of crashing on a mid-stream read error
+    pipeline(stream, res, () => {});
 }
 
 export const config = {

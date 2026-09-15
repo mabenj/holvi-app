@@ -4,6 +4,7 @@ import {
     HolviError,
     InvalidArgumentError,
     NotFoundError,
+    RangeNotSatisfiableError,
     UnauthorizedError
 } from "./errors";
 import Log, { LogColor } from "./log";
@@ -117,6 +118,13 @@ export class ApiRoute {
                 } else if (error instanceof InvalidArgumentError) {
                     code = 400;
                     message = getMessage(error, "Invalid request");
+                } else if (error instanceof RangeNotSatisfiableError) {
+                    code = 416;
+                    message = getMessage(error, "Range not satisfiable");
+                    res.setHeader(
+                        "Content-Range",
+                        `bytes */${error.totalSize}`
+                    );
                 } else if (error instanceof UnauthorizedError) {
                     code = 401;
                     message = getMessage(error, "Unauthorized");

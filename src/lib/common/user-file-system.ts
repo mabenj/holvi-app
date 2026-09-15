@@ -4,7 +4,7 @@ import { IncomingMessage } from "http";
 import path from "path";
 import appConfig from "./app-config";
 import Cryptography from "./cryptography";
-import { HolviError } from "./errors";
+import { HolviError, RangeNotSatisfiableError } from "./errors";
 import {
   createDirIfNotExists,
   deleteDirectory,
@@ -20,6 +20,7 @@ import { Collection } from "@/db/models/Collection";
 import { createWriteStream } from "fs";
 import archiver from "archiver";
 import { Readable } from "stream";
+import { pipeline } from "stream/promises";
 
 interface ParsedFile {
   filepath: string;
@@ -105,21 +106,12 @@ export class UserFileSystem {
               collections.length
             }) file '${file.name}' (${j + 1}/${files.length})`
           );
-          const { stream } = await this.getFileStream(
-            collection.id,
-            file.id,
-            0,
-            Number.POSITIVE_INFINITY
-          );
+          const stream = this.openDecryptedFile(collection.id, file.id);
           await createDirIfNotExists(path.join(collectionDir, "files"));
-          const writeStream = createWriteStream(
-            path.join(collectionDir, "files", file.name)
+          await pipeline(
+            stream,
+            createWriteStream(path.join(collectionDir, "files", file.name))
           );
-          stream.pipe(writeStream);
-          await new Promise((resolve, reject) => {
-            writeStream.on("close", resolve);
-            writeStream.on("error", reject);
-          });
         }
       }
 
@@ -181,21 +173,31 @@ export class UserFileSystem {
   ) {
     try {
       const filePath = path.join(this.rootDir, collectionId, fileId);
-      const { stream, size, totalSize } =
+      const { stream, start, end, totalSize } =
         await Cryptography.getDecryptedStreamChunk(filePath, offset, chunkSize);
 
       return {
         stream,
         totalLengthBytes: totalSize,
-        chunkStartEnd: [offset, offset + size] as [number, number],
+        chunkStartEnd: [start, end] as [number, number],
       };
     } catch (error) {
+      if (error instanceof RangeNotSatisfiableError) {
+        throw error;
+      }
       this.logger.error(
         `Error fetching file stream (collection: ${collectionId}, file: ${fileId}, start: ${offset})`,
         error
       );
       throw error;
     }
+  }
+
+  /** Opens a file's whole decrypted content as a stream. Failures are emitted as stream errors. */
+  openDecryptedFile(collectionId: string, fileId: string): Readable {
+    return Cryptography.createDecryptionStream(
+      path.join(this.rootDir, collectionId, fileId)
+    );
   }
 
   async readFile(

@@ -18,6 +18,7 @@ export default class Database {
   private readonly sequelize;
   private readonly logger: Log;
   private initializing = false;
+  private initialized = false;
 
   public get models() {
     return {
@@ -48,6 +49,10 @@ export default class Database {
 
   public transaction() {
     return this.sequelize.transaction();
+  }
+
+  public isInitialized() {
+    return this.initialized;
   }
 
   public static async getInstance() {
@@ -121,6 +126,7 @@ export default class Database {
 
       await Database.ensureUpToDate();
 
+      Database.instance.initialized = true;
       Database.instance.logger.info("Database initialized");
     } catch (error) {
       Database.instance.logger.error("Error initializing models", error);

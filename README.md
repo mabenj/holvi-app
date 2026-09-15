@@ -55,3 +55,22 @@ npm dev
 ### Open browser
 
 Open [http://localhost:3000](http://localhost:3000) and start coding.
+
+## Testing
+
+Tests use [Vitest](https://vitest.dev). Integration tests run against a real Postgres database built from the same image as the app database. Start a throwaway test database (its data lives in memory and is lost when the container stops):
+
+```bash
+docker build -t holvi-db-dev ./src/db
+docker run -d --rm --name holvi-db-test -p 5433:5432 --tmpfs /var/lib/postgresql/data -e POSTGRES_USER=admin -e POSTGRES_PASSWORD=admin -e POSTGRES_DB=holvi_test holvi-db-dev
+```
+
+Then run the tests:
+
+```bash
+yarn test
+# or, re-running on changes
+yarn test:watch
+```
+
+The tests connect to `postgres://admin:admin@localhost:5433/holvi_test` by default. Set `HOLVI_TEST_DB_CONNECTION_STRING` to use a different database; its name must end with `test`, because the tests delete all of its data. The data directory, backup directory and encryption key are pointed at temporary values for each test file (see `test/setup-env.ts`), so `.env.local` is not used.
