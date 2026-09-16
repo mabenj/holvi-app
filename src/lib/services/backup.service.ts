@@ -188,10 +188,15 @@ export class BackupService {
         const stopped = await getRunner().cancel(job.id);
         if (!stopped) {
             // Running but not in this process: left over from before a restart
-            await db.models.BackupJob.update(
+            const [cancelled] = await db.models.BackupJob.update(
                 { status: "cancelled", finishedAt: new Date() },
                 { where: { id: job.id, status: "running" } }
             );
+            // No runner will clean up after a job this process never ran, so its
+            // partial zip is removed here rather than waiting for the next restart
+            if (cancelled > 0) {
+                await removePartialZipsOfJob(job.UserId, job.id);
+            }
         }
         return (await this.findUserJob(jobId)).toDto();
     }
@@ -617,6 +622,33 @@ async function deletePreviousBackups(userId: string, currentJobId: string) {
     }
 }
 
+/**
+ * Removes the partial zips of one job, found by the part of its job id their
+ * name carries. Used to clean up after a job no runner of this process owns,
+ * whose zip path is therefore not known here. Failures are logged rather than
+ * thrown, so a leftover file cannot fail a cancellation that has taken effect.
+ */
+async function removePartialZipsOfJob(userId: string, jobId: string) {
+    const dir = getUserBackupDir(userId);
+    const suffix = `-${jobId.slice(0, 8)}.zip.partial`;
+    try {
+        const fileNames = await readdir(dir);
+        for (const fileName of fileNames.filter((name) =>
+            name.endsWith(suffix)
+        )) {
+            await removePartialZip(path.join(dir, fileName));
+        }
+    } catch (error) {
+        if (getErrorCode(error) === "ENOENT") {
+            return;
+        }
+        logger.error(
+            `Could not look for partial backups of job '${jobId}'`,
+            error
+        );
+    }
+}
+
 async function removePartialZip(partialZipPath: string) {
     await rm(partialZipPath, { force: true }).catch((rmError) =>
         logger.error(
@@ -797,6 +829,10 @@ async function writeBackupZip(
             const folder = folders.claim(collection.name);
             const metadataPath = `metadata/${folder}.json`;
             const filesMetadata = [];
+            // Counts entries actually written under the folder, which skipped
+            // files do not produce, so a collection whose files are all skipped
+            // still gets the folder entry
+            let fileEntries = 0;
             const fileNames = new UniqueSafeNames();
             for (const file of collection.CollectionFiles ?? []) {
                 progress.currentFileName = file.name;
@@ -842,6 +878,7 @@ async function writeBackupZip(
                     name: backupPath,
                     store: true
                 });
+                fileEntries += 1;
                 const { sizeBytes, sha256, failure } = content.result();
                 content = null;
                 const expectedSize = fileSizes.get(file.id);
@@ -882,7 +919,7 @@ async function writeBackupZip(
                 }
                 progress.filesDone += 1;
             }
-            if (filesMetadata.length === 0) {
+            if (fileEntries === 0) {
                 await appendEntry(archive, writeFailure, Buffer.alloc(0), {
                     name: `files/${folder}/`,
                     type: "directory"

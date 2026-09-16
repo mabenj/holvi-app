@@ -920,6 +920,43 @@ describe("BackupService (integration)", () => {
             const { dir } = await extract();
             expect(await listFiles(path.join(dir, "files", "Empty_"))).toEqual([]);
         });
+
+        it("includes a collection whose files are all skipped as an empty folder", async () => {
+            const user = await createUser("alice");
+            const gone = await createCollection(user.id, "Gone");
+            const holiday = await createCollection(user.id, "Holiday");
+            for (const name of ["a.jpg", "b.jpg"]) {
+                const file = await addFile(user.id, gone.id, name, crypto.randomBytes(500));
+                await unlink(encryptedFilePath(user.id, gone.id, file.id));
+            }
+            await addFile(user.id, holiday.id, "beach.jpg", crypto.randomBytes(10));
+            const service = new BackupService(user.id);
+
+            const job = await runBackup(service);
+
+            expect(job.status).toBe("completedWithErrors");
+            expect(job.skippedCount).toBe(2);
+            const { filePath } = await service.openDownload(job.id);
+            const entries = await readZip(filePath);
+            expect(entries.map((entry) => entry.name).sort()).toEqual([
+                "files/Gone/",
+                "files/Holiday/beach.jpg",
+                "manifest.json",
+                "metadata/Gone.json",
+                "metadata/Holiday.json"
+            ]);
+            const manifest = JSON.parse(
+                entries.find((entry) => entry.name === "manifest.json")!.data.toString("utf8")
+            );
+            expect(manifest.collections[0]).toMatchObject({
+                name: "Gone",
+                folder: "Gone",
+                fileCount: 2
+            });
+            const dir = path.join(appConfig.backupDir, "..", `extracted-${job.id}`);
+            await extractZip(filePath, dir);
+            expect(await listFiles(path.join(dir, "files", "Gone"))).toEqual([]);
+        });
     });
 
     describe("skipped and damaged files", () => {
@@ -1452,6 +1489,33 @@ describe("BackupService (integration)", () => {
                 (current) => !isActiveBackupJobStatus(current.status)
             );
             expect(job.status).toBe("completed");
+        });
+
+        it("cancels a job left running by a previous server process and deletes its partial zip", async () => {
+            const db = await getTestDatabase();
+            const alice = await createUser("alice");
+            const holiday = await createCollection(alice.id, "Holiday");
+            await addFile(alice.id, holiday.id, "a.jpg", crypto.randomBytes(1_000));
+            const service = new BackupService(alice.id);
+            const previous = await runBackup(service);
+            // Left behind by a server that stopped mid-backup, so no runner of
+            // this process owns it or its partial zip
+            const interrupted = await db.models.BackupJob.create({
+                UserId: alice.id,
+                status: "running",
+                queuedAt: new Date(Date.now() - 60_000),
+                startedAt: new Date(Date.now() - 59_000)
+            });
+            const aliceDir = path.join(appConfig.backupDir, alice.id);
+            const partial = `holvi-backup-alice-1-${interrupted.id.slice(0, 8)}.zip.partial`;
+            await writeFile(path.join(aliceDir, partial), "partial");
+
+            const cancelled = await service.cancel(interrupted.id);
+
+            expect(cancelled.status).toBe("cancelled");
+            expect(cancelled.finishedAt).not.toBeNull();
+            expect(await listUserBackupDir(alice.id)).toEqual([previous.zipFileName]);
+            expect((await service.getJob(previous.id)).status).toBe("completed");
         });
 
         it("leaves a finished job as it is", async () => {
