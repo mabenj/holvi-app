@@ -1,8 +1,9 @@
 import appConfig from "@/lib/common/app-config";
 import Log, { LogColor } from "@/lib/common/log";
 import { sleep } from "@/lib/common/utilities";
-import { QueryTypes, Sequelize } from "sequelize";
+import { QueryTypes, Sequelize, TransactionOptions } from "sequelize";
 import DatabaseUpgrade from "./DatabaseUpgrade";
+import { BackupJob } from "./models/BackupJob";
 import { Collection } from "./models/Collection";
 import { CollectionFile } from "./models/CollectionFile";
 import { CollectionFileTag } from "./models/CollectionFileTag";
@@ -12,12 +13,13 @@ import { Tag } from "./models/Tag";
 import { User } from "./models/User";
 
 export default class Database {
-  private static readonly version = 3;
+  public static readonly version = 5;
   private static instance: Database;
 
   private readonly sequelize;
   private readonly logger: Log;
   private initializing = false;
+  private initialized = false;
 
   public get models() {
     return {
@@ -27,6 +29,7 @@ export default class Database {
       Tag: Tag,
       CollectionTag: CollectionTag,
       CollectionFileTag: CollectionFileTag,
+      BackupJob: BackupJob,
     };
   }
 
@@ -46,8 +49,12 @@ export default class Database {
     });
   }
 
-  public transaction() {
-    return this.sequelize.transaction();
+  public transaction(options?: TransactionOptions) {
+    return this.sequelize.transaction(options ?? {});
+  }
+
+  public isInitialized() {
+    return this.initialized;
   }
 
   public static async getInstance() {
@@ -83,9 +90,17 @@ export default class Database {
       Tag.initModel(Database.instance.sequelize);
       CollectionTag.initModel(Database.instance.sequelize);
       CollectionFileTag.initModel(Database.instance.sequelize);
+      BackupJob.initModel(Database.instance.sequelize);
 
       User.hasMany(Collection);
       Collection.belongsTo(User, {
+        foreignKey: {
+          allowNull: false,
+        },
+      });
+
+      User.hasMany(BackupJob, { onDelete: "CASCADE" });
+      BackupJob.belongsTo(User, {
         foreignKey: {
           allowNull: false,
         },
@@ -121,6 +136,7 @@ export default class Database {
 
       await Database.ensureUpToDate();
 
+      Database.instance.initialized = true;
       Database.instance.logger.info("Database initialized");
     } catch (error) {
       Database.instance.logger.error("Error initializing models", error);

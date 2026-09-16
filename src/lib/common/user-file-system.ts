@@ -4,21 +4,17 @@ import { IncomingMessage } from "http";
 import path from "path";
 import appConfig from "./app-config";
 import Cryptography from "./cryptography";
-import { HolviError } from "./errors";
+import { HolviError, RangeNotSatisfiableError } from "./errors";
 import {
   createDirIfNotExists,
   deleteDirectory,
   moveDirectoryContents,
   tryReadFile,
-  writeFile,
 } from "./file-system-helpers";
 import { ImageHelper } from "./image-helper";
 import Log, { LogColor } from "./log";
-import { getErrorMessage, isValidDate, timestamp } from "./utilities";
+import { getErrorMessage, isValidDate } from "./utilities";
 import { VideoHelper } from "./video-helper";
-import { Collection } from "@/db/models/Collection";
-import { createWriteStream } from "fs";
-import archiver from "archiver";
 import { Readable } from "stream";
 
 interface ParsedFile {
@@ -59,95 +55,6 @@ export class UserFileSystem {
     this.logger = new Log("FS", LogColor.YELLOW);
   }
 
-  async backupCollections(collections: Collection[]) {
-    const outputDir = path.join(
-      this.rootDir,
-      "backups",
-      `holvi_backup_${timestamp()}`
-    );
-    // const outputZip = path.join(outputDir, `holvi_backup_${timestamp()}.zip`);
-    await createDirIfNotExists(outputDir);
-    this.logger.info(
-      `Backing up ${collections.length} collections to '${outputDir}'`
-    );
-    try {
-      for (let i = 0; i < collections.length; i++) {
-        const collection = collections[i];
-        const files = collection.CollectionFiles || [];
-        const tags = collection.Tags?.map((t) => t.name) || [];
-        const collectionDir = path.join(outputDir, collection.name);
-        await createDirIfNotExists(collectionDir);
-        writeFile(path.join(collectionDir, "tags.json"), JSON.stringify(tags));
-        writeFile(
-          path.join(collectionDir, "collection.json"),
-          JSON.stringify({
-            name: collection.name,
-            description: collection.description,
-            createdAt: collection.createdAt,
-            updatedAt: collection.updatedAt,
-          })
-        );
-        writeFile(
-          path.join(collectionDir, "files.json"),
-          JSON.stringify(
-            files.map((file) => ({
-              name: file.name,
-              createdAt: file.createdAt,
-              updatedAt: file.updatedAt,
-            }))
-          )
-        );
-
-        for (let j = 0; j < files.length; j++) {
-          const file = files[j];
-          this.logger.info(
-            `Backing up collection '${collection.name}' (${i + 1}/${
-              collections.length
-            }) file '${file.name}' (${j + 1}/${files.length})`
-          );
-          const { stream } = await this.getFileStream(
-            collection.id,
-            file.id,
-            0,
-            Number.POSITIVE_INFINITY
-          );
-          await createDirIfNotExists(path.join(collectionDir, "files"));
-          const writeStream = createWriteStream(
-            path.join(collectionDir, "files", file.name)
-          );
-          stream.pipe(writeStream);
-          await new Promise((resolve, reject) => {
-            writeStream.on("close", resolve);
-            writeStream.on("error", reject);
-          });
-        }
-      }
-
-      this.logger.info(`Writing zip file to '${outputDir}.zip'`);
-      const outputStream = createWriteStream(outputDir + ".zip");
-      const archive = archiver("zip", {
-        zlib: { level: 0 },
-      });
-      await new Promise((resolve, reject) => {
-        outputStream.on("close", resolve);
-        outputStream.on("end", resolve);
-        archive.on("error", reject);
-        archive.on("warning", reject);
-        archive.pipe(outputStream);
-        archive.directory(outputDir, false);
-        archive.finalize();
-      });
-
-      this.logger.info(
-        `Done creating backup archive (${prettyBytes(
-          archive.pointer()
-        )} total bytes)`
-      );
-    } finally {
-      await deleteDirectory(outputDir);
-    }
-  }
-
   async deleteFileAndThumbnail(collectionId: string, fileId: string) {
     try {
       await unlink(path.join(this.rootDir, collectionId, "tn", fileId));
@@ -181,21 +88,37 @@ export class UserFileSystem {
   ) {
     try {
       const filePath = path.join(this.rootDir, collectionId, fileId);
-      const { stream, size, totalSize } =
+      const { stream, start, end, totalSize } =
         await Cryptography.getDecryptedStreamChunk(filePath, offset, chunkSize);
 
       return {
         stream,
         totalLengthBytes: totalSize,
-        chunkStartEnd: [offset, offset + size] as [number, number],
+        chunkStartEnd: [start, end] as [number, number],
       };
     } catch (error) {
+      if (error instanceof RangeNotSatisfiableError) {
+        throw error;
+      }
       this.logger.error(
         `Error fetching file stream (collection: ${collectionId}, file: ${fileId}, start: ${offset})`,
         error
       );
       throw error;
     }
+  }
+
+  getDecryptedFileSize(collectionId: string, fileId: string) {
+    return Cryptography.getDecryptedSize(
+      path.join(this.rootDir, collectionId, fileId)
+    );
+  }
+
+  /** Opens a file's whole decrypted content as a stream. Failures are emitted as stream errors. */
+  openDecryptedFile(collectionId: string, fileId: string): Readable {
+    return Cryptography.createDecryptionStream(
+      path.join(this.rootDir, collectionId, fileId)
+    );
   }
 
   async readFile(
@@ -432,15 +355,4 @@ async function parseForm(
       lastModified: isValidDate(lastModified) ? lastModified : null,
     }));
   });
-}
-
-// https://stackoverflow.com/a/28120564
-function prettyBytes(bytes: number): string {
-  if (bytes == 0) {
-    return "0.00 B";
-  }
-  var e = Math.floor(Math.log(bytes) / Math.log(1024));
-  return (
-    (bytes / Math.pow(1024, e)).toFixed(2) + " " + " KMGTP".charAt(e) + "B"
-  );
 }

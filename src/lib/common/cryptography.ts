@@ -2,14 +2,22 @@ import bcrypt from "bcrypt";
 import { toBigIntBE, toBufferBE } from "bigint-buffer";
 import crypto from "crypto";
 import { createReadStream, createWriteStream } from "fs";
-import { rename, stat } from "fs/promises";
-import { Stream, Transform } from "stream";
+import { open, rename, stat } from "fs/promises";
+import { PassThrough, Readable, Transform, pipeline } from "stream";
 import appConfig from "./app-config";
+import { RangeNotSatisfiableError } from "./errors";
 
 const SALT_ROUNDS = 10;
 const ENCRYPTION_ALGORITHM = "aes-256-ctr";
 const IV_SIZE = 16;
 const AES_BLOCK_SIZE = 16;
+const MAX_COUNTER = (BigInt(1) << BigInt(IV_SIZE * 8)) - BigInt(1);
+
+/** An inclusive byte range of the decrypted content */
+interface ByteRange {
+  start: number;
+  end: number;
+}
 
 export default class Cryptography {
   static async getSaltAndHash(secret: string) {
@@ -53,73 +61,99 @@ export default class Cryptography {
     return result;
   }
 
+  /** Size of the decrypted content of an encrypted file */
+  static async getDecryptedSize(filepath: string) {
+    const { size } = await stat(filepath);
+    assertContainsIv(size);
+    return size - IV_SIZE;
+  }
+
+  /**
+   * Opens the decrypted content of an encrypted file (or an inclusive byte
+   * range of it) as a stream. Backpressure is respected end to end, and any
+   * failure (missing file, read or decipher error) is emitted as an `error`
+   * event on the returned stream.
+   */
+  static createDecryptionStream(filepath: string, range?: ByteRange): Readable {
+    const output = new PassThrough();
+
+    Cryptography.readIv(filepath)
+      .then((iv) => {
+        const offset = range?.start ?? 0;
+        const blockNumber = Math.floor(offset / AES_BLOCK_SIZE);
+        const blockStart = blockNumber * AES_BLOCK_SIZE;
+
+        const encrypted = createReadStream(filepath, {
+          start: IV_SIZE + blockStart,
+          end: range ? IV_SIZE + range.end : undefined,
+        });
+        const decipher = Cryptography.getDecipher(
+          Cryptography.getBlockIv(iv, blockNumber)
+        );
+
+        pipeline(
+          encrypted,
+          decipher,
+          skipBytes(offset - blockStart),
+          output,
+          () => {
+            // Errors are forwarded to `output` by pipeline
+          }
+        );
+      })
+      .catch((error) => output.destroy(error));
+
+    return output;
+  }
+
+  /**
+   * Opens a chunk of the decrypted content starting at `offset`, for serving
+   * range requests. `start` and `end` are the inclusive plaintext byte range
+   * the stream will contain.
+   */
   static async getDecryptedStreamChunk(
     filepath: string,
     offset: number,
     chunkSize = appConfig.streamChunkSize
   ): Promise<{
-    stream: Stream;
-    size: number;
+    stream: Readable;
+    start: number;
+    end: number;
     totalSize: number;
   }> {
-    // Calculate closest chunk boundary
-    const blockNumber = Math.floor(offset / AES_BLOCK_SIZE);
-    const closestBoundary = blockNumber * AES_BLOCK_SIZE;
-    const delta = offset - closestBoundary;
-
-    // Read encrypted chunk
-    const fileSize = await stat(filepath).then((stats) => stats.size);
-    const start = Math.min(IV_SIZE + closestBoundary, fileSize - 1);
-    const end = Math.min(start + delta + chunkSize - 1, fileSize - 1);
-    const encrypted = createReadStream(filepath, { start, end });
-
-    // Calculate correct IV (initial IV + block number)
-    const iv = await new Promise<Buffer>((resolve, reject) => {
-      const stream = createReadStream(filepath, {
-        end: IV_SIZE - 1,
-      });
-      let iv: Buffer;
-      stream.on("error", reject);
-      stream.on("data", (data: Buffer) => (iv = data));
-      stream.on("close", () => resolve(iv));
-    });
-    const blockIvInt = toBigIntBE(iv) + BigInt(blockNumber);
-    const blockIv = toBufferBE(blockIvInt, 16);
-    const decipher = Cryptography.getDecipher(blockIv);
-
-    // Setup read/write stream for decrypted data
-    const resultStream = new Transform({
-      write(chunk, encoding, callback) {
-        this.push(chunk);
-        callback();
-      },
-    });
-    let dataProcessed = 0;
-
-    decipher.on("error", (error) => {
-      throw error;
-    });
-    decipher.on("close", () => resultStream.end());
-    decipher.on("data", (data: Buffer) => {
-      // discard data before the requested offset
-      if (dataProcessed + data.length < delta) {
-        dataProcessed += data.length;
-        return;
-      }
-
-      const bytesToTrim = Math.max(0, delta - dataProcessed);
-      const relevantPart = data.subarray(bytesToTrim);
-      resultStream.write(relevantPart);
-      dataProcessed += data.length;
-    });
-
-    encrypted.pipe(decipher);
-
+    const totalSize = await Cryptography.getDecryptedSize(filepath);
+    if (!Number.isInteger(offset) || offset < 0 || offset >= totalSize) {
+      throw new RangeNotSatisfiableError(
+        `Offset ${offset} is outside the file (${totalSize} bytes)`,
+        totalSize
+      );
+    }
+    const start = offset;
+    const end = Math.min(start + Math.max(chunkSize, 1), totalSize) - 1;
     return {
-      stream: resultStream,
-      size: end - start,
-      totalSize: fileSize - IV_SIZE,
+      stream: Cryptography.createDecryptionStream(filepath, { start, end }),
+      start,
+      end,
+      totalSize,
     };
+  }
+
+  private static async readIv(filepath: string) {
+    const handle = await open(filepath, "r");
+    try {
+      const iv = Buffer.alloc(IV_SIZE);
+      const { bytesRead } = await handle.read(iv, 0, IV_SIZE, 0);
+      assertContainsIv(bytesRead);
+      return iv;
+    } finally {
+      await handle.close();
+    }
+  }
+
+  /** AES-CTR IV for the given block: the initial IV plus the block number, as a 128-bit counter */
+  private static getBlockIv(iv: Buffer, blockNumber: number) {
+    const counter = (toBigIntBE(iv) + BigInt(blockNumber)) & MAX_COUNTER;
+    return toBufferBE(counter, IV_SIZE);
   }
 
   private static getCipher(iv: Buffer) {
@@ -137,4 +171,28 @@ export default class Cryptography {
       iv
     );
   }
+}
+
+function assertContainsIv(encryptedSize: number) {
+  if (encryptedSize < IV_SIZE) {
+    throw new Error(
+      `Encrypted file is too short to contain an IV (${encryptedSize} bytes)`
+    );
+  }
+}
+
+function skipBytes(count: number) {
+  let remaining = count;
+  return new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      if (remaining >= chunk.length) {
+        remaining -= chunk.length;
+        callback();
+        return;
+      }
+      const relevantPart = chunk.subarray(remaining);
+      remaining = 0;
+      callback(null, relevantPart);
+    },
+  });
 }

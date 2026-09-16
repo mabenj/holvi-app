@@ -2,7 +2,7 @@ import Database from "@/db/Database";
 import { Collection } from "@/db/models/Collection";
 import { IncomingMessage } from "http";
 import { Op } from "sequelize";
-import { Stream } from "stream";
+import { Readable } from "stream";
 import { HolviError, NotFoundError } from "../common/errors";
 import { UserFileSystem } from "../common/user-file-system";
 import { EMPTY_UUIDV4, caseInsensitiveSorter } from "../common/utilities";
@@ -24,7 +24,7 @@ interface GetBufferResult {
 }
 
 interface GetStreamResult {
-  stream: Stream;
+  stream: Readable;
   chunkStartEnd: [start: number, end: number];
   totalLengthBytes: number;
   mimeType: string;
@@ -33,16 +33,6 @@ interface GetStreamResult {
 
 export class CollectionService {
   constructor(private readonly userId: string) {}
-
-  async backupCollections() {
-    const db = await Database.getInstance();
-    const collections = await db.models.Collection.findAll({
-      where: { UserId: this.userId },
-      include: [db.models.Tag, db.models.CollectionFile],
-    });
-    const fileSystem = new UserFileSystem(this.userId);
-    await fileSystem.backupCollections(collections);
-  }
 
   async getAllFiles(): Promise<CollectionFileDto[]> {
     const db = await Database.getInstance();
