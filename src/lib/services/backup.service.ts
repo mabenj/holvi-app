@@ -8,7 +8,7 @@ import crypto from "crypto";
 import { createWriteStream, WriteStream } from "fs";
 import { mkdir, open, readdir, rename, rm, stat, statfs } from "fs/promises";
 import path from "path";
-import { InferAttributes, Transaction } from "sequelize";
+import { InferAttributes, Op, Transaction } from "sequelize";
 import { Readable } from "stream";
 import appConfig from "../common/app-config";
 import { UniqueSafeNames } from "../common/backup-paths";
@@ -213,6 +213,21 @@ export class BackupService {
             throw new NotFoundError(`Backup of job '${jobId}' no longer exists`);
         }
         return { filePath, fileName: job.zipFileName, sizeBytes: stats.size };
+    }
+
+    /**
+     * Deletes the user's Current backup. Its job stays in the history, with no
+     * backup left to download.
+     */
+    async deleteBackup(jobId: string): Promise<BackupJobDto> {
+        const job = await this.findUserJob(jobId);
+        if (!isCompletedBackupJobStatus(job.status) || !job.zipFileName) {
+            throw new NotFoundError(
+                `Backup job '${jobId}' has no backup to delete`
+            );
+        }
+        await deleteBackupZip(job);
+        return (await this.findUserJob(jobId)).toDto();
     }
 
     private async findUserJob(jobId: string) {
@@ -471,7 +486,10 @@ async function runBackupJob(
         const snapshot = await readSnapshot(job.UserId);
         const userBackupDir = getUserBackupDir(job.UserId);
         const username = snapshot.user.username.replace(/[^\w-]/g, "_");
-        const zipFileName = `holvi-backup-${username}-${timestamp()}.zip`;
+        // Part of the job id tells apart two backups made in the same second,
+        // so a new backup never overwrites the one it is about to replace
+        const jobSuffix = job.id.slice(0, 8);
+        const zipFileName = `holvi-backup-${username}-${timestamp()}-${jobSuffix}.zip`;
         const zipPath = path.join(userBackupDir, zipFileName);
 
         const startedAt = new Date();
@@ -512,14 +530,18 @@ async function runBackupJob(
         await rename(`${zipPath}.partial`, zipPath);
         finishedPartialZipPath = null;
         const { size } = await stat(zipPath);
+        // Recorded before the backups it replaces are deleted, so that a crash
+        // in between can never leave the user with neither
+        await updateJob(job.id, { zipFileName, zipSizeBytes: size });
+        // Deleted before the job reports completion, so that a job seen as
+        // completed has left exactly one backup behind
+        await deletePreviousBackups(job.UserId, job.id);
 
         await updateJob(job.id, {
             ...progress,
             status: outcome,
             finishedAt,
             currentFileName: null,
-            zipFileName,
-            zipSizeBytes: size,
             skippedCount: countProblems(problems, "skipped"),
             damagedCount: countProblems(problems, "damaged"),
             problems
@@ -550,6 +572,47 @@ async function runBackupJob(
                 }`,
                 updateError
             )
+        );
+    }
+}
+
+/**
+ * Deletes a job's backup zip and clears it from the job, which leaves the job
+ * in the user's history with the size the backup had but nothing to download.
+ */
+async function deleteBackupZip(job: BackupJob) {
+    if (!job.zipFileName) {
+        return;
+    }
+    await rm(path.join(getUserBackupDir(job.UserId), job.zipFileName), {
+        force: true
+    });
+    await updateJob(job.id, { zipFileName: null });
+}
+
+/**
+ * Keeps only the Current backup by deleting the user's older ones. Runs once a
+ * new backup is complete, so a user is never left without a backup. A zip that
+ * cannot be deleted (a download may still hold it open) is logged instead of
+ * failing a job whose backup is sound; the next completed backup tries again.
+ */
+async function deletePreviousBackups(userId: string, currentJobId: string) {
+    try {
+        const db = await Database.getInstance();
+        const previous = await db.models.BackupJob.findAll({
+            where: {
+                UserId: userId,
+                id: { [Op.ne]: currentJobId },
+                zipFileName: { [Op.ne]: null }
+            }
+        });
+        for (const job of previous) {
+            await deleteBackupZip(job);
+        }
+    } catch (error) {
+        logger.error(
+            `Could not delete the backups replaced by job '${currentJobId}'`,
+            error
         );
     }
 }

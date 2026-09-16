@@ -14,6 +14,7 @@ const POLL_INTERVAL_MS = 3_000;
 export function useBackups() {
     const [isStarting, setIsStarting] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const http = useHttp();
     const toast = useToast();
 
@@ -74,12 +75,33 @@ export function useBackups() {
         await mutate();
     };
 
+    const deleteBackup = async (jobId: string) => {
+        setIsDeleting(true);
+        const { data, error } = await http
+            .delete<ApiData<{ job?: BackupJobDto }>>(`/api/backups/${jobId}`)
+            .finally(() => setIsDeleting(false));
+        if (!data?.job || error) {
+            toast({
+                description: `Could not delete backup (${getErrorMessage(
+                    error
+                )})`,
+                status: "error"
+            });
+            // Rejects so the confirmation dialog stays open on failure
+            return Promise.reject(error);
+        }
+        toast({ description: "Backup deleted", status: "info" });
+        await mutate();
+    };
+
     return {
         jobs: jobs || [],
         isLoading,
         isStarting,
         isCancelling,
+        isDeleting,
         startBackup,
-        cancelBackup
+        cancelBackup,
+        deleteBackup
     };
 }

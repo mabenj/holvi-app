@@ -1,6 +1,13 @@
 import crypto from "crypto";
-import { createWriteStream, existsSync } from "fs";
-import { appendFile, mkdir, truncate, unlink, writeFile } from "fs/promises";
+import { createReadStream, createWriteStream, existsSync } from "fs";
+import {
+    appendFile,
+    mkdir,
+    readFile,
+    truncate,
+    unlink,
+    writeFile
+} from "fs/promises";
 import path from "path";
 import { Readable } from "stream";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -25,6 +32,7 @@ import {
 } from "../../../test/backup-fixtures";
 import { getTestDatabase, resetDatabase } from "../../../test/database";
 import appConfig from "../common/app-config";
+import { ByteRange, parseByteRange } from "../common/byte-range";
 import { NotFoundError } from "../common/errors";
 import { UserFileSystem } from "../common/user-file-system";
 import { isActiveBackupJobStatus } from "../types/backup-job-dto";
@@ -1553,4 +1561,158 @@ describe("BackupService (integration)", () => {
             NotFoundError
         );
     });
+
+    describe("current backup", () => {
+        async function createUserWithFiles(username: string) {
+            const user = await createUser(username);
+            const holiday = await createCollection(user.id, "Holiday");
+            await addFile(user.id, holiday.id, "a.jpg", crypto.randomBytes(20_000));
+            await addFile(user.id, holiday.id, "b.jpg", crypto.randomBytes(5_000));
+            return user;
+        }
+
+        async function expectDownloadableBackup(
+            service: BackupService,
+            jobId: string
+        ) {
+            const { filePath } = await service.openDownload(jobId);
+            expect((await readZip(filePath)).at(-1)!.name).toBe("manifest.json");
+        }
+
+        it("keeps only the newest backup, deleting the previous one once a new job completes", async () => {
+            const alice = await createUserWithFiles("alice");
+            const bob = await createUserWithFiles("bob");
+            const aliceService = new BackupService(alice.id);
+            const bobService = new BackupService(bob.id);
+            const bobBackup = await runBackup(bobService);
+
+            const first = await runBackup(aliceService);
+            const second = await runBackup(aliceService);
+
+            expect(second.status).toBe("completed");
+            expect(await listUserBackupDir(alice.id)).toEqual([
+                second.zipFileName
+            ]);
+            await expectDownloadableBackup(aliceService, second.id);
+            // The job stays in history, without a backup to download
+            const jobs = await aliceService.getJobs();
+            expect(jobs.map((job) => job.id)).toEqual([second.id, first.id]);
+            expect(jobs[1]).toMatchObject({
+                status: "completed",
+                zipFileName: null,
+                zipSizeBytes: first.zipSizeBytes
+            });
+            await expect(aliceService.openDownload(first.id)).rejects.toThrow(
+                NotFoundError
+            );
+            // Retention is per user
+            expect(await listUserBackupDir(bob.id)).toEqual([
+                bobBackup.zipFileName
+            ]);
+            await expectDownloadableBackup(bobService, bobBackup.id);
+        });
+
+        it("keeps the previous backup when the next job fails", async () => {
+            const alice = await createUserWithFiles("alice");
+            const previous = await runBackup(new BackupService(alice.id));
+            const service = new BackupService(alice.id, {
+                getFreeSpace: async () => 5_000
+            });
+
+            const failed = await runBackup(service);
+
+            expect(failed.status).toBe("failed");
+            expect(await listUserBackupDir(alice.id)).toEqual([
+                previous.zipFileName
+            ]);
+            expect(await service.getJob(previous.id)).toMatchObject({
+                status: "completed",
+                zipFileName: previous.zipFileName
+            });
+            await expectDownloadableBackup(service, previous.id);
+        });
+
+        it("deletes the current backup on request, keeping the job in its history", async () => {
+            const alice = await createUserWithFiles("alice");
+            const service = new BackupService(alice.id);
+            const job = await runBackup(service);
+
+            const deleted = await service.deleteBackup(job.id);
+
+            expect(deleted).toMatchObject({
+                id: job.id,
+                status: "completed",
+                zipFileName: null,
+                // Kept, so the history can still show how big the backup was
+                zipSizeBytes: job.zipSizeBytes
+            });
+            expect(await listUserBackupDir(alice.id)).toEqual([]);
+            expect((await service.getJobs()).map((current) => current.id)).toEqual([
+                job.id
+            ]);
+            await expect(service.openDownload(job.id)).rejects.toThrow(
+                NotFoundError
+            );
+            // Nothing left to delete
+            await expect(service.deleteBackup(job.id)).rejects.toThrow(
+                NotFoundError
+            );
+        });
+
+        it("only lets a job's owner delete its backup", async () => {
+            const alice = await createUserWithFiles("alice");
+            const bob = await createUser("bob");
+            const aliceService = new BackupService(alice.id);
+            const bobService = new BackupService(bob.id);
+            const job = await runBackup(aliceService);
+
+            await expect(bobService.deleteBackup(job.id)).rejects.toThrow(
+                NotFoundError
+            );
+            await expect(bobService.deleteBackup("not-a-uuid")).rejects.toThrow(
+                NotFoundError
+            );
+
+            expect(await listUserBackupDir(alice.id)).toEqual([job.zipFileName]);
+            await expectDownloadableBackup(aliceService, job.id);
+        });
+
+        it("resumes an interrupted download into a byte-identical zip", async () => {
+            const alice = await createUserWithFiles("alice");
+            const service = new BackupService(alice.id);
+            const job = await runBackup(service);
+
+            const { filePath, fileName, sizeBytes } = await service.openDownload(
+                job.id
+            );
+
+            expect(fileName).toBe(job.zipFileName);
+            const whole = await readFile(filePath);
+            expect(sizeBytes).toBe(whole.length);
+            // The client keeps what it got before the connection dropped
+            const interruptedAt = Math.floor(sizeBytes / 3);
+            const received = whole.subarray(0, interruptedAt);
+            const rest = parseByteRange(`bytes=${interruptedAt}-`, sizeBytes);
+            expect(rest).toEqual({ start: interruptedAt, end: sizeBytes - 1 });
+            const resumed = Buffer.concat([
+                received,
+                await readRange(filePath, rest!)
+            ]);
+            expect(resumed.equals(whole)).toBe(true);
+            const resumedPath = path.join(appConfig.backupDir, "..", fileName);
+            await writeFile(resumedPath, resumed);
+            expect((await readZip(resumedPath)).at(-1)!.name).toBe(
+                "manifest.json"
+            );
+        });
+    });
 });
+
+/** Reads a byte range of a file, the way the download route serves one */
+async function readRange(filePath: string, { start, end }: ByteRange) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of createReadStream(filePath, { start, end })) {
+        chunks.push(chunk as Buffer);
+    }
+    return Buffer.concat(chunks);
+}

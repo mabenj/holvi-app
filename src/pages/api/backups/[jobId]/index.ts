@@ -12,6 +12,17 @@ async function getJob(
     res.status(200).json({ status: "ok", job });
 }
 
+async function deleteBackup(
+    req: ApiRequest,
+    res: ApiResponse<{ job?: BackupJobDto }>
+) {
+    const { jobId } = req.query as { jobId: string };
+    const service = new BackupService(req.session.user.id);
+    const job = await service.deleteBackup(jobId);
+    res.status(200).json({ status: "ok", job });
+}
+
 export default ApiRoute.create({
-    get: getJob
+    get: getJob,
+    delete: deleteBackup
 });

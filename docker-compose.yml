@@ -23,7 +23,9 @@ services:
             - HOLVI_SESSION_PASSWORD=generate-a-32-character-long-key-at-https://1password.com/password-generator
             - HOLVI_ENCRYPTION_KEY=generate-an-encryption-ket-at-https://generate-random.org/encryption-key-generator?count=1&bytes=24&cipher=aes-256-ctr&string=&password=
             - HOLVI_DATA_DIR=/app/data
-            # Backups are unencrypted; point this at a separate disk or mount if desired
+            # Backups are unencrypted. To keep them off the data disk, give them
+            # their own volume: set this to /app/backups and mount the
+            # backup-data volume below at that path
             - HOLVI_BACKUP_DIR=/app/data/backups
             - HOLVI_USE_HTTPS=false
             - HOLVI_SESSION_TTL_SECONDS=7200
@@ -32,6 +34,7 @@ services:
             - HOLVI_GEO_API_KEY=get-free-api-key-from-https://positionstack.com/product
         volumes:
             - app-data:/app/data
+            # - backup-data:/app/backups
         ports:
             - 7000:3000
         networks:
@@ -41,6 +44,7 @@ services:
 volumes:
     db-data:
     app-data:
+    # backup-data:
 
 networks:
     holvi-net:

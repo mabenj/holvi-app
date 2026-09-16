@@ -32,6 +32,8 @@ Create a `.env.local` file in the root of the project and add the following vari
 
 `HOLVI_BACKUP_DIR=<directory to write backups to (optional, defaults to a backups directory inside HOLVI_DATA_DIR)>`
 
+A backup is a zip holding decrypted copies of every file, so point `HOLVI_BACKUP_DIR` at a separate disk or network mount to keep backups off the data disk; `docker-compose.yml` carries a commented-out `backup-data` volume showing how. Each user keeps only their newest backup, which they can download or delete from the Backups panel.
+
 `HOLVI_SESSION_PASSWORD=<32 character long session password>`
 
 `HOLVI_GEO_API_KEY=<reverse geocoding API key (https://www.bigdatacloud.com/packages/reverse-geocoding)>`

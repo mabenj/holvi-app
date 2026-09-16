@@ -16,6 +16,14 @@ export function isCompletedBackupJobStatus(status: BackupJobStatus) {
     return status === "completed" || status === "completedWithErrors";
 }
 
+/**
+ * Whether this job's backup is the user's Current backup: the one still on the
+ * server, and so the only one that can be downloaded or deleted.
+ */
+export function isCurrentBackup(job: BackupJobDto) {
+    return isCompletedBackupJobStatus(job.status) && job.zipFileName !== null;
+}
+
 /** A file that a backup could not include whole: a Skipped file or a Damaged file */
 export interface BackupProblem {
     fileId: string;

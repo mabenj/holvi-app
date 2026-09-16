@@ -5,9 +5,10 @@ import {
     BackupJobStatus,
     BackupProblem,
     isActiveBackupJobStatus,
-    isCompletedBackupJobStatus
+    isCurrentBackup
 } from "@/lib/types/backup-job-dto";
 import {
+    Badge,
     Button,
     Collapse,
     Flex,
@@ -20,8 +21,14 @@ import {
     UnorderedList,
     useDisclosure
 } from "@chakra-ui/react";
-import { mdiBackupRestore, mdiCancel, mdiDownload } from "@mdi/js";
+import {
+    mdiBackupRestore,
+    mdiCancel,
+    mdiDelete,
+    mdiDownload
+} from "@mdi/js";
 import Icon from "@mdi/react";
+import AreYouSureDialog from "../ui/AreYouSureDialog";
 import Dialog from "../ui/Dialog";
 
 const STATUS_LABELS: Record<BackupJobStatus, string> = {
@@ -66,11 +73,13 @@ function BackupsPanelContent() {
         isLoading,
         isStarting,
         isCancelling,
+        isDeleting,
         startBackup,
-        cancelBackup
+        cancelBackup,
+        deleteBackup
     } = useBackups();
     const activeJob = jobs.find((job) => isActiveBackupJobStatus(job.status));
-    const lastFinishedJob = jobs.find(
+    const finishedJobs = jobs.filter(
         (job) => !isActiveBackupJobStatus(job.status)
     );
 
@@ -87,7 +96,7 @@ function BackupsPanelContent() {
             <Text>
                 A backup is a single zip file with all your collections and
                 files, decrypted. It is built in the background, so you can
-                close this panel while it runs.
+                close this panel while it runs. Only your newest backup is kept.
             </Text>
             {activeJob ? (
                 <ActiveJob
@@ -103,7 +112,19 @@ function BackupsPanelContent() {
                     Start backup
                 </Button>
             )}
-            {lastFinishedJob && <FinishedJob job={lastFinishedJob} />}
+            {finishedJobs.length > 0 && (
+                <Flex direction="column" gap={4}>
+                    <Heading size="md">History</Heading>
+                    {finishedJobs.map((job) => (
+                        <FinishedJob
+                            key={job.id}
+                            job={job}
+                            onDelete={() => deleteBackup(job.id)}
+                            isDeleting={isDeleting}
+                        />
+                    ))}
+                </Flex>
+            )}
         </Flex>
     );
 }
@@ -181,19 +202,28 @@ function ProgressRow({
     );
 }
 
-function FinishedJob({ job }: { job: BackupJobDto }) {
-    const finishedAt = job.finishedAt
-        ? new Date(job.finishedAt).toLocaleString()
-        : null;
-    const hasBackup = isCompletedBackupJobStatus(job.status);
+function FinishedJob({
+    job,
+    onDelete,
+    isDeleting
+}: {
+    job: BackupJobDto;
+    onDelete: () => Promise<void>;
+    isDeleting: boolean;
+}) {
+    // Only the Current backup still has a zip to download or delete
+    const hasBackup = isCurrentBackup(job);
     return (
-        <Flex direction="column" gap={2}>
-            <Heading size="md">
-                {hasBackup ? "Current backup" : "Last backup job"}
-            </Heading>
-            <Text>
-                {STATUS_LABELS[job.status]}
-                {finishedAt && ` · ${finishedAt}`}
+        <Flex direction="column" gap={2} borderTopWidth="1px" pt={3}>
+            <Flex alignItems="center" gap={2} flexWrap="wrap">
+                <Text fontWeight="semibold">{STATUS_LABELS[job.status]}</Text>
+                {hasBackup && (
+                    <Badge colorScheme="green">Current backup</Badge>
+                )}
+            </Flex>
+            <Text fontSize="sm" color="gray.500">
+                {formatTimestamp(job.startedAt ?? job.queuedAt)} –{" "}
+                {formatTimestamp(job.finishedAt)}
                 {job.zipSizeBytes !== null &&
                     ` · ${formatBytes(job.zipSizeBytes)}`}
             </Text>
@@ -206,16 +236,40 @@ function FinishedJob({ job }: { job: BackupJobDto }) {
                 />
             )}
             {hasBackup && (
-                <Button
-                    as="a"
-                    href={`/api/backups/${job.id}/download`}
-                    leftIcon={<Icon path={mdiDownload} size={1} />}
-                    colorScheme="blue">
-                    Download
-                </Button>
+                <Flex gap={2} flexWrap="wrap">
+                    <Button
+                        as="a"
+                        href={`/api/backups/${job.id}/download`}
+                        leftIcon={<Icon path={mdiDownload} size={1} />}
+                        colorScheme="blue">
+                        Download
+                    </Button>
+                    <AreYouSureDialog
+                        trigger={
+                            <Button
+                                leftIcon={<Icon path={mdiDelete} size={1} />}
+                                variant="outline"
+                                colorScheme="red">
+                                Delete
+                            </Button>
+                        }
+                        header="Delete backup"
+                        isConfirming={isDeleting}
+                        onConfirm={onDelete}
+                        confirmLabel="Delete">
+                        <Text>
+                            This deletes the decrypted zip from the server. Your
+                            collections and files stay in Holvi.
+                        </Text>
+                    </AreYouSureDialog>
+                </Flex>
             )}
         </Flex>
     );
+}
+
+function formatTimestamp(epochMs: number | null) {
+    return epochMs === null ? "—" : new Date(epochMs).toLocaleString();
 }
 
 function ProblemList({
