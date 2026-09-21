@@ -2,6 +2,7 @@ import { signOut } from "@/lib/client/auth";
 import { SignedInPageProps, signedInPageProps } from "@/lib/common/signed-in-page";
 import { getErrorMessage } from "@/lib/common/utilities";
 import AppShell from "@/lib/components/app-shell/AppShell";
+import Backups from "@/lib/components/settings/Backups";
 import ConfirmationSurface from "@/lib/components/surfaces/ConfirmationSurface";
 import {
     GRID_DENSITIES,
@@ -28,6 +29,9 @@ export default function SettingsTab({ user }: SignedInPageProps) {
     return (
         <AppShell title="Settings">
             <Stack gap="8" px="4" py="4" maxW="lg">
+                <Section title="Backups">
+                    <Backups />
+                </Section>
                 <Section title="Appearance">
                     <ThemeSetting />
                     <GridDensitySetting />
