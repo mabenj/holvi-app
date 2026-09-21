@@ -183,7 +183,7 @@ export default class DatabaseUpgrade {
     }
 
     private static async performUpgrade5(): Promise<boolean> {
-        // Version 6 adds the browsing and video processing columns and indexes, which model sync creates with defaults; no data to migrate
+        // Version 6 marks the UI rewrite's schema: its browsing and video processing columns and indexes are added to the models, which model sync creates with defaults; no data to migrate
         return true;
     }
 }

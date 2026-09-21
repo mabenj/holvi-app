@@ -5,7 +5,7 @@ import { mkdtemp, readFile, rm, writeFile } from "fs/promises";
 import os from "os";
 import path from "path";
 import { promisify } from "util";
-import { addFile } from "./fixtures";
+import { addFile, FileMetadata } from "./fixtures";
 
 // Tiny videos are generated at test time with the bundled ffmpeg, so none are committed.
 
@@ -16,12 +16,16 @@ export interface GeneratedVideoOptions {
     videoCodec: "h264" | "hevc";
     audio: "aac" | "none";
     container: "mp4" | "mov";
-    /** Written as the container's creation_time tag */
+    /**
+     * The spec's capture date: written as the container's creation_time tag.
+     * Video processing later copies it into the File's takenAt.
+     */
     captureDate?: Date;
     durationSeconds?: number;
 }
 
 const ENCODERS = { h264: "libx264", hevc: "libx265" };
+const DEFAULT_DURATION_SECONDS = 1;
 const MIME_TYPES = { mp4: "video/mp4", mov: "video/quicktime" };
 
 /** Encodes a tiny test-pattern video with a tone and returns its bytes */
@@ -30,7 +34,7 @@ export async function generateVideo({
     audio,
     container,
     captureDate,
-    durationSeconds = 1
+    durationSeconds = DEFAULT_DURATION_SECONDS
 }: GeneratedVideoOptions) {
     return withTempDir(async (dir) => {
         const output = path.join(dir, `video.${container}`);
@@ -65,7 +69,7 @@ export async function addVideo(
     collectionId: string,
     name: string,
     options: GeneratedVideoOptions,
-    metadata: Omit<Parameters<typeof addFile>[4], "mimeType"> = {}
+    metadata: Omit<FileMetadata, "mimeType"> = {}
 ) {
     return addFile(
         userId,
@@ -73,7 +77,7 @@ export async function addVideo(
         `${name}.${options.container}`,
         await generateVideo(options),
         {
-            durationInSeconds: options.durationSeconds ?? 1,
+            durationInSeconds: options.durationSeconds ?? DEFAULT_DURATION_SECONDS,
             ...metadata,
             mimeType: MIME_TYPES[options.container]
         }
@@ -83,7 +87,8 @@ export async function addVideo(
 export interface ProbedVideo {
     videoCodec: string | null;
     audioCodec: string | null;
-    container: "mp4" | "mov" | string;
+    /** mov for QuickTime's major brand, mp4 for other ISO media brands, otherwise ffprobe's format name */
+    container: string;
     captureDate: Date | null;
 }
 
@@ -108,7 +113,7 @@ export async function probeVideo(content: Buffer): Promise<ProbedVideo> {
             container:
                 majorBrand === "qt"
                     ? "mov"
-                    : majorBrand === "isom"
+                    : probe.format.format_name.includes("mp4")
                     ? "mp4"
                     : probe.format.format_name,
             captureDate: creationTime ? new Date(creationTime) : null

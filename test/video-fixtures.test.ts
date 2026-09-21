@@ -29,6 +29,11 @@ describe("video fixture (integration)", () => {
             "an HEVC MP4 without audio, which is not web-safe",
             { videoCodec: "hevc", audio: "none", container: "mp4", captureDate },
             { videoCodec: "hevc", audioCodec: null, container: "mp4" }
+        ],
+        [
+            "an HEVC/AAC MOV, like an iPhone video, which is not web-safe",
+            { videoCodec: "hevc", audio: "aac", container: "mov", captureDate },
+            { videoCodec: "hevc", audioCodec: "aac", container: "mov" }
         ]
     ])(
         "stores %s as an encrypted File that decrypts to the requested codecs and capture date",

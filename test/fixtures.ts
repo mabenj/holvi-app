@@ -70,7 +70,7 @@ async function createTags(tags: string[]) {
     );
 }
 
-type FileMetadata = Partial<
+export type FileMetadata = Partial<
     Pick<
         CollectionFile,
         | "mimeType"

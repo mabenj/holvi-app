@@ -33,7 +33,7 @@ interface GetStreamResult {
 }
 
 interface CollectionServiceOptions {
-  /** Tells the time for the Shuffle period, the Open window and the forgotten threshold */
+  /** Tells the time for the Shuffle period, whether an Open extends the previous one, and which collections are Forgotten collections */
   clock?: Clock;
 }
 
