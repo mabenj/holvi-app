@@ -1,8 +1,10 @@
+import { DARK_BACKGROUND } from "@/lib/components/theme/system";
 import { Head, Html, Main, NextScript } from "next/document";
 
 export default function Document() {
     return (
-        <Html lang="en">
+        // next-themes sets the theme class on <html> before React hydrates
+        <Html lang="en" suppressHydrationWarning>
             <Head>
                 <link
                     rel="apple-touch-icon"
@@ -28,7 +30,16 @@ export default function Document() {
                     color="#5bbad5"
                 />
                 <meta name="msapplication-TileColor" content="#da532c" />
-                <meta name="theme-color" content="#000000" />
+                {/* Dark is the default theme; ThemeColor follows the viewer's choice */}
+                <meta name="theme-color" content={DARK_BACKGROUND} />
+                <meta name="mobile-web-app-capable" content="yes" />
+                <meta name="apple-mobile-web-app-capable" content="yes" />
+                <meta name="apple-mobile-web-app-title" content="Holvi" />
+                {/* Content runs under the status bar; layouts pad by the safe-area insets */}
+                <meta
+                    name="apple-mobile-web-app-status-bar-style"
+                    content="black-translucent"
+                />
             </Head>
             <body>
                 <Main />
