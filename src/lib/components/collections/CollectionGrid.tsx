@@ -8,26 +8,15 @@ import CollectionCard from "./CollectionCard";
 const COLUMNS = [3, 3, 4, 6, 8, 9];
 /** Tile heights per breakpoint (base, sm, md, lg and up) at the default density */
 const TILE_HEIGHTS_REM = [8, 10, 11, 11];
-// Chakra v3's breakpoints, for the `sizes` media conditions
-const BREAKPOINT_MIN_WIDTHS = ["", "30em", "48em", "64em", "80em", "96em"];
 
 /** The columns and tile heights of today's grid, scaled by the grid density */
 function gridLayout(density: GridDensity) {
     const scale = density / 3;
-    const columns = COLUMNS.map((count) => Math.max(1, Math.round(count * scale)));
     return {
-        columns,
+        columns: COLUMNS.map((count) => Math.max(1, Math.round(count * scale))),
         tileHeights: TILE_HEIGHTS_REM.map(
             (rem) => `${Math.round((rem / scale) * 10) / 10}rem`
-        ),
-        sizes: columns
-            .map((count, i) =>
-                i === 0
-                    ? `${Math.ceil(100 / count)}vw`
-                    : `(min-width: ${BREAKPOINT_MIN_WIDTHS[i]}) ${Math.ceil(100 / count)}vw`
-            )
-            .reverse()
-            .join(", ")
+        )
     };
 }
 
@@ -51,12 +40,12 @@ export default function CollectionGrid({
         return null;
     }
 
-    const { columns, tileHeights, sizes } = gridLayout(density);
+    const { columns, tileHeights } = gridLayout(density);
     return (
         <SimpleGrid columns={columns} gap="2px">
             {collections.map((collection) => (
                 <Box key={collection.id} h={tileHeights}>
-                    <CollectionCard collection={collection} sizes={sizes} />
+                    <CollectionCard collection={collection} />
                 </Box>
             ))}
             {Array.from({ length: skeletons }, (_, i) => (

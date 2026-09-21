@@ -16,12 +16,10 @@ const OVERLAY_FONT_SIZE = ["x-small", "x-small", "xs", "sm"];
 
 interface CollectionCardProps {
     collection: CollectionSummary;
-    /** The tile's `sizes`, for the browser's image choice */
-    sizes: string;
 }
 
 /** A collection's tile: the Cover cropped to fill it, with its name and counts over a bottom gradient */
-export default function CollectionCard({ collection, sizes }: CollectionCardProps) {
+export default function CollectionCard({ collection }: CollectionCardProps) {
     const { cover } = collection;
     return (
         <CardLink
@@ -45,7 +43,6 @@ export default function CollectionCard({ collection, sizes }: CollectionCardProp
                     src={cover.thumbnailSrc}
                     alt={collection.name}
                     fill
-                    sizes={sizes}
                     // Thumbnails are small already, and decrypted content must
                     // not be written to Next.js's image cache
                     unoptimized

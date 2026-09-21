@@ -1,5 +1,6 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
 import { InvalidArgumentError } from "@/lib/common/errors";
+import { CollectionSort } from "@/lib/services/collection-browsing";
 import {
     BrowseCollectionsPage,
     CollectionService
@@ -15,14 +16,11 @@ async function browseCollections(
     req: ApiRequest,
     res: ApiResponse<Partial<BrowseCollectionsPage>>
 ) {
-    const sort = single(req.query.sort);
-    if (sort !== undefined && sort !== "random") {
-        throw new InvalidArgumentError(`Unknown sort '${sort}'`);
-    }
     const limit = single(req.query.limit);
     const collectionService = new CollectionService(req.session.user.id);
     const page = await collectionService.browseCollections({
-        sort,
+        // The service rejects any sort it does not know
+        sort: single(req.query.sort) as CollectionSort | undefined,
         seed: single(req.query.seed),
         cursor: single(req.query.cursor),
         limit: limit === undefined ? undefined : Number(limit)
