@@ -64,7 +64,7 @@ export default function Backups() {
     const [jobToDelete, setJobToDelete] = useState<BackupJobDto>();
     const [deleting, setDeleting] = useState(false);
 
-    const run = async (
+    const runJobAction = async (
         kind: "starting" | "cancelling",
         action: () => Promise<unknown>
     ) => {
@@ -86,11 +86,11 @@ export default function Backups() {
         setActionError(undefined);
         try {
             await deleteBackup(jobToDelete.id);
-            setJobToDelete(undefined);
         } catch (error) {
+            // Shown below the section once the confirmation closes
             setActionError(getErrorMessage(error));
-            setJobToDelete(undefined);
         } finally {
+            setJobToDelete(undefined);
             setDeleting(false);
             await refresh();
         }
@@ -121,14 +121,16 @@ export default function Backups() {
                     job={activeJob}
                     cancelling={busy === "cancelling"}
                     onCancel={() =>
-                        run("cancelling", () => cancelBackupJob(activeJob.id))
+                        runJobAction("cancelling", () =>
+                            cancelBackupJob(activeJob.id)
+                        )
                     }
                 />
             ) : (
                 <Button
                     size="lg"
                     loading={busy === "starting"}
-                    onClick={() => run("starting", startBackup)}>
+                    onClick={() => runJobAction("starting", startBackup)}>
                     <Icon path={mdiBackupRestore} size="20px" aria-hidden />
                     Start backup
                 </Button>
@@ -139,7 +141,11 @@ export default function Backups() {
                 </Text>
             )}
             {history.length > 0 && (
-                <Stack gap="0" as="ul" listStyleType="none" aria-label="Backup history">
+                <Stack
+                    as="ul"
+                    gap="0"
+                    listStyleType="none"
+                    aria-label="Backup history">
                     {history.map((job) => (
                         <FinishedJob
                             key={job.id}
