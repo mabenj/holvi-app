@@ -3,6 +3,7 @@ import { Collection } from "@/db/models/Collection";
 import { IncomingMessage } from "http";
 import { Op } from "sequelize";
 import { Readable } from "stream";
+import { Clock, realClock } from "../common/clock";
 import { HolviError, NotFoundError } from "../common/errors";
 import { UserFileSystem } from "../common/user-file-system";
 import { EMPTY_UUIDV4, caseInsensitiveSorter } from "../common/utilities";
@@ -31,8 +32,20 @@ interface GetStreamResult {
   filename: string;
 }
 
+interface CollectionServiceOptions {
+  /** Tells the time for the Shuffle period, the Open window and the forgotten threshold */
+  clock?: Clock;
+}
+
 export class CollectionService {
-  constructor(private readonly userId: string) {}
+  private readonly clock: Clock;
+
+  constructor(
+    private readonly userId: string,
+    options: CollectionServiceOptions = {}
+  ) {
+    this.clock = options.clock ?? realClock;
+  }
 
   async getAllFiles(): Promise<CollectionFileDto[]> {
     const db = await Database.getInstance();
