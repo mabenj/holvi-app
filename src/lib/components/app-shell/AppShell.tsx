@@ -17,13 +17,16 @@ interface AppShellProps {
     children: ReactNode;
     /** Hidden when absent, e.g. on the Timeline */
     floatingAction?: FloatingAction;
+    /** What tapping the tab of this screen does, e.g. refresh and scroll to the top */
+    onActiveTabReselect?: () => void;
 }
 
 /** Frame of every signed-in screen: page header, content and the bottom tab bar */
 export default function AppShell({
     title,
     children,
-    floatingAction
+    floatingAction,
+    onActiveTabReselect
 }: AppShellProps) {
     return (
         <>
@@ -45,7 +48,7 @@ export default function AppShell({
                 <Box flex="1">{children}</Box>
             </Flex>
             {floatingAction && <FloatingActionButton {...floatingAction} />}
-            <TabBar />
+            <TabBar onActiveTabReselect={onActiveTabReselect} />
         </>
     );
 }

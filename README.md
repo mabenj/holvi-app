@@ -40,6 +40,10 @@ A backup is a zip holding decrypted copies of every file, so point `HOLVI_BACKUP
 
 `HOLVI_ENCRYPTION_KEY=<32 character long encryption key>`
 
+`HOLVI_SHUFFLE_PERIOD_MINUTES=<minutes the random order of each user's collections stays the same (optional, defaults to 60)>`
+
+The Collections tab opens in random order. Within one Shuffle period a refresh gives the same order; when the next period starts, the order changes by itself.
+
 ### Install dependencies
 
 ```bash

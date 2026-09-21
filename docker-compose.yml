@@ -32,6 +32,8 @@ services:
             - HOLVI_MAX_FILE_SIZE_KB=4294967296
             - HOLVI_MAX_TOTAL_FILE_SIZE_KB=17179869184
             - HOLVI_GEO_API_KEY=get-free-api-key-from-https://positionstack.com/product
+            # Minutes the random order of each user's collections stays the same
+            - HOLVI_SHUFFLE_PERIOD_MINUTES=60
         volumes:
             - app-data:/app/data
             # - backup-data:/app/backups

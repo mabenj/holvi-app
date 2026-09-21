@@ -48,7 +48,9 @@ export class Collection extends Model<
                 updatedAt: DataTypes.DATE
             },
             {
-                sequelize
+                sequelize,
+                // Browsing reads one user's collections
+                indexes: [{ fields: ["UserId"] }]
             }
         );
     }
