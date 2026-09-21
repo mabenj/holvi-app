@@ -18,7 +18,8 @@ export default class DatabaseUpgrade {
             1: DatabaseUpgrade.performUpgrade1,
             2: DatabaseUpgrade.performUpgrade2,
             3: DatabaseUpgrade.performUpgrade3,
-            4: DatabaseUpgrade.performUpgrade4
+            4: DatabaseUpgrade.performUpgrade4,
+            5: DatabaseUpgrade.performUpgrade5
         };
 
     static async upgrade(from: number, to: number, db: Database) {
@@ -178,6 +179,11 @@ export default class DatabaseUpgrade {
 
     private static async performUpgrade4(): Promise<boolean> {
         // Version 5 adds the BackupJobs problem columns, which model sync creates with defaults; no data to migrate
+        return true;
+    }
+
+    private static async performUpgrade5(): Promise<boolean> {
+        // Version 6 marks the UI rewrite's schema: its browsing and video processing columns and indexes are added to the models, which model sync creates with defaults; no data to migrate
         return true;
     }
 }
