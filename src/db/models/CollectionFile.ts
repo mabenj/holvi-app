@@ -71,7 +71,9 @@ export class CollectionFile extends Model<
                 blurDataUrl: DataTypes.TEXT
             },
             {
-                sequelize
+                sequelize,
+                // Collection summaries read each collection's first files by name
+                indexes: [{ fields: ["CollectionId", "name", "id"] }]
             }
         );
     }

@@ -18,6 +18,8 @@ const nextConfig = {
         optimizePackageImports: ["@chakra-ui/react"]
     },
     images: {
+        // File and thumbnail sources name the file in their query string
+        localPatterns: [{ pathname: "/api/collections/**" }],
         remotePatterns: [
             {
                 protocol: "https",

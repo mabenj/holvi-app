@@ -48,7 +48,12 @@ const TABS: Tab[] = [
     }
 ];
 
-export default function TabBar() {
+interface TabBarProps {
+    /** Called instead of navigating when the user taps the tab of the screen they are on */
+    onActiveTabReselect?: () => void;
+}
+
+export default function TabBar({ onActiveTabReselect }: TabBarProps) {
     const { pathname } = useRouter();
 
     return (
@@ -68,11 +73,19 @@ export default function TabBar() {
             <Flex h={TAB_BAR_HEIGHT} maxW="lg" mx="auto">
                 {TABS.map((tab) => {
                     const active = tab.isActive(pathname);
+                    // Only the tab's own screen: from a collection page, Collections goes back
+                    const reselected = pathname === tab.href;
                     return (
                         <TabLink
                             key={tab.href}
                             href={tab.href}
                             aria-current={active ? "page" : undefined}
+                            onClick={(event) => {
+                                if (reselected && onActiveTabReselect) {
+                                    event.preventDefault();
+                                    onActiveTabReselect();
+                                }
+                            }}
                             flex="1"
                             display="flex"
                             flexDirection="column"

@@ -11,6 +11,16 @@ import { CollectionDto } from "../types/collection-dto";
 import { CollectionFileDto } from "../types/collection-file-dto";
 import { CollectionFileFormData } from "../validators/collection-file.validator";
 import { CollectionFormData } from "../validators/collection.validator";
+import {
+  BrowseCollectionsPage,
+  BrowseCollectionsQuery,
+  browseCollections,
+} from "./collection-browsing";
+
+export type {
+  BrowseCollectionsPage,
+  BrowseCollectionsQuery,
+} from "./collection-browsing";
 
 interface CreateResult {
   collection?: CollectionDto;
@@ -45,6 +55,13 @@ export class CollectionService {
     options: CollectionServiceOptions = {}
   ) {
     this.clock = options.clock ?? realClock;
+  }
+
+  /** One page of the user's collections as summaries, in random order for the seed or the current Shuffle period */
+  async browseCollections(
+    query: BrowseCollectionsQuery = {}
+  ): Promise<BrowseCollectionsPage> {
+    return browseCollections(this.userId, this.clock(), query);
   }
 
   async getAllFiles(): Promise<CollectionFileDto[]> {
@@ -550,17 +567,6 @@ export class CollectionService {
       transaction.rollback();
       throw new HolviError("Error creating collection", error);
     }
-  }
-
-  async getAllCollections(): Promise<CollectionDto[]> {
-    const db = await Database.getInstance();
-    const collections = await db.models.Collection.findAll({
-      where: {
-        UserId: this.userId,
-      },
-      include: [db.models.Tag, db.models.CollectionFile],
-    });
-    return collections.map((collection) => collection.toDto());
   }
 
   private async getCollectionFileInfo(collectionId: string, fileId: string) {
