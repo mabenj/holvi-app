@@ -5,7 +5,7 @@ import AppShell from "@/lib/components/app-shell/AppShell";
 import ConfirmationSurface from "@/lib/components/surfaces/ConfirmationSurface";
 import {
     GRID_DENSITIES,
-    GridDensity,
+    parseGridDensity,
     useGridDensity
 } from "@/lib/hooks/useGridDensity";
 import {
@@ -119,9 +119,10 @@ function GridDensitySetting() {
                 aria-label="Grid density"
                 size="lg"
                 value={String(density)}
-                onValueChange={({ value }) =>
-                    value && setDensity(Number(value) as GridDensity)
-                }>
+                onValueChange={({ value }) => {
+                    const next = parseGridDensity(value);
+                    if (next) setDensity(next);
+                }}>
                 <SegmentGroup.Indicator />
                 <SegmentGroup.Items
                     items={GRID_DENSITIES.map(String)}

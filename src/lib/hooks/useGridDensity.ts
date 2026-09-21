@@ -10,11 +10,17 @@ const STORAGE_KEY = "holvi.gridDensity";
 // The storage event only reaches other tabs, so this tab is told with its own event
 const CHANGE_EVENT = "holvi:grid-density";
 
+/** The density a stored or chosen value names, or undefined if it names none */
+export function parseGridDensity(value: unknown): GridDensity | undefined {
+    return GRID_DENSITIES.find((density) => String(density) === String(value));
+}
+
 function read(): GridDensity {
     try {
-        const stored = Number(window.localStorage.getItem(STORAGE_KEY));
-        return GRID_DENSITIES.find((density) => density === stored) ??
-            DEFAULT_GRID_DENSITY;
+        return (
+            parseGridDensity(window.localStorage.getItem(STORAGE_KEY)) ??
+            DEFAULT_GRID_DENSITY
+        );
     } catch {
         // Storage can be unavailable, e.g. in some private windows
         return DEFAULT_GRID_DENSITY;

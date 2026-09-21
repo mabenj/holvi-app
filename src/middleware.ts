@@ -32,6 +32,6 @@ export const config = {
          * and except public files such as the web app manifest and icons, which
          * the sign-in screen and home-screen install need without a session
          */
-        "/((?!api|_next/static|_next/image|.*\.(?:ico|png|svg|xml|webmanifest)$).*)"
+        "/((?!api|_next/static|_next/image|.*\\.(?:ico|png|svg|xml|webmanifest)$).*)"
     ]
 };
