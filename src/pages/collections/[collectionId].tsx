@@ -19,6 +19,7 @@ import FileSortSelect from "@/lib/components/collection-page/FileSortSelect";
 import FileTagFilter from "@/lib/components/collection-page/FileTagFilter";
 import UploadStatus from "@/lib/components/collection-page/UploadStatus";
 import CollectionEditor from "@/lib/components/collections/CollectionEditor";
+import FileLightbox from "@/lib/components/lightbox/FileLightbox";
 import ConfirmationSurface from "@/lib/components/surfaces/ConfirmationSurface";
 import { useCollectionFiles } from "@/lib/hooks/useCollectionFiles";
 import {
@@ -26,6 +27,7 @@ import {
     replaceCollection
 } from "@/lib/hooks/useCollectionsBrowse";
 import { useFileDrop } from "@/lib/hooks/useFileDrop";
+import { useLightboxHistory } from "@/lib/hooks/useLightboxHistory";
 import { useNextPageSentinel } from "@/lib/hooks/useNextPageSentinel";
 import { isUploading, startUpload, useUpload } from "@/lib/hooks/useUpload";
 import { CollectionDetails as Collection } from "@/lib/types/collection-details";
@@ -91,21 +93,27 @@ function CollectionScreen({
         event.target.value = "";
     };
 
+    const lightbox = useLightboxHistory();
+
     // When an upload into this collection ends, the new files appear and the
-    // hero shows the new counts and Cover
-    // (one that finished before the page opened is already in what it loads)
+    // hero shows the new counts and Cover. One that finished before the page
+    // opened is already in what it loads. While the lightbox is open, the
+    // grid waits until it closes: reloading replaces the loaded files, which
+    // would shift the slides under it.
     const finishedUpload = upload?.status === "done" ? upload.sequence : null;
     const seenUpload = useRef(finishedUpload);
+    const lightboxOpen = !!lightbox.photoId;
     useEffect(() => {
         if (finishedUpload === null || finishedUpload === seenUpload.current) {
             return;
         }
+        void refetchCollection();
+        if (lightboxOpen) return;
         seenUpload.current = finishedUpload;
         reload();
-        void refetchCollection();
         // Only a newly finished upload reloads, not a change of sort
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [finishedUpload]);
+    }, [finishedUpload, lightboxOpen]);
 
     const [editing, setEditing] = useState(false);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -187,7 +195,11 @@ function CollectionScreen({
                     ) : isEmpty ? (
                         <NoFilesYet />
                     ) : (
-                        <FileGrid files={files} skeletons={skeletons} />
+                        <FileGrid
+                            files={files}
+                            skeletons={skeletons}
+                            onOpen={lightbox.open}
+                        />
                     )}
                     {error && (
                         <VStack py="8" px="4" gap="3" textAlign="center">
@@ -198,6 +210,11 @@ function CollectionScreen({
                         </VStack>
                     )}
                     <Box ref={sentinel} h="1px" />
+                    {/* Swiping on past the loaded files loads the next page */}
+                    <FileLightbox
+                        files={files}
+                        onNearEnd={hasMore && !error ? loadMore : undefined}
+                    />
                 </>
             )}
             <input

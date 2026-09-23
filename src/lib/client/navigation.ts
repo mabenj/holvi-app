@@ -9,10 +9,11 @@ let currentPath: string | null = null;
 /** Counts the app's own navigations, so Back knows whether it would leave the app */
 export function countNavigations(events: NextRouter["events"]) {
     currentPath = window.location.pathname;
-    const count = (url: string) => {
+    const count = (url: string, { shallow }: { shallow: boolean }) => {
+        // Shallow changes stay on the same screen, e.g. the lightbox's query
+        if (shallow) return;
         navigations++;
         const path = new URL(url, window.location.origin).pathname;
-        // Query-only changes, e.g. opening the lightbox, stay on the same screen
         if (path !== currentPath) {
             previousPath = currentPath;
             currentPath = path;
