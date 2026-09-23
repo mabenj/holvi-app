@@ -1,5 +1,8 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
-import { InvalidArgumentError } from "@/lib/common/errors";
+import {
+    numberQueryParam,
+    singleQueryParam
+} from "@/lib/common/query-params";
 import { CollectionSort } from "@/lib/services/collection-browsing";
 import {
     BrowseCollectionsPage,
@@ -16,23 +19,15 @@ async function browseCollections(
     req: ApiRequest,
     res: ApiResponse<Partial<BrowseCollectionsPage>>
 ) {
-    const limit = single(req.query.limit);
     const collectionService = new CollectionService(req.session.user.id);
     const page = await collectionService.browseCollections({
         // The service rejects any sort it does not know
-        sort: single(req.query.sort) as CollectionSort | undefined,
-        seed: single(req.query.seed),
-        cursor: single(req.query.cursor),
-        limit: limit === undefined ? undefined : Number(limit)
+        sort: singleQueryParam(req.query.sort) as CollectionSort | undefined,
+        seed: singleQueryParam(req.query.seed),
+        cursor: singleQueryParam(req.query.cursor),
+        limit: numberQueryParam(req.query.limit)
     });
     res.status(200).json({ status: "ok", ...page });
-}
-
-function single(value: string | string[] | undefined) {
-    if (Array.isArray(value)) {
-        throw new InvalidArgumentError("Repeated query parameter");
-    }
-    return value || undefined;
 }
 
 async function createCollection(

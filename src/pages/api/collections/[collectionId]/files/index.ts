@@ -1,6 +1,14 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
 import { InvalidArgumentError } from "@/lib/common/errors";
-import { CollectionService } from "@/lib/services/collection.service";
+import {
+    numberQueryParam,
+    singleQueryParam
+} from "@/lib/common/query-params";
+import {
+    BrowseFilesPage,
+    CollectionService,
+    FileSort
+} from "@/lib/services/collection.service";
 import { CollectionFileDto } from "@/lib/types/collection-file-dto";
 import {
     CollectionFileFormData,
@@ -49,14 +57,20 @@ async function get(req: ApiRequest, res: ApiResponse) {
     res.status(404).json({ status: "error", error: "Not found" });
 }
 
+/** One page of the collection's files: ?sort=newest|oldest|name&cursor=&limit= */
 async function handleGetCollectionFiles(
     req: ApiRequest,
-    res: ApiResponse<{ files?: CollectionFileDto[] }>,
+    res: ApiResponse<Partial<BrowseFilesPage>>,
     collectionId: string
 ) {
     const service = new CollectionService(req.session.user.id);
-    const files = await service.getFiles(collectionId);
-    res.status(200).json({ status: "ok", files });
+    const page = await service.browseFiles(collectionId, {
+        // The service rejects any sort it does not know
+        sort: singleQueryParam(req.query.sort) as FileSort | undefined,
+        cursor: singleQueryParam(req.query.cursor),
+        limit: numberQueryParam(req.query.limit)
+    });
+    res.status(200).json({ status: "ok", ...page });
 }
 
 async function handleGetThumbnail(

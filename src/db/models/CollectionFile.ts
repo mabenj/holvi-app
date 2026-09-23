@@ -72,8 +72,13 @@ export class CollectionFile extends Model<
             },
             {
                 sequelize,
-                // Collection summaries read each collection's first files by name
-                indexes: [{ fields: ["CollectionId", "name", "id"] }]
+                indexes: [
+                    // Collection summaries read each collection's first files
+                    // by name, and a collection page pages through them by name
+                    { fields: ["CollectionId", "name", "id"] },
+                    // A collection page pages through its files by date
+                    { fields: ["CollectionId", "createdAt", "id"] }
+                ]
             }
         );
     }

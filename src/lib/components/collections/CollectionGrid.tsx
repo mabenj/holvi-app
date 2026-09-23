@@ -1,46 +1,33 @@
-import { GridDensity, useGridDensity } from "@/lib/hooks/useGridDensity";
 import { CollectionSummary } from "@/lib/types/collection-summary";
 import { Box, SimpleGrid, Skeleton } from "@chakra-ui/react";
-import { useEffect, useState } from "react";
+import { useLayoutEffect } from "react";
+import { useGridLayout } from "../grid/useGridLayout";
 import CollectionCard from "./CollectionCard";
-
-/** Columns per breakpoint (base, sm, md, lg, xl, 2xl) at the default density of 3 */
-const COLUMNS = [3, 3, 4, 6, 8, 9];
-/** Tile heights per breakpoint (base, sm, md, lg and up) at the default density */
-const TILE_HEIGHTS_REM = [8, 10, 11, 11];
-
-/** The columns and tile heights of today's grid, scaled by the grid density */
-function gridLayout(density: GridDensity) {
-    const scale = density / 3;
-    return {
-        columns: COLUMNS.map((count) => Math.max(1, Math.round(count * scale))),
-        tileHeights: TILE_HEIGHTS_REM.map(
-            (rem) => `${Math.round((rem / scale) * 10) / 10}rem`
-        )
-    };
-}
 
 interface CollectionGridProps {
     collections: CollectionSummary[];
     /** Skeleton tiles after the collections, where nothing is known yet */
     skeletons?: number;
+    /** Called once the tiles are in the page and before it paints, e.g. to restore the scroll position */
+    onLaidOut?: () => void;
 }
 
 /** The tight collections grid: hairline gaps and cover-cropped tiles */
 export default function CollectionGrid({
     collections,
-    skeletons = 0
+    skeletons = 0,
+    onLaidOut
 }: CollectionGridProps) {
-    const [density] = useGridDensity();
-    // The stored density is only known after hydration; laying out before
-    // that would make the grid jump
-    const [mounted, setMounted] = useState(false);
-    useEffect(() => setMounted(true), []);
-    if (!mounted) {
+    const layout = useGridLayout();
+    const laidOut = layout !== null;
+    useLayoutEffect(() => {
+        if (laidOut) onLaidOut?.();
+    }, [laidOut, onLaidOut]);
+    if (!layout) {
         return null;
     }
 
-    const { columns, tileHeights } = gridLayout(density);
+    const { columns, tileHeights } = layout;
     return (
         <SimpleGrid columns={columns} gap="2px">
             {collections.map((collection) => (

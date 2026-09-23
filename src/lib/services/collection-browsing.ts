@@ -5,6 +5,12 @@ import appConfig from "../common/app-config";
 import { InvalidArgumentError } from "../common/errors";
 import { getFileSrc } from "../common/utilities";
 import { CollectionSummary } from "../types/collection-summary";
+import {
+    decodeCursor,
+    encodeCursor,
+    pageLimit,
+    UUID_PATTERN
+} from "./keyset-paging";
 
 export type CollectionSort = "random";
 
@@ -23,16 +29,11 @@ export interface BrowseCollectionsPage {
     seed: string;
 }
 
-export const DEFAULT_BROWSE_LIMIT = 48;
-export const MAX_BROWSE_LIMIT = 200;
-
 const SEED_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const SHUFFLE_KEY_PATTERN = /^[0-9a-f]{32}$/;
-const UUID_PATTERN =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Where a page ends in the random order: the last collection's shuffle key and id */
-type RandomCursor = { shuffleKey: string; id: string };
+type RandomCursor = [shuffleKey: string, id: string];
 
 /**
  * One page of a user's collections as summaries, in random order: by a hash of
@@ -47,17 +48,14 @@ export async function browseCollections(
     if (sort !== "random") {
         throw new InvalidArgumentError(`Unknown sort '${sort}'`);
     }
-    const limit = query.limit ?? DEFAULT_BROWSE_LIMIT;
-    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_BROWSE_LIMIT) {
-        throw new InvalidArgumentError(
-            `Limit must be a whole number from 1 to ${MAX_BROWSE_LIMIT}`
-        );
-    }
+    const limit = pageLimit(query.limit);
     if (query.seed !== undefined && !SEED_PATTERN.test(query.seed)) {
         throw new InvalidArgumentError("Malformed seed");
     }
     const seed = query.seed ?? deriveShuffleSeed(userId, now);
-    const after = query.cursor ? decodeCursor(query.cursor) : null;
+    const after = query.cursor
+        ? decodeCursor(query.cursor, isRandomCursor)
+        : null;
 
     const db = await Database.getInstance();
     // "C" collation: hex keys compare byte by byte, the same in ORDER BY and the cursor
@@ -76,8 +74,8 @@ export async function browseCollections(
         {
             userId,
             seed,
-            afterKey: after?.shuffleKey,
-            afterId: after?.id,
+            afterKey: after?.[0],
+            afterId: after?.[1],
             // One extra row tells whether another page follows
             limit: limit + 1
         }
@@ -87,11 +85,11 @@ export async function browseCollections(
     const last = pageRows.at(-1);
     const nextCursor =
         rows.length > limit && last
-            ? encodeCursor({ shuffleKey: last.shuffleKey, id: last.id })
+            ? encodeCursor([last.shuffleKey, last.id])
             : null;
 
     return {
-        collections: await summarize(pageRows),
+        collections: await summarizeCollections(pageRows),
         nextCursor,
         seed
     };
@@ -110,7 +108,8 @@ export function deriveShuffleSeed(userId: string, now: Date) {
         .slice(0, 16);
 }
 
-async function summarize(
+/** Summaries of the given collections, in the same order */
+export async function summarizeCollections(
     collections: { id: string; name: string; createdAt: Date }[]
 ): Promise<CollectionSummary[]> {
     if (collections.length === 0) {
@@ -208,22 +207,10 @@ async function summarize(
     });
 }
 
-function encodeCursor(cursor: RandomCursor) {
-    return Buffer.from(JSON.stringify([cursor.shuffleKey, cursor.id])).toString(
-        "base64url"
+function isRandomCursor(parts: string[]): parts is RandomCursor {
+    return (
+        parts.length === 2 &&
+        SHUFFLE_KEY_PATTERN.test(parts[0]) &&
+        UUID_PATTERN.test(parts[1])
     );
-}
-
-function decodeCursor(cursor: string): RandomCursor {
-    try {
-        const [shuffleKey, id] = JSON.parse(
-            Buffer.from(cursor, "base64url").toString("utf8")
-        );
-        if (SHUFFLE_KEY_PATTERN.test(shuffleKey) && UUID_PATTERN.test(id)) {
-            return { shuffleKey, id };
-        }
-    } catch {
-        // Falls through to the error below
-    }
-    throw new InvalidArgumentError("Malformed cursor");
 }

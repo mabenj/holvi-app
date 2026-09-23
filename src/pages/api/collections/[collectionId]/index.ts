@@ -1,5 +1,6 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
 import { CollectionService } from "@/lib/services/collection.service";
+import { CollectionDetails } from "@/lib/types/collection-details";
 import { CollectionDto } from "@/lib/types/collection-dto";
 import {
     CollectionFormData,
@@ -9,7 +10,7 @@ import {
 async function getCollection(
     req: ApiRequest,
     res: ApiResponse<{
-        collection?: CollectionDto;
+        collection?: CollectionDetails;
     }>
 ) {
     const { collectionId } = req.query as { collectionId: string };

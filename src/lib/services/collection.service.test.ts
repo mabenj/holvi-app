@@ -1,10 +1,19 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetDatabase } from "../../../test/database";
-import { addFile, createCollection, createUser } from "../../../test/fixtures";
+import {
+    addFile,
+    createCollection,
+    createUser,
+    FileMetadata
+} from "../../../test/fixtures";
+import { NotFoundError } from "../common/errors";
 import {
     BrowseCollectionsPage,
     BrowseCollectionsQuery,
-    CollectionService
+    BrowseFilesPage,
+    BrowseFilesQuery,
+    CollectionService,
+    FileSort
 } from "./collection.service";
 
 describe("CollectionService (integration)", () => {
@@ -12,41 +21,47 @@ describe("CollectionService (integration)", () => {
         await resetDatabase();
     });
 
-    it("reports a collection's creation time", async () => {
+    it("serves a collection's description, tags and Cover", async () => {
         const user = await createUser("alice");
-        const createdAt = new Date("2019-05-04T10:00:00Z");
         const holiday = await createCollection(user.id, "Holiday", {
-            createdAt
+            description: "See https://example.com",
+            tags: ["travel"]
         });
+        const cover = await addFile(
+            user.id,
+            holiday.id,
+            "a.jpg",
+            Buffer.from("a"),
+            { blurDataUrl: "data:image/png;base64,aaa" }
+        );
+        await addFile(user.id, holiday.id, "b.jpg", Buffer.from("b"));
 
         const collection = await new CollectionService(user.id).getCollection(
             holiday.id
         );
 
-        expect(collection.timestamp).toBe(createdAt.getTime());
+        expect(collection).toMatchObject({
+            id: holiday.id,
+            name: "Holiday",
+            description: "See https://example.com",
+            tags: ["travel"],
+            imageCount: 2,
+            videoCount: 0,
+            cover: {
+                thumbnailSrc: `/api/collections/${holiday.id}/files?thumbnail=${cover.id}`,
+                blurDataUrl: "data:image/png;base64,aaa"
+            }
+        });
     });
 
-    it("dates a file by its taken-at time, falling back to its creation time", async () => {
-        const user = await createUser("alice");
-        const holiday = await createCollection(user.id, "Holiday");
-        await addFile(user.id, holiday.id, "scanned.jpg", Buffer.from("a"), {
-            createdAt: new Date("2022-01-01T00:00:00Z")
-        });
-        await addFile(user.id, holiday.id, "beach.jpg", Buffer.from("b"), {
-            createdAt: new Date("2022-01-02T00:00:00Z"),
-            takenAt: new Date("2015-07-01T12:00:00Z")
-        });
+    it("does not serve another user's collection", async () => {
+        const alice = await createUser("alice");
+        const bob = await createUser("bob");
+        const bobs = await createCollection(bob.id, "Secrets");
 
-        const files = await new CollectionService(user.id).getFiles(holiday.id);
-
-        expect(
-            Object.fromEntries(
-                files.map((file) => [file.name, new Date(file.timestamp)])
-            )
-        ).toEqual({
-            "scanned.jpg": new Date("2022-01-01T00:00:00Z"),
-            "beach.jpg": new Date("2015-07-01T12:00:00Z")
-        });
+        await expect(
+            new CollectionService(alice.id).getCollection(bobs.id)
+        ).rejects.toThrow(NotFoundError);
     });
 });
 
@@ -179,9 +194,11 @@ describe("Browsing collections (integration)", () => {
             });
         }
         const fileIds = Object.fromEntries(
-            (await new CollectionService(user.id).getFiles(trip.id)).map(
-                (file) => [file.name, file.id]
-            )
+            (
+                await new CollectionService(user.id).browseFiles(trip.id, {
+                    limit: 100
+                })
+            ).files.map((file) => [file.name, file.id])
         );
         const thumbnail = (name: string) =>
             `/api/collections/${trip.id}/files?thumbnail=${fileIds[name]}`;
@@ -270,6 +287,297 @@ describe("Browsing collections (integration)", () => {
         ).rejects.toThrow("Malformed cursor");
     });
 });
+
+describe("Browsing a collection's files (integration)", () => {
+    beforeEach(async () => {
+        await resetDatabase();
+    });
+
+    const day = (d: number, hour = 0) => new Date(Date.UTC(2022, 0, d, hour));
+
+    /**
+     * Files dated by taken-at time or else creation time, three of them on the
+     * same date. Returns the names of the three, ordered by id.
+     */
+    async function createDatedFiles(userId: string, collectionId: string) {
+        const files: [string, FileMetadata][] = [
+            // Dated by taken-at time, although created last
+            ["beach.jpg", { createdAt: day(20), takenAt: day(1) }],
+            // No taken-at time: dated by creation time
+            ["Scan.jpg", { createdAt: day(5) }],
+            // Three files on the same date: only the id orders them
+            ["tie-1.jpg", { createdAt: day(10) }],
+            ["tie-2.jpg", { createdAt: day(12), takenAt: day(10) }],
+            ["tie-3.jpg", { createdAt: day(10) }],
+            ["apple.mp4", { createdAt: day(15), mimeType: "video/mp4" }]
+        ];
+        const ids: Record<string, string> = {};
+        for (const [name, metadata] of files) {
+            const file = await addFile(
+                userId,
+                collectionId,
+                name,
+                Buffer.from(name),
+                metadata
+            );
+            ids[name] = file.id;
+        }
+        return ["tie-1.jpg", "tie-2.jpg", "tie-3.jpg"].sort((a, b) =>
+            compareUuids(ids[a], ids[b])
+        );
+    }
+
+    it("orders files newest first by default, dated by taken-at time or else creation time, then by id", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const tiedByIdAscending = await createDatedFiles(user.id, trip.id);
+
+        const names = await browseAllFileNames(
+            new CollectionService(user.id),
+            trip.id,
+            {}
+        );
+
+        expect(names).toEqual([
+            "apple.mp4",
+            ...[...tiedByIdAscending].reverse(),
+            "Scan.jpg",
+            "beach.jpg"
+        ]);
+    });
+
+    it("orders files oldest first, then by id", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const tiedByIdAscending = await createDatedFiles(user.id, trip.id);
+
+        const names = await browseAllFileNames(
+            new CollectionService(user.id),
+            trip.id,
+            { sort: "oldest" }
+        );
+
+        expect(names).toEqual([
+            "beach.jpg",
+            "Scan.jpg",
+            ...tiedByIdAscending,
+            "apple.mp4"
+        ]);
+    });
+
+    it("orders files by name ignoring case, then by id", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        await createDatedFiles(user.id, trip.id);
+        const sameName = [
+            await addFile(user.id, trip.id, "same.jpg", Buffer.from("1")),
+            await addFile(user.id, trip.id, "SAME.jpg", Buffer.from("2"))
+        ]
+            .map((file) => file.id)
+            .sort(compareUuids);
+
+        const files = await browseAllFiles(
+            new CollectionService(user.id),
+            trip.id,
+            { sort: "name" }
+        );
+
+        expect(files.map((file) => file.name.toLowerCase())).toEqual([
+            "apple.mp4",
+            "beach.jpg",
+            "same.jpg",
+            "same.jpg",
+            "scan.jpg",
+            "tie-1.jpg",
+            "tie-2.jpg",
+            "tie-3.jpg"
+        ]);
+        expect(files.slice(2, 4).map((file) => file.id)).toEqual(sameName);
+    });
+
+    it("pages concatenated through cursors contain every file exactly once, for every sort", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const names: string[] = [];
+        for (let i = 0; i < 13; i++) {
+            const name = `photo-${i}.jpg`;
+            names.push(name);
+            // Pairs of files share a date, so pages end inside ties
+            await addFile(user.id, trip.id, name, Buffer.from(name), {
+                createdAt: day(1 + Math.floor(i / 2))
+            });
+        }
+        const service = new CollectionService(user.id);
+
+        for (const sort of ["newest", "oldest", "name"] as const) {
+            const pages = await browseAllFilePages(service, trip.id, {
+                sort,
+                limit: 3
+            });
+            const whole = await service.browseFiles(trip.id, {
+                sort,
+                limit: 100
+            });
+
+            expect(pages.map((page) => page.files.length)).toEqual([
+                3, 3, 3, 3, 1
+            ]);
+            expect(pages.at(-1)!.nextCursor).toBeNull();
+            expect(
+                pages.flatMap((page) => page.files.map((file) => file.name))
+            ).toEqual(whole.files.map((file) => file.name));
+            expect(whole.files.map((file) => file.name).sort()).toEqual(
+                [...names].sort()
+            );
+        }
+    });
+
+    it("summarises a file with its date, blur placeholder and sources, and a video with its playback source", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const photo = await addFile(
+            user.id,
+            trip.id,
+            "photo.jpg",
+            Buffer.from("p"),
+            {
+                createdAt: day(2),
+                takenAt: day(1, 12),
+                width: 4000,
+                height: 3000,
+                thumbnailWidth: 400,
+                thumbnailHeight: 300,
+                blurDataUrl: "data:image/png;base64,ppp",
+                tags: ["sunset"]
+            }
+        );
+        const video = await addFile(
+            user.id,
+            trip.id,
+            "clip.mp4",
+            Buffer.from("v"),
+            { mimeType: "video/mp4", createdAt: day(3), durationInSeconds: 42 }
+        );
+
+        const { files } = await new CollectionService(user.id).browseFiles(
+            trip.id,
+            { sort: "name" }
+        );
+
+        expect(files).toEqual([
+            expect.objectContaining({
+                id: video.id,
+                name: "clip.mp4",
+                mimeType: "video/mp4",
+                timestamp: day(3).getTime(),
+                durationInSeconds: 42,
+                thumbnailSrc: `/api/collections/${trip.id}/files?thumbnail=${video.id}`,
+                // The original, until Renditions exist
+                playbackSrc: `/api/collections/${trip.id}/files?video=${video.id}`
+            }),
+            expect.objectContaining({
+                id: photo.id,
+                collectionId: trip.id,
+                name: "photo.jpg",
+                mimeType: "image/jpeg",
+                timestamp: day(1, 12).getTime(),
+                src: `/api/collections/${trip.id}/files?image=${photo.id}`,
+                thumbnailSrc: `/api/collections/${trip.id}/files?thumbnail=${photo.id}`,
+                width: 4000,
+                height: 3000,
+                thumbnailWidth: 400,
+                thumbnailHeight: 300,
+                blurDataUrl: "data:image/png;base64,ppp",
+                tags: ["sunset"]
+            })
+        ]);
+        expect(files[1]).not.toHaveProperty("playbackSrc");
+    });
+
+    it("does not list the files of another user's collection", async () => {
+        const alice = await createUser("alice");
+        const bob = await createUser("bob");
+        const bobs = await createCollection(bob.id, "Secrets");
+        await addFile(bob.id, bobs.id, "secret.jpg", Buffer.from("s"));
+
+        await expect(
+            new CollectionService(alice.id).browseFiles(bobs.id)
+        ).rejects.toThrow(NotFoundError);
+    });
+
+    it("rejects a malformed cursor, an unknown sort and another sort's cursor", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        for (const name of ["a.jpg", "b.jpg"]) {
+            await addFile(user.id, trip.id, name, Buffer.from(name));
+        }
+        const service = new CollectionService(user.id);
+        const byName = await service.browseFiles(trip.id, {
+            sort: "name",
+            limit: 1
+        });
+
+        await expect(
+            service.browseFiles(trip.id, { cursor: "not-a-cursor" })
+        ).rejects.toThrow("Malformed cursor");
+        await expect(
+            service.browseFiles(trip.id, { sort: "size" as FileSort })
+        ).rejects.toThrow("Unknown sort");
+        await expect(
+            service.browseFiles(trip.id, {
+                sort: "newest",
+                cursor: byName.nextCursor!
+            })
+        ).rejects.toThrow("Malformed cursor");
+    });
+});
+
+/** Postgres orders uuids by their bytes, which is the order of their lower-case text */
+function compareUuids(a: string, b: string) {
+    const [x, y] = [a.toLowerCase(), b.toLowerCase()];
+    return x < y ? -1 : x > y ? 1 : 0;
+}
+
+/** Every page of a collection's files, following the cursors until the last page */
+async function browseAllFilePages(
+    service: CollectionService,
+    collectionId: string,
+    query: BrowseFilesQuery
+) {
+    const pages: BrowseFilesPage[] = [];
+    let cursor: string | undefined = query.cursor;
+    do {
+        const page = await service.browseFiles(collectionId, {
+            ...query,
+            cursor
+        });
+        pages.push(page);
+        cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    return pages;
+}
+
+/** Every file of a collection in the order a browse returns them, two to a page */
+async function browseAllFiles(
+    service: CollectionService,
+    collectionId: string,
+    query: BrowseFilesQuery
+) {
+    const pages = await browseAllFilePages(service, collectionId, {
+        limit: 2,
+        ...query
+    });
+    return pages.flatMap((page) => page.files);
+}
+
+async function browseAllFileNames(
+    service: CollectionService,
+    collectionId: string,
+    query: BrowseFilesQuery
+) {
+    const files = await browseAllFiles(service, collectionId, query);
+    return files.map((file) => file.name);
+}
 
 async function createCollections(userId: string, count: number) {
     for (let i = 0; i < count; i++) {

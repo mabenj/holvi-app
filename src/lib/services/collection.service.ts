@@ -11,16 +11,21 @@ import { CollectionDto } from "../types/collection-dto";
 import { CollectionFileDto } from "../types/collection-file-dto";
 import { CollectionFileFormData } from "../validators/collection-file.validator";
 import { CollectionFormData } from "../validators/collection.validator";
+import { CollectionDetails } from "../types/collection-details";
 import {
   BrowseCollectionsPage,
   BrowseCollectionsQuery,
   browseCollections,
+  summarizeCollections,
 } from "./collection-browsing";
+import { BrowseFilesPage, BrowseFilesQuery, browseFiles } from "./file-browsing";
+import { UUID_PATTERN } from "./keyset-paging";
 
 export type {
   BrowseCollectionsPage,
   BrowseCollectionsQuery,
 } from "./collection-browsing";
+export type { BrowseFilesPage, BrowseFilesQuery, FileSort } from "./file-browsing";
 
 interface CreateResult {
   collection?: CollectionDto;
@@ -62,6 +67,15 @@ export class CollectionService {
     query: BrowseCollectionsQuery = {}
   ): Promise<BrowseCollectionsPage> {
     return browseCollections(this.userId, this.clock(), query);
+  }
+
+  /** One page of the files of one of the user's collections, newest first unless another sort is asked for */
+  async browseFiles(
+    collectionId: string,
+    query: BrowseFilesQuery = {}
+  ): Promise<BrowseFilesPage> {
+    await this.throwIfNotUserCollection(collectionId);
+    return browseFiles(collectionId, query);
   }
 
   async getAllFiles(): Promise<CollectionFileDto[]> {
@@ -146,16 +160,19 @@ export class CollectionService {
     }
   }
 
-  async getCollection(collectionId: string): Promise<CollectionDto> {
+  /** One of the user's collections as its page shows it: its summary and description */
+  async getCollection(collectionId: string): Promise<CollectionDetails> {
     const db = await Database.getInstance();
     await this.throwIfNotUserCollection(collectionId);
     const collection = await db.models.Collection.findByPk(collectionId, {
-      include: db.models.Tag,
+      attributes: ["id", "name", "description", "createdAt"],
+      raw: true,
     });
     if (!collection) {
       throw new NotFoundError(`Collection '${collectionId}' not found`);
     }
-    return collection.toDto();
+    const [summary] = await summarizeCollections([collection]);
+    return { ...summary, description: collection.description ?? "" };
   }
 
   async multiDelete(idsToDelete: string[]) {
@@ -228,18 +245,6 @@ export class CollectionService {
       await transaction.rollback();
       throw new HolviError(`Error deleting file '${fileId}'`, error);
     }
-  }
-
-  async getFiles(collectionId: string): Promise<CollectionFileDto[]> {
-    const db = await Database.getInstance();
-    await this.throwIfNotUserCollection(collectionId);
-    const collectionFiles = await db.models.CollectionFile.findAll({
-      where: {
-        CollectionId: collectionId,
-      },
-      include: db.models.Tag,
-    });
-    return collectionFiles?.map((file) => file.toDto()) || [];
   }
 
   async getVideoStream(
@@ -597,6 +602,9 @@ export class CollectionService {
   }
 
   private async throwIfNotUserCollection(collectionId: string) {
+    if (!UUID_PATTERN.test(collectionId)) {
+      throw new NotFoundError(`Collection not found '${collectionId}'`);
+    }
     const db = await Database.getInstance();
     const collection = await db.models.Collection.findByPk(collectionId, {
       attributes: ["UserId"],

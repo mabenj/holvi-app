@@ -19,15 +19,19 @@ const INITIAL_STATE: CollectionsBrowseState = {
 };
 
 /**
- * The Collections tab's loaded pages and the Shuffle seed they were fetched with.
- * Kept in app memory only, so a full reload starts from the current Shuffle
- * period's order, while moving between screens keeps the same order.
+ * The Collections tab's loaded pages, the Shuffle seed they were fetched with
+ * and where the grid was scrolled to. The tab has one query so far (random
+ * order with this seed), so these are that query's cached pages. Kept in app
+ * memory only, so a full reload starts from the current Shuffle period's order,
+ * while going back from a collection returns to the same pages and place.
  */
 class CollectionsBrowse {
     private state = INITIAL_STATE;
     /** Sent with every page after the first, so one scroll keeps one order */
     private seed: string | undefined;
     private request: AbortController | null = null;
+    /** Where the grid was scrolled to when the user left it, until it is restored */
+    private scrollPosition: number | null = null;
     private readonly listeners = new Set<() => void>();
 
     subscribe = (listener: () => void) => {
@@ -45,6 +49,23 @@ class CollectionsBrowse {
         const last = this.state.pages.at(-1);
         return !last || last.nextCursor !== null;
     }
+
+    /** Fetches the first page, unless pages are loaded already, e.g. when coming back to the tab */
+    loadFirstPage = () => {
+        if (this.state.pages.length === 0) this.loadMore();
+    };
+
+    /** Remembers where the grid is scrolled to, as the user leaves it */
+    saveScrollPosition = (scrollY: number) => {
+        this.scrollPosition = scrollY;
+    };
+
+    /** Where to scroll back to once the loaded pages are shown again, if anywhere; asked once */
+    takeScrollPosition = () => {
+        const position = this.scrollPosition;
+        this.scrollPosition = null;
+        return this.state.pages.length > 0 ? position : null;
+    };
 
     /** Fetches the next page, unless one is on its way, none is left or the last attempt failed */
     loadMore = () => {
@@ -68,6 +89,7 @@ class CollectionsBrowse {
     refresh = () => {
         this.abort();
         this.seed = undefined;
+        this.scrollPosition = null;
         this.update({ refreshing: true });
         void this.fetchPage(undefined, (page) => [page]);
     };
@@ -133,6 +155,9 @@ export function useCollectionsBrowse(userId: string) {
         ...state,
         hasMore: browse.hasMore,
         loadMore: browse.loadMore,
+        loadFirstPage: browse.loadFirstPage,
+        saveScrollPosition: browse.saveScrollPosition,
+        takeScrollPosition: browse.takeScrollPosition,
         retry: browse.retry,
         refresh: browse.refresh
     };
