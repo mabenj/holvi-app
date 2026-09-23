@@ -1,7 +1,7 @@
 import Database from "@/db/Database";
 import { Collection } from "@/db/models/Collection";
 import { IncomingMessage } from "http";
-import { Op } from "sequelize";
+import { Op, Transaction } from "sequelize";
 import { Readable } from "stream";
 import { Clock, realClock } from "../common/clock";
 import { HolviError, NotFoundError } from "../common/errors";
@@ -341,9 +341,10 @@ export class CollectionService {
     errors: string[];
   }> {
     const db = await Database.getInstance();
-    const transaction = await db.transaction();
     await this.throwIfNotUserCollection(collectionId);
     const fileSystem = new UserFileSystem(this.userId);
+    // Opened only once the files have arrived, so a long upload holds no connection
+    let transaction: Transaction | undefined;
     try {
       let { files, errors } = await fileSystem.uploadFilesToTempDir(req);
 
@@ -375,6 +376,7 @@ export class CollectionService {
         );
       }
 
+      transaction = await db.transaction();
       const insertedRows = await db.models.CollectionFile.bulkCreate(
         files.map((file) => ({
           id: file.id,
@@ -413,7 +415,7 @@ export class CollectionService {
         errors: errors,
       };
     } catch (error) {
-      transaction.rollback();
+      await transaction?.rollback().catch(() => undefined);
       throw new HolviError(
         `Error uploading files to collection '${collectionId}'`,
         error
@@ -428,13 +430,14 @@ export class CollectionService {
     collectionData: CollectionFormData
   ): Promise<CreateResult> {
     const db = await Database.getInstance();
-    const transaction = await db.transaction();
     await this.throwIfNotUserCollection(collectionId);
 
     if (await this.nameTaken(collectionData.name, collectionId)) {
       return { nameError: "Collection name already exists" };
     }
 
+    // Opened only after the checks, so a rejection never holds a connection
+    const transaction = await db.transaction();
     try {
       const collectionInDb = await db.models.Collection.findByPk(collectionId, {
         include: db.models.CollectionFile,
@@ -465,6 +468,7 @@ export class CollectionService {
             [Op.notIn]: collectionData.tags,
           },
         },
+        transaction,
       });
       await db.models.CollectionTag.bulkCreate(
         collectionData.tags.map((tag) => ({
@@ -504,9 +508,9 @@ export class CollectionService {
 
   async deleteCollection(collectionId: string) {
     const db = await Database.getInstance();
-    const transaction = await db.transaction();
     await this.throwIfNotUserCollection(collectionId);
 
+    const transaction = await db.transaction();
     try {
       await db.models.Collection.destroy({
         where: {
