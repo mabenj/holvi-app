@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import {
     CollectionsFilter,
     CollectionsPage,
@@ -7,6 +7,7 @@ import {
     NO_COLLECTIONS_FILTER
 } from "../client/collections";
 import { getErrorMessage } from "../common/utilities";
+import type { CollectionSummary } from "../types/collection-summary";
 
 export interface CollectionsBrowseState {
     /** What the tab shows: the collections that match it */
@@ -18,6 +19,12 @@ export interface CollectionsBrowseState {
     /** A refresh is fetching the new first page; the old pages stay until it arrives */
     refreshing: boolean;
     error: string | null;
+    /**
+     * Collections the user just uploaded into or created, most recent first.
+     * The tab shows them before its pages, whatever the filter, and not again
+     * within the pages, until the user leaves it.
+     */
+    featured: CollectionSummary[];
 }
 
 const INITIAL_STATE: CollectionsBrowseState = {
@@ -25,7 +32,8 @@ const INITIAL_STATE: CollectionsBrowseState = {
     pages: [],
     loading: false,
     refreshing: false,
-    error: null
+    error: null,
+    featured: []
 };
 
 /** Pages of this many other filters stay cached, the most recently shown ones */
@@ -124,6 +132,53 @@ class CollectionsBrowse {
         void this.fetchPage(cursor, (page) => [...this.state.pages, page]);
     };
 
+    /** Shows the collection first on the tab until the user next leaves it */
+    feature = (collection: CollectionSummary) => {
+        this.update({
+            featured: [
+                collection,
+                ...this.state.featured.filter((c) => c.id !== collection.id)
+            ]
+        });
+    };
+
+    /** Stops showing the featured collections first, as the user leaves the tab */
+    endVisit = () => {
+        if (this.state.featured.length > 0) this.update({ featured: [] });
+    };
+
+    /** Shows the collection's new summary wherever it is loaded, under every filter, e.g. after an edit */
+    replace = (collection: CollectionSummary) => {
+        this.changeCollections((collections) =>
+            collections.map((c) => (c.id === collection.id ? collection : c))
+        );
+    };
+
+    /** Takes a deleted collection out of every filter's loaded pages */
+    remove = (collectionId: string) => {
+        this.changeCollections((collections) =>
+            collections.filter((c) => c.id !== collectionId)
+        );
+    };
+
+    /** Applies a change to the collections of the current pages, every cached filter's pages and the featured ones */
+    private changeCollections(
+        change: (collections: CollectionSummary[]) => CollectionSummary[]
+    ) {
+        const changePages = (pages: CollectionsPage[]) =>
+            pages.map((page) => ({
+                ...page,
+                collections: change(page.collections)
+            }));
+        this.cachedPages.forEach((pages, key) =>
+            this.cachedPages.set(key, changePages(pages))
+        );
+        this.update({
+            pages: changePages(this.state.pages),
+            featured: change(this.state.featured)
+        });
+    }
+
     /** Tries the failed page again */
     retry = () => {
         this.update({ error: null });
@@ -194,6 +249,38 @@ function browseFor(userId: string) {
     return current.browse;
 }
 
+/** Shows the collection first on the Collections tab until the user next leaves it */
+export function featureCollection(
+    userId: string,
+    collection: CollectionSummary
+) {
+    browseFor(userId).feature(collection);
+}
+
+/** Shows the collection's new summary on the Collections tab */
+export function replaceCollection(
+    userId: string,
+    collection: CollectionSummary
+) {
+    browseFor(userId).replace(collection);
+}
+
+/** Takes a deleted collection off the Collections tab */
+export function removeCollection(userId: string, collectionId: string) {
+    browseFor(userId).remove(collectionId);
+}
+
+/** The featured collections, then the loaded pages' collections that are not featured */
+function collectionsToShow({ featured, pages }: CollectionsBrowseState) {
+    const featuredIds = new Set(featured.map((c) => c.id));
+    return [
+        ...featured,
+        ...pages.flatMap((page) =>
+            page.collections.filter((c) => !featuredIds.has(c.id))
+        )
+    ];
+}
+
 /** The user's collections that match the tab's filter, in random order, a page at a time */
 export function useCollectionsBrowse(userId: string) {
     const browse = browseFor(userId);
@@ -202,8 +289,11 @@ export function useCollectionsBrowse(userId: string) {
         browse.getSnapshot,
         browse.getServerSnapshot
     );
+    const collections = useMemo(() => collectionsToShow(state), [state]);
     return {
         ...state,
+        collections,
+        endVisit: browse.endVisit,
         hasMore: browse.hasMore,
         loadMore: browse.loadMore,
         loadFirstPage: browse.loadFirstPage,

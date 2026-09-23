@@ -36,6 +36,7 @@ async function updateCollection(
         await collectionService.updateCollection(collectionId, req.body);
     if (nameError) {
         res.status(400).json({ status: "error", error: nameError, nameError });
+        return;
     }
     res.status(200).json({ status: "ok", collection: updated });
 }
