@@ -184,6 +184,34 @@ export async function deleteCollection(collectionId: string) {
     );
 }
 
+/**
+ * Deletes a selection of the user's collections, or of their files, all at
+ * once. Ids that are not the user's are left alone.
+ */
+export async function deleteSelection(ids: string[]) {
+    await sendJson("/api/multiDelete", "POST", ids, "Could not delete them");
+}
+
+/** What the file editor saves */
+export interface FileFields {
+    name: string;
+    tags: string[];
+}
+
+/** Saves a file's name and tags */
+export async function updateFile(
+    collectionId: string,
+    fileId: string,
+    fields: FileFields
+) {
+    await sendJson(
+        `${collectionUrl(collectionId)}/files`,
+        "POST",
+        { id: fileId, ...fields },
+        "Could not save the file"
+    );
+}
+
 /** Existing tags that contain the query, for tag inputs */
 export async function fetchTagSuggestions(
     query: string,

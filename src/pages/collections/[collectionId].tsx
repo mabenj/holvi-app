@@ -19,6 +19,7 @@ import FileSortSelect from "@/lib/components/collection-page/FileSortSelect";
 import FileTagFilter from "@/lib/components/collection-page/FileTagFilter";
 import UploadStatus from "@/lib/components/collection-page/UploadStatus";
 import CollectionEditor from "@/lib/components/collections/CollectionEditor";
+import FileSelectionBar from "@/lib/components/files/FileSelectionBar";
 import FileLightbox from "@/lib/components/lightbox/FileLightbox";
 import ConfirmationSurface from "@/lib/components/surfaces/ConfirmationSurface";
 import { useCollectionFiles } from "@/lib/hooks/useCollectionFiles";
@@ -29,9 +30,11 @@ import {
 import { useFileDrop } from "@/lib/hooks/useFileDrop";
 import { useLightboxHistory } from "@/lib/hooks/useLightboxHistory";
 import { useNextPageSentinel } from "@/lib/hooks/useNextPageSentinel";
+import { useSelection } from "@/lib/hooks/useSelection";
 import { isUploading, startUpload, useUpload } from "@/lib/hooks/useUpload";
 import { CollectionDetails as Collection } from "@/lib/types/collection-details";
 import { FileSort } from "@/lib/types/file-sort";
+import { FileSummary } from "@/lib/types/file-summary";
 import { Box, Button, EmptyState, Flex, Text, VStack } from "@chakra-ui/react";
 import { mdiImagePlusOutline, mdiTagOffOutline, mdiUpload } from "@mdi/js";
 import Icon from "@mdi/react";
@@ -76,10 +79,40 @@ function CollectionScreen({
         { revalidateOnFocus: false }
     );
 
-    const [sort, setSort] = useState<FileSort>("newest");
-    const [tags, setTags] = useState<string[]>([]);
-    const { files, pages, loading, error, hasMore, loadMore, reload, retry } =
-        useCollectionFiles(collectionId, sort, tags);
+    const [sort, changeSort] = useState<FileSort>("newest");
+    const [tags, changeTags] = useState<string[]>([]);
+    const {
+        files,
+        pages,
+        loading,
+        error,
+        hasMore,
+        loadMore,
+        reload,
+        changeFiles,
+        retry
+    } = useCollectionFiles(collectionId, sort, tags);
+    const selection = useSelection();
+    // Another sort or tags loads the files afresh, so a selection ends
+    const setSort = (sort: FileSort) => {
+        selection.exit();
+        changeSort(sort);
+    };
+    const setTags = (tags: string[]) => {
+        selection.exit();
+        changeTags(tags);
+    };
+    // Files whose tags changed may no longer match the tag filter
+    const changeTaggedFiles = (
+        change: (files: FileSummary[]) => FileSummary[]
+    ) => (tags.length > 0 ? reload() : changeFiles(change));
+
+    // Deleting or renaming files can change the counts and the Cover, here
+    // and on the Collections tab
+    const refreshCollection = async () => {
+        const updated = await refetchCollection();
+        if (updated) replaceCollection(userId, updated);
+    };
 
     const { upload, dismiss } = useUpload(collectionId);
     const uploadFiles = useCallback(
@@ -152,6 +185,40 @@ function CollectionScreen({
                           onClick: () => picker.current?.click()
                       }
                     : undefined
+            }
+            contextualBar={
+                selection.selecting ? (
+                    <FileSelectionBar
+                        selection={selection}
+                        selected={files.filter((file) =>
+                            selection.isSelected(file.id)
+                        )}
+                        collectionId={collectionId}
+                        onDeleted={(ids) => {
+                            changeFiles((loaded) =>
+                                loaded.filter((file) => !ids.includes(file.id))
+                            );
+                            void refreshCollection();
+                        }}
+                        onEdited={(id, fields) => {
+                            changeTaggedFiles((loaded) =>
+                                loaded.map((file) =>
+                                    file.id === id ? { ...file, ...fields } : file
+                                )
+                            );
+                            void refreshCollection();
+                        }}
+                        onTagged={(tagsById) =>
+                            changeTaggedFiles((loaded) =>
+                                loaded.map((file) =>
+                                    tagsById[file.id]
+                                        ? { ...file, tags: tagsById[file.id] }
+                                        : file
+                                )
+                            )
+                        }
+                    />
+                ) : undefined
             }>
             <CollectionHero
                 collection={collection ?? null}
@@ -199,6 +266,7 @@ function CollectionScreen({
                             files={files}
                             skeletons={skeletons}
                             onOpen={lightbox.open}
+                            selection={selection}
                         />
                     )}
                     {error && (

@@ -5,8 +5,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { resetDatabase } from "../../../test/database";
 import {
     addFile,
+    addThumbnail,
     createCollection,
     createUser,
+    encryptedFilePath,
     FileMetadata
 } from "../../../test/fixtures";
 import { pngImage, uploadRequest } from "../../../test/upload-fixtures";
@@ -878,6 +880,123 @@ describe("Deleting collections (integration)", () => {
         );
         expect(existsSync(path.join(appConfig.dataDir, user.id, trip.id))).toBe(
             false
+        );
+    });
+});
+
+describe("Editing files (integration)", () => {
+    beforeEach(async () => {
+        await resetDatabase();
+    });
+
+    it("changes a file's name and tags", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const file = await addFile(user.id, trip.id, "a.jpg", Buffer.from("a"), {
+            tags: ["blurry", "sunset"]
+        });
+        const service = new CollectionService(user.id);
+
+        await service.updateFile(trip.id, {
+            id: file.id,
+            name: "Sunset.jpg",
+            tags: ["sunset", "favourite"]
+        });
+
+        const [edited] = await browseAllFiles(service, trip.id, {});
+        expect(edited.name).toBe("Sunset.jpg");
+        expect([...edited.tags].sort()).toEqual(["favourite", "sunset"]);
+    });
+
+    it("does not edit another user's file, even through one of the user's own collections", async () => {
+        const alice = await createUser("alice");
+        const bob = await createUser("bob");
+        const alices = await createCollection(alice.id, "Holiday");
+        const bobs = await createCollection(bob.id, "Secrets");
+        const other = await addFile(bob.id, bobs.id, "b.jpg", Buffer.from("b"));
+        const service = new CollectionService(alice.id);
+
+        for (const collectionId of [alices.id, bobs.id]) {
+            await expect(
+                service.updateFile(collectionId, {
+                    id: other.id,
+                    name: "Mine.jpg",
+                    tags: ["hacked"]
+                })
+            ).rejects.toThrow(NotFoundError);
+        }
+
+        const files = await browseAllFiles(
+            new CollectionService(bob.id),
+            bobs.id,
+            {}
+        );
+        expect(files.map((f) => [f.name, f.tags])).toEqual([["b.jpg", []]]);
+    });
+});
+
+describe("Deleting a selection (integration)", () => {
+    beforeEach(async () => {
+        await resetDatabase();
+    });
+
+    /** A file with its thumbnail, as uploads store them */
+    async function addFileWithThumbnail(
+        userId: string,
+        collectionId: string,
+        name: string
+    ) {
+        const file = await addFile(userId, collectionId, name, Buffer.from(name));
+        await addThumbnail(userId, collectionId, file.id, Buffer.from(name));
+        return file;
+    }
+
+    it("deletes every selected collection, and every selected file with its content", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const home = await createCollection(user.id, "Home");
+        const work = await createCollection(user.id, "Work");
+        await addFileWithThumbnail(user.id, trip.id, "t.jpg");
+        const a = await addFileWithThumbnail(user.id, home.id, "a.jpg");
+        const b = await addFileWithThumbnail(user.id, home.id, "b.jpg");
+        await addFileWithThumbnail(user.id, home.id, "c.jpg");
+        const service = new CollectionService(user.id);
+
+        await service.multiDelete([trip.id, work.id]);
+        await service.multiDelete([a.id, b.id]);
+
+        expect(await browseAllNames(service, {})).toEqual(["Home"]);
+        expect(await browseAllFileNames(service, home.id, {})).toEqual([
+            "c.jpg"
+        ]);
+        expect(existsSync(path.join(appConfig.dataDir, user.id, trip.id))).toBe(
+            false
+        );
+        expect(existsSync(encryptedFilePath(user.id, home.id, a.id))).toBe(
+            false
+        );
+    });
+
+    it("never deletes another user's collections or files", async () => {
+        const alice = await createUser("alice");
+        const bob = await createUser("bob");
+        const bobs = await createCollection(bob.id, "Secrets");
+        const other = await addFileWithThumbnail(bob.id, bobs.id, "b.jpg");
+        const mine = await createCollection(alice.id, "Holiday");
+
+        await new CollectionService(alice.id).multiDelete([
+            mine.id,
+            bobs.id,
+            other.id
+        ]);
+
+        const service = new CollectionService(bob.id);
+        expect(await browseAllNames(service, {})).toEqual(["Secrets"]);
+        expect(await browseAllFileNames(service, bobs.id, {})).toEqual([
+            "b.jpg"
+        ]);
+        expect(existsSync(encryptedFilePath(bob.id, bobs.id, other.id))).toBe(
+            true
         );
     });
 });
