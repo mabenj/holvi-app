@@ -20,6 +20,7 @@ import {
 } from "./collection-browsing";
 import { BrowseFilesPage, BrowseFilesQuery, browseFiles } from "./file-browsing";
 import { UUID_PATTERN } from "./keyset-paging";
+import { VideoProcessingService } from "./video-processing.service";
 
 export type {
   BrowseCollectionsPage,
@@ -248,27 +249,37 @@ export class CollectionService {
     }
   }
 
+  /** Streams a chunk of a video's original, or of its Rendition if it has one */
   async getVideoStream(
     collectionId: string,
     videoId: string,
-    offset: number
+    offset: number,
+    { rendition = false }: { rendition?: boolean } = {}
   ): Promise<GetStreamResult> {
     const fileInfo = await this.getCollectionFileInfo(collectionId, videoId);
     if (!fileInfo) {
       throw new NotFoundError(`File not found '${videoId}'`);
     }
+    if (rendition && !fileInfo.hasRendition) {
+      throw new NotFoundError(`Video '${videoId}' has no Rendition`);
+    }
 
     const fileSystem = new UserFileSystem(this.userId);
     const { stream, totalLengthBytes, chunkStartEnd } =
-      await fileSystem.getFileStream(collectionId, fileInfo.id, offset);
+      await fileSystem.getFileStream(collectionId, fileInfo.id, offset, {
+        rendition,
+      });
     if (!stream) {
       throw new HolviError(`Could not get file stream for file '${videoId}'`);
     }
 
     return {
       stream,
-      filename: fileInfo.label,
-      mimeType: fileInfo.mimeType,
+      // A Rendition is always an MP4, whatever the original was
+      filename: rendition
+        ? `${fileInfo.label.replace(/\.[^.]*$/, "")}.mp4`
+        : fileInfo.label,
+      mimeType: rendition ? "video/mp4" : fileInfo.mimeType,
       chunkStartEnd,
       totalLengthBytes,
     };
@@ -393,6 +404,10 @@ export class CollectionService {
           takenAt: file.takenAt,
           durationInSeconds: file.durationInSeconds,
           blurDataUrl: file.blurDataUrl,
+          // Every new video gets video processing, in the background
+          processingStatus: file.mimeType.startsWith("video")
+            ? "pending"
+            : null,
         })),
         {
           transaction,
@@ -400,6 +415,8 @@ export class CollectionService {
       );
       await fileSystem.mergeTempDirToCollectionDir(collectionId);
       await transaction.commit();
+      // Not awaited: the upload finishes without waiting for video processing
+      VideoProcessingService.kick();
 
       const collection = await db.models.Collection.findByPk(collectionId, {
         include: [db.models.CollectionFile, db.models.Tag],
@@ -582,7 +599,7 @@ export class CollectionService {
         CollectionId: collectionId,
         id: fileId,
       },
-      attributes: ["mimeType", "id", "name"],
+      attributes: ["mimeType", "id", "name", "hasRendition"],
       include: {
         model: db.models.Collection,
         required: true,
@@ -599,6 +616,7 @@ export class CollectionService {
       id: collectionFile.id,
       label: collectionFile.name,
       mimeType: collectionFile.mimeType,
+      hasRendition: collectionFile.hasRendition,
     };
   }
 

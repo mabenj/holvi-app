@@ -84,6 +84,7 @@ interface FileRow {
     gpsLabel: string | null;
     durationInSeconds: number | null;
     blurDataUrl: string | null;
+    hasRendition: boolean;
     date: Date;
     sortKey: string;
 }
@@ -122,7 +123,7 @@ export async function browseFiles(
         `SELECT f.id, f."CollectionId", f.name, f."mimeType", f.width, f.height,
                 f."thumbnailWidth", f."thumbnailHeight", f."gpsLatitude",
                 f."gpsLongitude", f."gpsAltitude", f."gpsLabel",
-                f."durationInSeconds", f."blurDataUrl",
+                f."durationInSeconds", f."blurDataUrl", f."hasRendition",
                 ${FILE_DATE} AS date, ${keyText} AS "sortKey"
             FROM "CollectionFiles" f
             WHERE f."CollectionId" = :collectionId
@@ -216,7 +217,15 @@ async function summarizeFiles(rows: FileRow[]): Promise<FileSummary[]> {
             durationInSeconds: row.durationInSeconds ?? undefined,
             blurDataUrl: row.blurDataUrl ?? undefined
         };
-        // The original, until Renditions exist
-        return isVideo ? { ...summary, playbackSrc: summary.src } : summary;
+        if (!isVideo) {
+            return summary;
+        }
+        // The Rendition once it is ready, and the original until then
+        return {
+            ...summary,
+            playbackSrc: row.hasRendition
+                ? getFileSrc({ ...source, rendition: true })
+                : summary.src
+        };
     });
 }

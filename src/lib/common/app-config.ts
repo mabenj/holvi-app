@@ -47,6 +47,12 @@ const appConfig = {
         "number",
         60
     ),
+    /** The highest bitrate video processing gives a Rendition it re-encodes */
+    renditionMaxBitrateKbps: getEnvVariable(
+        "HOLVI_RENDITION_MAX_BITRATE_KBPS",
+        "number",
+        10_000
+    ),
     thumbnailMaxWidth: 600,
     thumbnailMaxHeight: 600,
     encryptionKey: getEnvVariable("HOLVI_ENCRYPTION_KEY")
