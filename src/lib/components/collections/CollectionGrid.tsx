@@ -1,7 +1,11 @@
 import { GridDensity, useGridDensity } from "@/lib/hooks/useGridDensity";
+import {
+    CARD_ID_ATTRIBUTE,
+    useThumbnailCycling
+} from "@/lib/hooks/useThumbnailCycling";
 import { CollectionSummary } from "@/lib/types/collection-summary";
 import { Box, SimpleGrid, Skeleton } from "@chakra-ui/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import CollectionCard from "./CollectionCard";
 
 /** Columns per breakpoint (base, sm, md, lg, xl, 2xl) at the default density of 3 */
@@ -36,16 +40,28 @@ export default function CollectionGrid({
     // that would make the grid jump
     const [mounted, setMounted] = useState(false);
     useEffect(() => setMounted(true), []);
+    const gridRef = useRef<HTMLDivElement>(null);
+    const { cycling, frame, onCardHover } = useThumbnailCycling(
+        gridRef,
+        `${mounted}:${density}:${collections.length}:${collections[0]?.id}`
+    );
     if (!mounted) {
         return null;
     }
 
     const { columns, tileHeights } = gridLayout(density);
     return (
-        <SimpleGrid columns={columns} gap="2px">
+        <SimpleGrid ref={gridRef} columns={columns} gap="2px">
             {collections.map((collection) => (
-                <Box key={collection.id} h={tileHeights}>
-                    <CollectionCard collection={collection} />
+                <Box
+                    key={collection.id}
+                    h={tileHeights}
+                    {...{ [CARD_ID_ATTRIBUTE]: collection.id }}>
+                    <CollectionCard
+                        collection={collection}
+                        frame={cycling.has(collection.id) ? frame : null}
+                        onHoverChange={onCardHover}
+                    />
                 </Box>
             ))}
             {Array.from({ length: skeletons }, (_, i) => (
