@@ -1,5 +1,6 @@
 import { readFile, rename } from "fs/promises";
 import path from "path";
+import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
     addFile,
@@ -49,6 +50,24 @@ async function playbackSrcOf(userId: string, collectionId: string, fileId: strin
     return files.find((file) => file.id === fileId)?.playbackSrc;
 }
 
+async function scrubPreviewOf(userId: string, collectionId: string, fileId: string) {
+    const { files } = await new CollectionService(userId).browseFiles(
+        collectionId
+    );
+    return files.find((file) => file.id === fileId)?.scrubPreview;
+}
+
+/** Fetches the image a Scrub preview source serves, as the player does, and reads its size and format */
+async function readScrubPreview(userId: string, src: string) {
+    const url = new URL(src, "http://holvi");
+    expect(url.searchParams.get("variant")).toBe("scrubPreview");
+    const { file, mimeType } = await new CollectionService(
+        userId
+    ).getScrubPreview(url.pathname.split("/")[3], url.searchParams.get("image")!);
+    const { width, height, format } = await sharp(file).metadata();
+    return { width, height, format, mimeType, content: file };
+}
+
 /** Reads the whole video a playback source streams, a chunk at a time, the way the player's range requests do */
 async function readPlaybackSrc(userId: string, playbackSrc: string) {
     const url = new URL(playbackSrc, "http://holvi");
@@ -77,12 +96,23 @@ async function readPlaybackSrc(userId: string, playbackSrc: string) {
 /** Every MP4 and MOV starts with an ftyp box, so plaintext video holds these bytes near its start */
 const FTYP = Buffer.from("ftyp", "latin1");
 
-/** Files under the data directory whose bytes hold plaintext video */
-async function findPlaintextVideos() {
+/** Every JPEG, such as a Scrub preview or one of its frames, starts with these bytes */
+const JPEG_START = Buffer.from([0xff, 0xd8, 0xff]);
+
+/** Whether a file's bytes hold a plaintext video or JPEG */
+function isPlaintext(content: Buffer) {
+    return (
+        content.subarray(0, 64).includes(FTYP) ||
+        content.subarray(0, 3).equals(JPEG_START)
+    );
+}
+
+/** Files under the data directory whose bytes hold a plaintext video or JPEG */
+async function findPlaintextFiles() {
     const found: string[] = [];
     for (const file of await listFiles(appConfig.dataDir)) {
         const content = await readFile(path.join(appConfig.dataDir, file));
-        if (content.subarray(0, 64).includes(FTYP)) {
+        if (isPlaintext(content)) {
             found.push(file);
         }
     }
@@ -102,7 +132,7 @@ describe("VideoProcessingService (integration)", () => {
         releaseHoldingOpeners();
     });
 
-    it("gives a web-safe MP4 no Rendition, so it plays from its original", async () => {
+    it("gives a web-safe MP4 a Scrub preview but no Rendition, so it plays from its original", async () => {
         const user = await createUser("alice");
         const trip = await createCollection(user.id, "Trip");
         const video = await addVideo(user.id, trip.id, "clip", {
@@ -118,12 +148,59 @@ describe("VideoProcessingService (integration)", () => {
         expect(await playbackSrcOf(user.id, trip.id, video.id)).toBe(
             originalSrc(trip.id, video.id)
         );
-        expect(await listFiles(path.join(appConfig.dataDir, user.id))).toEqual([
-            path.join(trip.id, video.id)
-        ]);
+        const scrubPreview = await scrubPreviewOf(user.id, trip.id, video.id);
+        expect(scrubPreview).toBeDefined();
+        expect(await readScrubPreview(user.id, scrubPreview!.src)).toMatchObject({
+            format: "jpeg",
+            mimeType: "image/jpeg"
+        });
+        // The original and its Scrub preview, and no Rendition
+        expect(await listFiles(path.join(appConfig.dataDir, user.id))).toHaveLength(2);
     });
 
-    it("gives a video that is not web-safe a playable H.264/AAC MP4 Rendition at the original resolution", async () => {
+    it("samples a Scrub preview's frames a second apart, at most 100 of them, tiled as its layout says", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const webSafe = { videoCodec: "h264", audio: "none", container: "mp4" } as const;
+        const short = await addVideo(user.id, trip.id, "short", {
+            ...webSafe,
+            durationSeconds: 3
+        });
+        const long = await addVideo(user.id, trip.id, "long", {
+            ...webSafe,
+            durationSeconds: 150
+        });
+
+        await processVideos(new VideoProcessingService(user.id));
+
+        const shortPreview = (await scrubPreviewOf(user.id, trip.id, short.id))!;
+        expect(shortPreview.layout).toEqual({
+            intervalSeconds: 1,
+            frames: 3,
+            columns: 3,
+            rows: 1,
+            // About 160 px wide, keeping the 96x64 video's proportions at even sizes
+            tileWidth: 160,
+            tileHeight: 106
+        });
+        const longPreview = (await scrubPreviewOf(user.id, trip.id, long.id))!;
+        expect(longPreview.layout).toEqual({
+            intervalSeconds: 1.5,
+            frames: 100,
+            columns: 10,
+            rows: 10,
+            tileWidth: 160,
+            tileHeight: 106
+        });
+        for (const { src, layout } of [shortPreview, longPreview]) {
+            expect(await readScrubPreview(user.id, src)).toMatchObject({
+                width: layout.columns * layout.tileWidth,
+                height: layout.rows * layout.tileHeight
+            });
+        }
+    });
+
+    it("gives a video that is not web-safe a Scrub preview and a playable H.264/AAC MP4 Rendition at the original resolution", async () => {
         const user = await createUser("alice");
         const trip = await createCollection(user.id, "Trip");
         const video = await addVideo(user.id, trip.id, "iphone", {
@@ -135,6 +212,10 @@ describe("VideoProcessingService (integration)", () => {
         const status = await processVideos(new VideoProcessingService(user.id));
 
         expect(status).toMatchObject({ done: 1, failed: 0 });
+        const scrubPreview = await scrubPreviewOf(user.id, trip.id, video.id);
+        expect(await readScrubPreview(user.id, scrubPreview!.src)).toMatchObject({
+            format: "jpeg"
+        });
         const playbackSrc = await playbackSrcOf(user.id, trip.id, video.id);
         expect(playbackSrc).not.toBe(originalSrc(trip.id, video.id));
         const rendition = await readPlaybackSrc(user.id, playbackSrc!);
@@ -180,7 +261,7 @@ describe("VideoProcessingService (integration)", () => {
         expect(boxes.indexOf("moov")).toBeLessThan(boxes.indexOf("mdat"));
     });
 
-    it("stores the Rendition encrypted, next to an original that stays byte-identical", async () => {
+    it("stores the Rendition and the Scrub preview encrypted, next to an original that stays byte-identical", async () => {
         const user = await createUser("alice");
         const trip = await createCollection(user.id, "Trip");
         const video = await addVideo(user.id, trip.id, "iphone", {
@@ -195,24 +276,33 @@ describe("VideoProcessingService (integration)", () => {
 
         expect((await readFile(originalPath)).equals(originalBefore)).toBe(true);
         const stored = await listFiles(path.join(appConfig.dataDir, user.id));
-        expect(stored).toHaveLength(2);
-        const renditionFile = stored.find(
+        const outputFiles = stored.filter(
             (file) => file !== path.join(trip.id, video.id)
-        )!;
-        expect(path.dirname(path.dirname(renditionFile))).toBe(trip.id);
-        const storedRendition = await readFile(
-            path.join(appConfig.dataDir, user.id, renditionFile)
         );
+        expect(outputFiles).toHaveLength(2);
         const rendition = await readPlaybackSrc(
             user.id,
             (await playbackSrcOf(user.id, trip.id, video.id))!
         );
+        const scrubPreview = (
+            await readScrubPreview(
+                user.id,
+                (await scrubPreviewOf(user.id, trip.id, video.id))!.src
+            )
+        ).content;
         expect(rendition.subarray(0, 64).includes(FTYP)).toBe(true);
-        expect(storedRendition.subarray(0, 64).includes(FTYP)).toBe(false);
-        expect(storedRendition.includes(rendition.subarray(0, 256))).toBe(false);
+        expect(scrubPreview.subarray(0, 3).equals(JPEG_START)).toBe(true);
+        for (const file of outputFiles) {
+            // Next to the original, in the collection's directory
+            expect(path.dirname(path.dirname(file))).toBe(trip.id);
+            const content = await readFile(path.join(appConfig.dataDir, user.id, file));
+            expect(isPlaintext(content)).toBe(false);
+            expect(content.includes(rendition.subarray(0, 256))).toBe(false);
+            expect(content.includes(scrubPreview.subarray(0, 256))).toBe(false);
+        }
     });
 
-    it("leaves no plaintext behind, whether a video gets a Rendition, needs none or fails", async () => {
+    it("leaves no plaintext behind, whether a video gets a Rendition and a Scrub preview, only a Scrub preview, or fails", async () => {
         const user = await createUser("alice");
         const trip = await createCollection(user.id, "Trip");
         await addVideo(user.id, trip.id, "iphone", {
@@ -239,9 +329,10 @@ describe("VideoProcessingService (integration)", () => {
         const status = await processVideos(new VideoProcessingService(user.id));
 
         expect(status).toMatchObject({ done: 2, failed: 1 });
-        expect(await findPlaintextVideos()).toEqual([]);
-        // Three originals and one Rendition, and nothing outside the users' directories
-        expect(await listFiles(path.join(appConfig.dataDir, user.id))).toHaveLength(4);
+        expect(await findPlaintextFiles()).toEqual([]);
+        // Three originals, one Rendition and two Scrub previews, and nothing
+        // outside the users' directories
+        expect(await listFiles(path.join(appConfig.dataDir, user.id))).toHaveLength(6);
         expect(
             (await listFiles(appConfig.dataDir)).filter(
                 (file) => !/^[0-9a-f-]{36}[\\/]/.test(file)
@@ -249,7 +340,7 @@ describe("VideoProcessingService (integration)", () => {
         ).toEqual([]);
     });
 
-    it("deletes a video's Rendition with the video, whether deleted alone or among others", async () => {
+    it("deletes a video's Rendition and Scrub preview with the video, whether deleted alone or among others", async () => {
         const user = await createUser("alice");
         const trip = await createCollection(user.id, "Trip");
         const hevc = { videoCodec: "hevc", audio: "aac", container: "mov" } as const;
@@ -260,7 +351,8 @@ describe("VideoProcessingService (integration)", () => {
         }
         await processVideos(new VideoProcessingService(user.id));
         const userDir = path.join(appConfig.dataDir, user.id);
-        expect(await listFiles(userDir)).toHaveLength(6);
+        // Each video's original, thumbnail, Rendition and Scrub preview
+        expect(await listFiles(userDir)).toHaveLength(8);
 
         const collections = new CollectionService(user.id);
         await collections.deleteFile(trip.id, alone.id);
@@ -269,7 +361,7 @@ describe("VideoProcessingService (integration)", () => {
         expect(await listFiles(userDir)).toEqual([]);
     });
 
-    it("leaves Renditions out of a Backup, which holds the original only", async () => {
+    it("leaves Renditions and Scrub previews out of a Backup, which holds the original only", async () => {
         const user = await createUser("alice");
         const trip = await createCollection(user.id, "Trip");
         const original = await generateVideo({
@@ -277,10 +369,18 @@ describe("VideoProcessingService (integration)", () => {
             audio: "aac",
             container: "mov"
         });
-        await addFile(user.id, trip.id, "iphone.mov", original, {
+        const video = await addFile(user.id, trip.id, "iphone.mov", original, {
             mimeType: "video/quicktime"
         });
         await processVideos(new VideoProcessingService(user.id));
+        const rendition = await readPlaybackSrc(
+            user.id,
+            (await playbackSrcOf(user.id, trip.id, video.id))!
+        );
+        const { content: scrubPreview } = await readScrubPreview(
+            user.id,
+            (await scrubPreviewOf(user.id, trip.id, video.id))!.src
+        );
         const backups = new BackupService(user.id);
 
         const started = await backups.start();
@@ -294,6 +394,10 @@ describe("VideoProcessingService (integration)", () => {
         const files = entries.filter((entry) => entry.name.startsWith("files/"));
         expect(files.map((entry) => entry.name)).toEqual(["files/Trip/iphone.mov"]);
         expect(files[0].data.equals(original)).toBe(true);
+        for (const entry of entries) {
+            expect(entry.data.includes(rendition.subarray(0, 256))).toBe(false);
+            expect(entry.data.includes(scrubPreview.subarray(0, 256))).toBe(false);
+        }
     });
 
     it("queues only the user's videos that were never processed or failed, and counts them through processing", async () => {

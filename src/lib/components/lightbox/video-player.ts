@@ -1,3 +1,5 @@
+import type { ScrubPreviewLayout } from "@/lib/types/scrub-preview";
+
 /** How long playback runs with the controls showing before they hide by themselves */
 export const CONTROLS_AUTO_HIDE_MS = 3000;
 
@@ -123,4 +125,19 @@ export function togglePlay(video: HTMLVideoElement) {
 export function setVolume(video: HTMLVideoElement, volume: number) {
     video.volume = Math.min(1, Math.max(0, volume));
     video.muted = video.volume === 0;
+}
+
+/**
+ * Where in a Scrub preview's image the frame for a playback position sits,
+ * in pixels from its top left: the last frame sampled at or before it.
+ */
+export function scrubPreviewTile(layout: ScrubPreviewLayout, seconds: number) {
+    const sampled = Math.floor(seconds / layout.intervalSeconds);
+    const frame = Number.isFinite(sampled)
+        ? Math.min(layout.frames - 1, Math.max(0, sampled))
+        : 0;
+    return {
+        left: (frame % layout.columns) * layout.tileWidth,
+        top: Math.floor(frame / layout.columns) * layout.tileHeight
+    };
 }
