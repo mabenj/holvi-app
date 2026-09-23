@@ -94,12 +94,20 @@ export function getFileSrc(options: {
   fileId: string;
   mimeType: string;
   thumbnail?: boolean;
+  /** A video's Rendition instead of its original */
+  rendition?: boolean;
 }) {
-  const { collectionId, fileId, mimeType, thumbnail = false } = options;
+  const {
+    collectionId,
+    fileId,
+    mimeType,
+    thumbnail = false,
+    rendition = false,
+  } = options;
   const isImage = mimeType.includes("image");
   return `/api/collections/${collectionId}/files?${
     thumbnail ? "thumbnail" : isImage ? "image" : "video"
-  }=${fileId}`;
+  }=${fileId}${rendition ? "&variant=rendition" : ""}`;
 }
 
 export function launchFullscreen(element: any) {

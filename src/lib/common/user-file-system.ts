@@ -1,5 +1,5 @@
 import formidable from "formidable";
-import { unlink } from "fs/promises";
+import { rm, unlink } from "fs/promises";
 import { IncomingMessage } from "http";
 import path from "path";
 import appConfig from "./app-config";
@@ -55,8 +55,16 @@ export class UserFileSystem {
     this.logger = new Log("FS", LogColor.YELLOW);
   }
 
+  /** Where a video's encrypted Rendition is stored: next to its original */
+  getRenditionPath(collectionId: string, fileId: string) {
+    return path.join(this.rootDir, collectionId, "rendition", fileId);
+  }
+
+  /** Deletes a file with its thumbnail and, for a video, its Rendition */
   async deleteFileAndThumbnail(collectionId: string, fileId: string) {
     try {
+      // A Rendition can be made again from the original, so it goes first
+      await rm(this.getRenditionPath(collectionId, fileId), { force: true });
       await unlink(path.join(this.rootDir, collectionId, "tn", fileId));
       await unlink(path.join(this.rootDir, collectionId, fileId));
     } catch (error) {
@@ -80,14 +88,17 @@ export class UserFileSystem {
     }
   }
 
+  /** Streams a chunk of a file's original, or of its Rendition */
   async getFileStream(
     collectionId: string,
     fileId: string,
     offset: number,
-    chunkSize?: number
+    { rendition = false, chunkSize }: { rendition?: boolean; chunkSize?: number } = {}
   ) {
     try {
-      const filePath = path.join(this.rootDir, collectionId, fileId);
+      const filePath = rendition
+        ? this.getRenditionPath(collectionId, fileId)
+        : path.join(this.rootDir, collectionId, fileId);
       const { stream, start, end, totalSize } =
         await Cryptography.getDecryptedStreamChunk(filePath, offset, chunkSize);
 
