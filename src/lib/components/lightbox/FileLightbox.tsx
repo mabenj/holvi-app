@@ -88,7 +88,7 @@ export default function FileLightbox({
                 leave();
             }
         } else if (!photoId && pswp && !pswp.isDestroying) {
-            closedByHistory.add(pswp);
+            historyLeftAlready.add(pswp);
             pswp.close();
         }
     }, [photoId, files, leave]);
@@ -113,7 +113,7 @@ export default function FileLightbox({
         () => () => {
             const pswp = pswpRef.current;
             if (!pswp) return;
-            closedByHistory.add(pswp);
+            historyLeftAlready.add(pswp);
             pswp.destroy();
         },
         []
@@ -145,8 +145,8 @@ export default function FileLightbox({
     );
 }
 
-/** Lightboxes closing because history left their entry, not by themselves */
-const closedByHistory = new WeakSet<PhotoSwipe>();
+/** Lightboxes whose history entry is already gone (Back, or the page was left), so closing must not go back again */
+const historyLeftAlready = new WeakSet<PhotoSwipe>();
 
 function openLightbox(
     index: number,
@@ -231,7 +231,7 @@ function openLightbox(
         // The closing zoom needs the active file's tile on screen, however
         // far the swipes went
         if (file) revealTile(file.id);
-        if (!closedByHistory.has(pswp)) latest.current.leave();
+        if (!historyLeftAlready.has(pswp)) latest.current.leave();
     });
     pswp.on("destroy", () => {
         const file = files()[pswp.currIndex];
