@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatPlaybackTime, fractionAtPointer, isTap } from "./video-player";
+import {
+    formatPlaybackTime,
+    fractionAtPointer,
+    isTap,
+    keyboardAction,
+    seekTarget,
+    skipZone
+} from "./video-player";
 
 describe("formatPlaybackTime", () => {
     it("shows minutes and seconds", () => {
@@ -47,5 +54,77 @@ describe("isTap", () => {
     it("is not a drag", () => {
         expect(isTap({ x: 10, y: 10 }, { x: 40, y: 10 })).toBe(false);
         expect(isTap({ x: 10, y: 10 }, { x: 10, y: 60 })).toBe(false);
+    });
+});
+
+describe("skipZone", () => {
+    it("skips back on the left third and forward on the right third", () => {
+        expect(skipZone(0, 300)).toBe("back");
+        expect(skipZone(99, 300)).toBe("back");
+        expect(skipZone(201, 300)).toBe("forward");
+        expect(skipZone(300, 300)).toBe("forward");
+    });
+
+    it("does not skip in the middle third", () => {
+        expect(skipZone(100, 300)).toBeNull();
+        expect(skipZone(150, 300)).toBeNull();
+        expect(skipZone(200, 300)).toBeNull();
+    });
+});
+
+describe("seekTarget", () => {
+    it("moves the position by the given seconds", () => {
+        expect(seekTarget(30, 10, 120)).toBe(40);
+        expect(seekTarget(30, -10, 120)).toBe(20);
+    });
+
+    it("stays within the video", () => {
+        expect(seekTarget(4, -10, 120)).toBe(0);
+        expect(seekTarget(115, 10, 120)).toBe(120);
+    });
+
+    it("only stops at the start while the duration is unknown", () => {
+        expect(seekTarget(30, 10, NaN)).toBe(40);
+        expect(seekTarget(3, -10, NaN)).toBe(0);
+    });
+});
+
+describe("keyboardAction", () => {
+    const key = (key: string, modifiers = {}) =>
+        keyboardAction({
+            key,
+            ctrlKey: false,
+            metaKey: false,
+            altKey: false,
+            ...modifiers
+        });
+
+    it("toggles play with space and K", () => {
+        expect(key(" ")).toEqual({ type: "togglePlay" });
+        expect(key("k")).toEqual({ type: "togglePlay" });
+        expect(key("K")).toEqual({ type: "togglePlay" });
+    });
+
+    it("skips 10 s back and forward with J and L", () => {
+        expect(key("j")).toEqual({ type: "seek", seconds: -10 });
+        expect(key("L")).toEqual({ type: "seek", seconds: 10 });
+    });
+
+    it("seeks 5 s with the left and right arrows", () => {
+        expect(key("ArrowLeft")).toEqual({ type: "seek", seconds: -5 });
+        expect(key("ArrowRight")).toEqual({ type: "seek", seconds: 5 });
+    });
+
+    it("changes volume with the up and down arrows", () => {
+        expect(key("ArrowUp")).toEqual({ type: "volume", change: 0.1 });
+        expect(key("ArrowDown")).toEqual({ type: "volume", change: -0.1 });
+    });
+
+    it("leaves other keys and the browser's shortcuts alone", () => {
+        expect(key("Escape")).toBeNull();
+        expect(key("a")).toBeNull();
+        expect(key("ArrowLeft", { altKey: true })).toBeNull();
+        expect(key("l", { ctrlKey: true })).toBeNull();
+        expect(key(" ", { metaKey: true })).toBeNull();
     });
 });

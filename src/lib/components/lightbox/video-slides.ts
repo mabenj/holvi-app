@@ -1,7 +1,9 @@
 import type PhotoSwipe from "photoswipe";
 import { setControlsVisible } from "./lightbox-controls";
 import type { FileSlideData } from "./lightbox-slides";
+import { addRotateToFullscreen } from "./rotate-to-fullscreen";
 import { isTap } from "./video-player";
+import { PositionTracker, resumeAndTrackPosition } from "./video-positions";
 import { applyVideoSettings, saveVideoSettings } from "./video-settings";
 
 /** Class of a video slide's element, which holds its video */
@@ -18,17 +20,34 @@ function videoOf(content: { element?: HTMLElement }) {
     return content.element?.querySelector("video") ?? null;
 }
 
+/** Ends picture-in-picture for a video that is no longer shown */
+function leavePictureInPicture(video: HTMLVideoElement) {
+    if (document.pictureInPictureElement === video) {
+        document.exitPictureInPicture().catch(() => undefined);
+    }
+}
+
 /**
  * Makes video files slides with a bare video element, which the player's
  * controls (`VideoControls`) drive while it is the active slide. The active
  * video plays with the viewer's remembered volume and the others are paused,
- * so audio never plays from a hidden slide.
+ * so audio never plays from a hidden slide. A longer video resumes where
+ * its playback stopped last time (see `resumeAndTrackPosition`).
  *
  * The video has no native controls, so PhotoSwipe's gestures work on it as
  * on images: a horizontal drag changes slide, a vertical drag closes, and a
  * tap toggles the controls.
  */
 export function addVideoSlides(pswp: PhotoSwipe, events: VideoSlideEvents) {
+    // The active video's remembered position, kept up to date while it plays
+    const positions = new WeakMap<HTMLVideoElement, PositionTracker>();
+    const stopTracking = (video: HTMLVideoElement) => {
+        const tracker = positions.get(video);
+        tracker?.save();
+        tracker?.stop();
+        positions.delete(video);
+    };
+
     pswp.on("contentLoad", (event) => {
         const { content } = event;
         const data = content.data as FileSlideData;
@@ -70,8 +89,11 @@ export function addVideoSlides(pswp: PhotoSwipe, events: VideoSlideEvents) {
     pswp.on("contentActivate", ({ content }) => {
         const video = videoOf(content);
         if (!video) return;
+        const { fileId } = content.data as FileSlideData;
         applyVideoSettings(video);
-        events.onActivate(video, (content.data as FileSlideData).fileId);
+        stopTracking(video);
+        positions.set(video, resumeAndTrackPosition(video, fileId));
+        events.onActivate(video, fileId);
         video.play().catch(() => {
             // Autoplay with sound can be refused, e.g. by a browser that has
             // not seen the viewer interact yet: show the play button instead
@@ -83,19 +105,27 @@ export function addVideoSlides(pswp: PhotoSwipe, events: VideoSlideEvents) {
     pswp.on("contentDeactivate", ({ content }) => {
         const video = videoOf(content);
         if (!video) return;
+        stopTracking(video);
         video.pause();
+        leavePictureInPicture(video);
         events.onDeactivate(video);
     });
     pswp.on("contentRemove", ({ content }) => videoOf(content)?.pause());
     pswp.on("contentDestroy", ({ content }) => {
         const video = videoOf(content);
         if (!video) return;
+        stopTracking(video);
         video.pause();
+        leavePictureInPicture(video);
         events.onDeactivate(video);
         // Stops the download of a video that is no longer shown
         video.removeAttribute("src");
         video.load();
     });
+
+    addRotateToFullscreen(pswp, () =>
+        pswp.currSlide ? videoOf(pswp.currSlide.content) : null
+    );
 
     // The zoom from the thumbnail uses its placeholder, as for images
     pswp.addFilter(
