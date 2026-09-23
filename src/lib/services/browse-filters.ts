@@ -24,12 +24,13 @@ interface TagJunction {
 }
 
 /**
- * Matches rows that have every one of the tags. Tags compare ignoring case,
- * since tag names are case-insensitive.
+ * Matches rows that have every one of the tags. With several junctions, a row
+ * has a tag if any of them holds it, e.g. a file or its collection. Tags
+ * compare ignoring case, since tag names are case-insensitive.
  */
 export function tagFilter(
     tags: string[] | undefined,
-    junction: TagJunction
+    junctions: TagJunction | TagJunction[]
 ): SqlFilter {
     const names = tags ?? [];
     if (names.length > MAX_FILTER_TAGS) {
@@ -40,13 +41,17 @@ export function tagFilter(
     if (names.some((name) => !name || name.length > MAX_TAG_LENGTH)) {
         throw new InvalidArgumentError("Malformed tag");
     }
-    const { table, ownerColumn, owner } = junction;
+    const holders = [junctions].flat();
     const replacements: Record<string, unknown> = {};
     const conditions = names.map((name, i) => {
         replacements[`filterTag${i}`] = name;
-        return `AND EXISTS (SELECT 1 FROM ${table} t
+        const held = holders.map(
+            ({ table, ownerColumn, owner }) =>
+                `EXISTS (SELECT 1 FROM ${table} t
                     WHERE t.${ownerColumn} = ${owner}
-                    AND t."TagName" = CAST(:filterTag${i} AS citext))`;
+                    AND t."TagName" = CAST(:filterTag${i} AS citext))`
+        );
+        return `AND (${held.join(" OR ")})`;
     });
     return { conditions: conditions.join("\n"), replacements };
 }
