@@ -1,3 +1,4 @@
+import { fetchCollection } from "@/lib/client/collections";
 import {
     SignedInPageProps,
     signedInPageProps
@@ -8,13 +9,24 @@ import {
     NO_COLLECTIONS_FILTER
 } from "@/lib/client/collections";
 import AppShell from "@/lib/components/app-shell/AppShell";
+import DropOverlay from "@/lib/components/app-shell/DropOverlay";
 import PullToRefresh from "@/lib/components/app-shell/PullToRefresh";
+import CollectionEditor from "@/lib/components/collections/CollectionEditor";
 import CollectionGrid from "@/lib/components/collections/CollectionGrid";
 import CollectionsFilterBar from "@/lib/components/collections/CollectionsFilterBar";
-import { useCollectionsBrowse } from "@/lib/hooks/useCollectionsBrowse";
+import {
+    featureCollection,
+    useCollectionsBrowse
+} from "@/lib/hooks/useCollectionsBrowse";
+import { DroppedFiles, useFileDrop } from "@/lib/hooks/useFileDrop";
 import { useNextPageSentinel } from "@/lib/hooks/useNextPageSentinel";
+import { startUpload } from "@/lib/hooks/useUpload";
 import { Box, Button, EmptyState, Text, VStack } from "@chakra-ui/react";
-import { mdiImageMultipleOutline, mdiMagnifyRemoveOutline } from "@mdi/js";
+import {
+    mdiImageMultipleOutline,
+    mdiMagnifyRemoveOutline,
+    mdiPlus
+} from "@mdi/js";
 import Icon from "@mdi/react";
 import { useRouter } from "next/router";
 import { useCallback, useEffect, useState } from "react";
@@ -30,6 +42,7 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
     const {
         filter,
         pages,
+        collections,
         loading,
         refreshing,
         error,
@@ -39,11 +52,12 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
         changeFilter,
         saveScrollPosition,
         takeScrollPosition,
+        endVisit,
         retry,
         refresh
     } = useCollectionsBrowse(user.id);
-    const collections = pages.flatMap((page) => page.collections);
     const router = useRouter();
+    const creator = useCollectionCreator(user.id);
 
     // The first visit in this app session fetches the first page; coming back
     // from another screen keeps the pages already loaded
@@ -51,12 +65,16 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
         loadFirstPage();
     }, [loadFirstPage]);
 
-    // Leaving the tab remembers the place in the grid...
+    // Leaving the tab remembers the place in the grid, and ends the visit that
+    // showed a collection just uploaded into first...
     useEffect(() => {
-        const save = () => saveScrollPosition(window.scrollY);
-        router.events.on("routeChangeStart", save);
-        return () => router.events.off("routeChangeStart", save);
-    }, [router.events, saveScrollPosition]);
+        const leave = () => {
+            saveScrollPosition(window.scrollY);
+            endVisit();
+        };
+        router.events.on("routeChangeStart", leave);
+        return () => router.events.off("routeChangeStart", leave);
+    }, [router.events, saveScrollPosition, endVisit]);
 
     // ...and coming back scrolls there once every cached page is in the grid.
     // Until then, the next page must not load: the grid's end is still in view.
@@ -99,13 +117,20 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
               : 0;
 
     return (
-        <AppShell title="Collections" onActiveTabReselect={startOver}>
+        <AppShell
+            title="Collections"
+            onActiveTabReselect={startOver}
+            floatingAction={{
+                label: "New collection",
+                icon: mdiPlus,
+                onClick: () => creator.open()
+            }}>
             <CollectionsFilterBar filter={filter} onChange={narrow} />
             <PullToRefresh onRefresh={startOver} refreshing={refreshing}>
                 {isEmpty && isFiltering(filter) ? (
                     <NoMatches onClear={clearFilter} />
                 ) : isEmpty ? (
-                    <FirstCollectionPrompt />
+                    <FirstCollectionPrompt onCreate={() => creator.open()} />
                 ) : (
                     <CollectionGrid
                         collections={collections}
@@ -123,11 +148,54 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
                 )}
                 <Box ref={sentinel} h="1px" />
             </PullToRefresh>
+            <CollectionEditor
+                open={creator.isOpen}
+                onClose={creator.close}
+                initialName={creator.dropped?.folderName ?? ""}
+                fileCount={creator.dropped?.files.length}
+                onSaved={creator.onCreated}
+            />
+            <DropOverlay
+                visible={creator.dragging}
+                label="Drop to create a collection"
+            />
         </AppShell>
     );
 }
 
-function FirstCollectionPrompt() {
+/**
+ * Creating a collection from the tab, from the floating button or from files
+ * dropped on it. Once created, the app goes into the new collection, where
+ * dropped files upload, and the tab shows it first on the next visit.
+ */
+function useCollectionCreator(userId: string) {
+    const router = useRouter();
+    const [isOpen, setIsOpen] = useState(false);
+    const [dropped, setDropped] = useState<DroppedFiles | null>(null);
+
+    const open = useCallback((files: DroppedFiles | null = null) => {
+        setDropped(files);
+        setIsOpen(true);
+    }, []);
+    const close = useCallback(() => setIsOpen(false), []);
+
+    const { dragging } = useFileDrop(open, !isOpen);
+
+    const onCreated = async (collectionId: string) => {
+        if (dropped) void startUpload(userId, collectionId, dropped.files);
+        // Entering the collection leaves the tab, which ends its visit; the
+        // new collection is shown first on the next one
+        await router.push(`/collections/${encodeURIComponent(collectionId)}`);
+        setIsOpen(false);
+        fetchCollection(collectionId)
+            .then((collection) => featureCollection(userId, collection))
+            .catch(() => undefined);
+    };
+
+    return { isOpen, dropped, dragging, open, close, onCreated };
+}
+
+function FirstCollectionPrompt({ onCreate }: { onCreate: () => void }) {
     return (
         <EmptyState.Root>
             <EmptyState.Content>
@@ -145,6 +213,10 @@ function FirstCollectionPrompt() {
                         create one, it shows up here.
                     </EmptyState.Description>
                 </VStack>
+                <Button onClick={onCreate}>
+                    <Icon path={mdiPlus} size="20px" aria-hidden />
+                    New collection
+                </Button>
             </EmptyState.Content>
         </EmptyState.Root>
     );

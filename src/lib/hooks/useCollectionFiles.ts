@@ -79,6 +79,28 @@ export function useCollectionFiles(
     // Leaving the collection or changing the sort or tags drops the page on its way
     useEffect(() => () => request.current?.abort(), [query]);
 
+    /** Fetches the first page again, e.g. after an upload; the loaded pages stay until it arrives */
+    const reload = useCallback(() => {
+        const controller = new AbortController();
+        request.current?.abort();
+        request.current = controller;
+        fetchFilesPage(collectionId, { sort, tags }, controller.signal)
+            .then((page) => {
+                if (controller.signal.aborted) return;
+                setState({ query, pages: [page], loading: false, error: null });
+            })
+            .catch((error) => {
+                if (controller.signal.aborted) return;
+                setState((previous) => ({
+                    ...previous,
+                    loading: false,
+                    error: getErrorMessage(error)
+                }));
+            });
+        // The query key stands for the tags
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [collectionId, sort, query]);
+
     const retry = useCallback(() => {
         setState((previous) => ({ ...previous, error: null }));
     }, []);
@@ -90,6 +112,7 @@ export function useCollectionFiles(
         error: current.error,
         hasMore,
         loadMore,
+        reload,
         retry
     };
 }
