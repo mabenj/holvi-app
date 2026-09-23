@@ -5,7 +5,9 @@ import CollectionDetails from "@/lib/components/collection-page/CollectionDetail
 import CollectionHero from "@/lib/components/collection-page/CollectionHero";
 import FileGrid from "@/lib/components/collection-page/FileGrid";
 import FileSortSelect from "@/lib/components/collection-page/FileSortSelect";
+import FileLightbox from "@/lib/components/lightbox/FileLightbox";
 import { useCollectionFiles } from "@/lib/hooks/useCollectionFiles";
+import { useLightboxHistory } from "@/lib/hooks/useLightboxHistory";
 import { useNextPageSentinel } from "@/lib/hooks/useNextPageSentinel";
 import { FileSort } from "@/lib/types/file-sort";
 import { Box, Button, EmptyState, Flex, Text, VStack } from "@chakra-ui/react";
@@ -45,6 +47,8 @@ function CollectionScreen({ collectionId }: { collectionId: string }) {
         if (pages.length === 0) loadMore();
     }, [pages.length, loadMore]);
 
+    const lightbox = useLightboxHistory();
+
     const sentinel = useNextPageSentinel(
         pages.length > 0 && hasMore && !error ? loadMore : undefined,
         pages.length
@@ -79,7 +83,11 @@ function CollectionScreen({ collectionId }: { collectionId: string }) {
                     {isEmpty ? (
                         <NoFilesYet />
                     ) : (
-                        <FileGrid files={files} skeletons={skeletons} />
+                        <FileGrid
+                            files={files}
+                            skeletons={skeletons}
+                            onOpen={lightbox.open}
+                        />
                     )}
                     {error && (
                         <VStack py="8" px="4" gap="3" textAlign="center">
@@ -90,6 +98,11 @@ function CollectionScreen({ collectionId }: { collectionId: string }) {
                         </VStack>
                     )}
                     <Box ref={sentinel} h="1px" />
+                    {/* Swiping on past the loaded files loads the next page */}
+                    <FileLightbox
+                        files={files}
+                        onNearEnd={hasMore && !error ? loadMore : undefined}
+                    />
                 </>
             )}
         </AppShell>
