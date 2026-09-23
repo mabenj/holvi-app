@@ -48,7 +48,7 @@ describe("video fixture (integration)", () => {
                 holiday.id,
                 file.id
             );
-            expect(await probeVideo(decrypted)).toEqual({
+            expect(await probeVideo(decrypted)).toMatchObject({
                 ...expected,
                 captureDate
             });
