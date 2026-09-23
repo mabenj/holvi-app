@@ -1,7 +1,6 @@
 import { fetchTagCounts, tagCountsUrl } from "@/lib/client/tags";
-import { Flex } from "@chakra-ui/react";
 import useSWR from "swr";
-import TagToggle, { hasTag, toggleTag } from "../filters/TagToggle";
+import { TagToggles } from "../filters/TagToggle";
 
 interface FileTagFilterProps {
     collectionId: string;
@@ -19,45 +18,26 @@ export default function FileTagFilter({
     value,
     onChange
 }: FileTagFilterProps) {
-    const { data: tagCounts } = useSWR(
+    const { data: tagCounts = [] } = useSWR(
         tagCountsUrl("files", collectionId),
         fetchTagCounts,
         { revalidateOnFocus: false }
     );
-    const counted = tagCounts ?? [];
-    // Selected tags stay on the row even if no file has them any more
-    const missing = value.filter(
-        (tag) => !hasTag(counted.map((count) => count.name), tag)
-    );
-    if (counted.length === 0 && missing.length === 0) {
+    if (tagCounts.length === 0 && value.length === 0) {
         return null;
     }
     return (
-        <Flex
+        <TagToggles
             role="group"
             aria-label="Filter files by tag"
             flex="1"
             minW="0"
             gap="1.5"
             overflowX="auto"
-            css={{ scrollbarWidth: "none" }}>
-            {missing.map((tag) => (
-                <TagToggle
-                    key={tag}
-                    name={tag}
-                    selected
-                    onToggle={() => onChange(toggleTag(value, tag))}
-                />
-            ))}
-            {counted.map(({ name, count }) => (
-                <TagToggle
-                    key={name}
-                    name={name}
-                    count={count}
-                    selected={hasTag(value, name)}
-                    onToggle={() => onChange(toggleTag(value, name))}
-                />
-            ))}
-        </Flex>
+            css={{ scrollbarWidth: "none" }}
+            tagCounts={tagCounts}
+            value={value}
+            onChange={onChange}
+        />
     );
 }

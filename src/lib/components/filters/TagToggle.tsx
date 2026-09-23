@@ -1,6 +1,7 @@
-import { Button, Text } from "@chakra-ui/react";
+import { Button, Flex, FlexProps, Text } from "@chakra-ui/react";
 import { mdiCheck } from "@mdi/js";
 import Icon from "@mdi/react";
+import type { TagCount } from "../../types/tag-count";
 
 interface TagToggleProps {
     name: string;
@@ -48,4 +49,47 @@ export function toggleTag(tags: string[], tag: string) {
 export function hasTag(tags: string[], tag: string) {
     const lower = tag.toLowerCase();
     return tags.some((t) => t.toLowerCase() === lower);
+}
+
+interface TagTogglesProps extends Omit<FlexProps, "onChange"> {
+    /** The tags to offer, most used first */
+    tagCounts: TagCount[];
+    /** The selected tags */
+    value: string[];
+    onChange: (tags: string[]) => void;
+}
+
+/**
+ * A toggle for each tag, with its count. Selected tags that no longer have
+ * a count stay first on the list, so they can still be turned off.
+ */
+export function TagToggles({
+    tagCounts,
+    value,
+    onChange,
+    ...flexProps
+}: TagTogglesProps) {
+    const counted = tagCounts.map((count) => count.name);
+    const uncounted = value.filter((tag) => !hasTag(counted, tag));
+    return (
+        <Flex gap="2" {...flexProps}>
+            {uncounted.map((tag) => (
+                <TagToggle
+                    key={tag}
+                    name={tag}
+                    selected
+                    onToggle={() => onChange(toggleTag(value, tag))}
+                />
+            ))}
+            {tagCounts.map(({ name, count }) => (
+                <TagToggle
+                    key={name}
+                    name={name}
+                    count={count}
+                    selected={hasTag(value, name)}
+                    onToggle={() => onChange(toggleTag(value, name))}
+                />
+            ))}
+        </Flex>
+    );
 }

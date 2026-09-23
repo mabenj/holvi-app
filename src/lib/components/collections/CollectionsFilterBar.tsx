@@ -22,7 +22,7 @@ import { mdiClose, mdiFilterVariant, mdiMagnify } from "@mdi/js";
 import Icon from "@mdi/react";
 import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
-import TagToggle, { hasTag, toggleTag } from "../filters/TagToggle";
+import { TagToggles, toggleTag } from "../filters/TagToggle";
 import PanelSurface from "../surfaces/PanelSurface";
 
 export const FILE_TYPE_LABELS: Record<CollectionFileType, string> = {
@@ -245,9 +245,6 @@ function FilterPanel({
         open ? tagCountsUrl("collections") : null,
         fetchTagCounts
     );
-    // Selected tags stay on the list even if no collection has them any more
-    const countedTags = tagCounts?.map((count) => count.name) ?? [];
-    const missingTags = filter.tags.filter((tag) => !hasTag(countedTags, tag));
     const panelFilters = filter.tags.length > 0 || filter.fileType !== "any";
 
     return (
@@ -301,36 +298,15 @@ function FilterPanel({
                         <Text color="fg.muted">{error.message}</Text>
                     ) : !tagCounts ? (
                         <Text color="fg.muted">Loading tags…</Text>
-                    ) : tagCounts.length === 0 && missingTags.length === 0 ? (
+                    ) : tagCounts.length === 0 && filter.tags.length === 0 ? (
                         <Text color="fg.muted">No collection has tags yet</Text>
                     ) : (
-                        <Flex gap="2" wrap="wrap">
-                            {missingTags.map((tag) => (
-                                <TagToggle
-                                    key={tag}
-                                    name={tag}
-                                    selected
-                                    onToggle={() =>
-                                        onChange({
-                                            tags: toggleTag(filter.tags, tag)
-                                        })
-                                    }
-                                />
-                            ))}
-                            {tagCounts.map(({ name, count }) => (
-                                <TagToggle
-                                    key={name}
-                                    name={name}
-                                    count={count}
-                                    selected={hasTag(filter.tags, name)}
-                                    onToggle={() =>
-                                        onChange({
-                                            tags: toggleTag(filter.tags, name)
-                                        })
-                                    }
-                                />
-                            ))}
-                        </Flex>
+                        <TagToggles
+                            wrap="wrap"
+                            tagCounts={tagCounts}
+                            value={filter.tags}
+                            onChange={(tags) => onChange({ tags })}
+                        />
                     )}
                 </Stack>
             </Stack>
