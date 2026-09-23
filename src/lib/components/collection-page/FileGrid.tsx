@@ -33,7 +33,7 @@ export default function FileGrid({ files, skeletons = 0 }: FileGridProps) {
 }
 
 /** A file's thumbnail cropped to fill its tile; a video shows a play mark and its length */
-function FileTile({ file }: { file: FileSummary }) {
+export function FileTile({ file }: { file: FileSummary }) {
     const isVideo = file.playbackSrc !== undefined;
     return (
         <Box position="relative" w="100%" h="100%" overflow="hidden" bg="bg.muted">

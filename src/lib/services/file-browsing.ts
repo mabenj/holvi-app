@@ -23,6 +23,13 @@ export interface BrowseFilesQuery {
     limit?: number;
 }
 
+/** The Timeline has one fixed order, newest first */
+export interface BrowseTimelineQuery {
+    /** Opaque; from the previous page's nextCursor */
+    cursor?: string;
+    limit?: number;
+}
+
 export interface BrowseFilesPage {
     files: FileSummary[];
     nextCursor: string | null;
@@ -101,6 +108,54 @@ export async function browseFiles(
     if (!FILE_SORTS.includes(sort)) {
         throw new InvalidArgumentError(`Unknown sort '${sort}'`);
     }
+    const tags = tagFilter(query.tags, {
+        table: `"CollectionFileTags"`,
+        ownerColumn: `"CollectionFileId"`,
+        owner: `f.id`
+    });
+    return browseFilePage(
+        {
+            from: `"CollectionFiles" f`,
+            conditions: `f."CollectionId" = :collectionId ${tags.conditions}`,
+            replacements: { ...tags.replacements, collectionId }
+        },
+        sort,
+        query
+    );
+}
+
+/** One page of the Timeline: every file the user owns, across collections, newest first */
+export async function browseTimeline(
+    userId: string,
+    query: BrowseTimelineQuery
+): Promise<BrowseFilesPage> {
+    return browseFilePage(
+        {
+            from: `"CollectionFiles" f
+                JOIN "Collections" c ON c.id = f."CollectionId"`,
+            conditions: `c."UserId" = :userId`,
+            replacements: { userId }
+        },
+        "newest",
+        query
+    );
+}
+
+/** Which files a browse pages through, as SQL */
+interface FileScope {
+    /** FROM clause, naming the files `f` */
+    from: string;
+    /** WHERE conditions */
+    conditions: string;
+    replacements: Record<string, unknown>;
+}
+
+/** One page of the files in the scope, in the sort's order after the cursor */
+async function browseFilePage(
+    scope: FileScope,
+    sort: FileSort,
+    query: { cursor?: string; limit?: number }
+): Promise<BrowseFilesPage> {
     const limit = pageLimit(query.limit);
     const after = query.cursor
         ? decodeCursor(query.cursor, isFileCursor)
@@ -110,11 +165,6 @@ export async function browseFiles(
         throw new InvalidArgumentError("Malformed cursor");
     }
 
-    const filter = tagFilter(query.tags, {
-        table: `"CollectionFileTags"`,
-        ownerColumn: `"CollectionFileId"`,
-        owner: `f.id`
-    });
     const { key, direction, keyText, keyFromCursor } = ORDERS[sort];
     const comparison = direction === "ASC" ? ">" : "<";
 
@@ -125,9 +175,8 @@ export async function browseFiles(
                 f."gpsLongitude", f."gpsAltitude", f."gpsLabel",
                 f."durationInSeconds", f."blurDataUrl", f."hasRendition",
                 ${FILE_DATE} AS date, ${keyText} AS "sortKey"
-            FROM "CollectionFiles" f
-            WHERE f."CollectionId" = :collectionId
-            ${filter.conditions}
+            FROM ${scope.from}
+            WHERE ${scope.conditions}
             ${
                 after
                     ? `AND (${key}, f.id) ${comparison} (${keyFromCursor}, CAST(:afterId AS uuid))`
@@ -136,8 +185,7 @@ export async function browseFiles(
             ORDER BY ${key} ${direction}, f.id ${direction}
             LIMIT :limit`,
         {
-            ...filter.replacements,
-            collectionId,
+            ...scope.replacements,
             afterKey: after?.[1],
             afterId: after?.[2],
             // One extra row tells whether another page follows
