@@ -169,7 +169,7 @@ export class CollectionService {
       raw: true,
     });
     if (!collection) {
-      throw new NotFoundError(`Collection '${collectionId}' not found`);
+      throw new NotFoundError(`Collection not found '${collectionId}'`);
     }
     const [summary] = await summarizeCollections([collection]);
     return { ...summary, description: collection.description ?? "" };

@@ -28,23 +28,43 @@ export interface BrowseFilesPage {
 /** A file's date: when it was taken, or else when it was created */
 const FILE_DATE = `COALESCE(f."takenAt", f."createdAt")`;
 
-/** How each sort orders files, always with the id as the final tie-break */
-const ORDERS: Record<
-    FileSort,
-    { key: string; keyType: string; direction: "ASC" | "DESC" }
-> = {
-    newest: { key: FILE_DATE, keyType: "timestamptz", direction: "DESC" },
-    oldest: { key: FILE_DATE, keyType: "timestamptz", direction: "ASC" },
-    // citext compares names ignoring case
-    name: { key: `f.name`, keyType: "citext", direction: "ASC" }
+/** How a sort orders files; the id is always the final tie-break */
+interface FileOrder {
+    /** The SQL expression files are ordered by */
+    key: string;
+    direction: "ASC" | "DESC";
+    /** The key as text for a cursor, without losing precision */
+    keyText: string;
+    /** The key read back from a cursor */
+    keyFromCursor: string;
+    /** Whether a cursor's key is one this order can have made */
+    isCursorKey: (key: string) => boolean;
+}
+
+/** Dates travel in cursors as UTC with microseconds, so no precision is lost */
+const DATE_ORDER = {
+    key: FILE_DATE,
+    keyText: `to_char(${FILE_DATE} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+    keyFromCursor: `CAST(:afterKey AS timestamptz)`,
+    isCursorKey: (key: string) =>
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(key)
+};
+
+const ORDERS: Record<FileSort, FileOrder> = {
+    newest: { ...DATE_ORDER, direction: "DESC" },
+    oldest: { ...DATE_ORDER, direction: "ASC" },
+    name: {
+        key: `f.name`,
+        direction: "ASC",
+        keyText: `f.name::text`,
+        // citext compares names ignoring case, as the ORDER BY does
+        keyFromCursor: `CAST(:afterKey AS citext)`,
+        isCursorKey: (key) => key.length <= 1024
+    }
 };
 
 /** Where a page ends: the sort it belongs to, the last file's sort key and its id */
 type FileCursor = [sort: FileSort, key: string, id: string];
-
-/** Dates travel in cursors as UTC with microseconds, so no precision is lost */
-const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
-const MAX_NAME_KEY_LENGTH = 1024;
 
 interface FileRow {
     id: string;
@@ -86,12 +106,8 @@ export async function browseFiles(
         throw new InvalidArgumentError("Malformed cursor");
     }
 
-    const { key, keyType, direction } = ORDERS[sort];
+    const { key, direction, keyText, keyFromCursor } = ORDERS[sort];
     const comparison = direction === "ASC" ? ">" : "<";
-    const sortKey =
-        keyType === "timestamptz"
-            ? `to_char(${key} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`
-            : `${key}::text`;
 
     const db = await Database.getInstance();
     const rows = (await db.select(
@@ -99,12 +115,12 @@ export async function browseFiles(
                 f."thumbnailWidth", f."thumbnailHeight", f."gpsLatitude",
                 f."gpsLongitude", f."gpsAltitude", f."gpsLabel",
                 f."durationInSeconds", f."blurDataUrl",
-                ${FILE_DATE} AS date, ${sortKey} AS "sortKey"
+                ${FILE_DATE} AS date, ${keyText} AS "sortKey"
             FROM "CollectionFiles" f
             WHERE f."CollectionId" = :collectionId
             ${
                 after
-                    ? `AND (${key}, f.id) ${comparison} (CAST(:afterKey AS ${keyType}), CAST(:afterId AS uuid))`
+                    ? `AND (${key}, f.id) ${comparison} (${keyFromCursor}, CAST(:afterId AS uuid))`
                     : ""
             }
             ORDER BY ${key} ${direction}, f.id ${direction}
@@ -134,11 +150,9 @@ function isFileCursor(parts: string[]): parts is FileCursor {
         return false;
     }
     const [sort, key] = parts;
-    if (sort === "name") {
-        return key.length <= MAX_NAME_KEY_LENGTH;
-    }
     return (
-        (sort === "newest" || sort === "oldest") && DATE_KEY_PATTERN.test(key)
+        FILE_SORTS.includes(sort as FileSort) &&
+        ORDERS[sort as FileSort].isCursorKey(key)
     );
 }
 

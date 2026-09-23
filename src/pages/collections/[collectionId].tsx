@@ -23,8 +23,13 @@ const FIRST_PAGE_SKELETONS = 12;
 const NEXT_PAGE_SKELETONS = 6;
 
 export default function CollectionPage() {
-    const router = useRouter();
-    const collectionId = router.query.collectionId as string;
+    const { query } = useRouter();
+    const collectionId = query.collectionId as string;
+    // Another collection starts afresh, with the default sort
+    return <CollectionScreen key={collectionId} collectionId={collectionId} />;
+}
+
+function CollectionScreen({ collectionId }: { collectionId: string }) {
     const { data: collection, error: collectionError } = useSWR(
         collectionUrl(collectionId),
         () => fetchCollection(collectionId),

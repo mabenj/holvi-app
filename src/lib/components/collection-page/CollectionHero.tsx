@@ -9,6 +9,8 @@ import { useEffect, useRef, useState } from "react";
 
 /** Height of the compact title bar, not counting the safe-area inset above it */
 const TITLE_BAR_HEIGHT = "52px";
+/** CSS variable with how far the hero has collapsed, from 0 to 1 */
+const COLLAPSE = "--hero-collapse";
 const HERO_HEIGHT = { base: "min(62vh, 440px)", md: "min(56vh, 520px)" };
 
 interface CollectionHeroProps {
@@ -27,7 +29,7 @@ export default function CollectionHero({ collection }: CollectionHeroProps) {
     const router = useRouter();
     const hero = useRef<HTMLDivElement>(null);
     const titleBar = useRef<HTMLDivElement>(null);
-    const collapsed = useScrolledPast(hero, titleBar);
+    const collapsed = useCollapse(hero, titleBar);
     const cover = collection?.cover;
 
     return (
@@ -38,30 +40,38 @@ export default function CollectionHero({ collection }: CollectionHeroProps) {
                 h={HERO_HEIGHT}
                 overflow="hidden"
                 bg="bg.muted">
-                {!collection ? (
-                    <Skeleton position="absolute" inset="0" rounded="none" />
-                ) : cover ? (
-                    <Image
-                        src={cover.thumbnailSrc}
-                        alt=""
-                        fill
-                        priority
-                        // Decrypted content must not be written to Next.js's image cache
-                        unoptimized
-                        placeholder={cover.blurDataUrl ? "blur" : "empty"}
-                        blurDataURL={cover.blurDataUrl ?? undefined}
-                        style={{ objectFit: "cover" }}
-                    />
-                ) : (
-                    <Flex
-                        position="absolute"
-                        inset="0"
-                        alignItems="center"
-                        justifyContent="center"
-                        color="fg.subtle">
-                        <Icon path={mdiImageOutline} size="64px" aria-hidden />
-                    </Flex>
-                )}
+                <Box
+                    position="absolute"
+                    inset="0"
+                    // Drifts slower than the page as the hero collapses
+                    style={{
+                        transform: `translateY(calc(var(${COLLAPSE}, 0) * 35%))`
+                    }}>
+                    {!collection ? (
+                        <Skeleton position="absolute" inset="0" rounded="none" />
+                    ) : cover ? (
+                        <Image
+                            src={cover.thumbnailSrc}
+                            alt=""
+                            fill
+                            priority
+                            // Decrypted content must not be written to Next.js's image cache
+                            unoptimized
+                            placeholder={cover.blurDataUrl ? "blur" : "empty"}
+                            blurDataURL={cover.blurDataUrl ?? undefined}
+                            style={{ objectFit: "cover" }}
+                        />
+                    ) : (
+                        <Flex
+                            position="absolute"
+                            inset="0"
+                            alignItems="center"
+                            justifyContent="center"
+                            color="fg.subtle">
+                            <Icon path={mdiImageOutline} size="64px" aria-hidden />
+                        </Flex>
+                    )}
+                </Box>
                 <Flex
                     position="absolute"
                     inset="0"
@@ -74,7 +84,13 @@ export default function CollectionHero({ collection }: CollectionHeroProps) {
                     // Darkens the top for the back button and the bottom for the name
                     backgroundImage="linear-gradient(rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0) 22%, rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, 0.8) 100%)">
                     {collection && (
-                        <>
+                        <Box
+                            // The name fades and shrinks into the title bar
+                            transformOrigin="left bottom"
+                            style={{
+                                opacity: `calc(1 - var(${COLLAPSE}, 0))`,
+                                transform: `scale(calc(1 - var(${COLLAPSE}, 0) * 0.2))`
+                            }}>
                             <Heading
                                 as="h1"
                                 textStyle={{ base: "3xl", md: "4xl" }}
@@ -87,7 +103,7 @@ export default function CollectionHero({ collection }: CollectionHeroProps) {
                             <Text textStyle="sm" opacity={0.85}>
                                 {describeCounts(collection)}
                             </Text>
-                        </>
+                        </Box>
                     )}
                 </Flex>
             </Box>
@@ -153,19 +169,29 @@ function describeCounts({
     return parts.length > 0 ? parts.join(" · ") : "No files yet";
 }
 
-/** Whether the page has scrolled so far that only the title bar's height of the hero is left */
-function useScrolledPast(
+/**
+ * Tracks how far the hero has collapsed: from 0 at the top of the page to 1
+ * once only the title bar's height of it is left. The progress goes into a CSS
+ * variable on the hero, so scrolling does not re-render; the return value tells
+ * whether the hero has collapsed completely.
+ */
+function useCollapse(
     hero: React.RefObject<HTMLElement | null>,
     titleBar: React.RefObject<HTMLElement | null>
 ) {
-    const [scrolledPast, setScrolledPast] = useState(false);
+    const [collapsed, setCollapsed] = useState(false);
     useEffect(() => {
         let frame = 0;
         const update = () => {
             frame = 0;
-            const heroBottom = hero.current?.getBoundingClientRect().bottom ?? 0;
+            const element = hero.current;
+            if (!element) return;
+            const { top, height } = element.getBoundingClientRect();
             const barHeight = titleBar.current?.offsetHeight ?? 0;
-            setScrolledPast(heroBottom <= barHeight);
+            const range = Math.max(1, height - barHeight);
+            const progress = Math.min(1, Math.max(0, -top / range));
+            element.style.setProperty(COLLAPSE, String(progress));
+            setCollapsed(progress >= 1);
         };
         const onScroll = () => {
             if (!frame) frame = requestAnimationFrame(update);
@@ -179,5 +205,5 @@ function useScrolledPast(
             cancelAnimationFrame(frame);
         };
     }, [hero, titleBar]);
-    return scrolledPast;
+    return collapsed;
 }
