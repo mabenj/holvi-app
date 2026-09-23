@@ -1,6 +1,7 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
 import { InvalidArgumentError } from "@/lib/common/errors";
 import {
+    listQueryParam,
     numberQueryParam,
     singleQueryParam
 } from "@/lib/common/query-params";
@@ -57,7 +58,7 @@ async function get(req: ApiRequest, res: ApiResponse) {
     res.status(404).json({ status: "error", error: "Not found" });
 }
 
-/** One page of the collection's files: ?sort=newest|oldest|name&cursor=&limit= */
+/** One page of the collection's files: ?sort=newest|oldest|name&tags=&tags=&cursor=&limit= */
 async function handleGetCollectionFiles(
     req: ApiRequest,
     res: ApiResponse<Partial<BrowseFilesPage>>,
@@ -67,6 +68,7 @@ async function handleGetCollectionFiles(
     const page = await service.browseFiles(collectionId, {
         // The service rejects any sort it does not know
         sort: singleQueryParam(req.query.sort) as FileSort | undefined,
+        tags: listQueryParam(req.query.tags),
         cursor: singleQueryParam(req.query.cursor),
         limit: numberQueryParam(req.query.limit)
     });

@@ -25,6 +25,7 @@ export type {
   BrowseCollectionsPage,
   BrowseCollectionsQuery,
 } from "./collection-browsing";
+export type { CollectionFileType } from "../types/collection-file-type";
 export type { BrowseFilesPage, BrowseFilesQuery, FileSort } from "./file-browsing";
 
 interface CreateResult {

@@ -4,7 +4,12 @@ import { createHash } from "crypto";
 import appConfig from "../common/app-config";
 import { InvalidArgumentError } from "../common/errors";
 import { getFileSrc } from "../common/utilities";
+import {
+    COLLECTION_FILE_TYPES,
+    CollectionFileType
+} from "../types/collection-file-type";
 import { CollectionSummary } from "../types/collection-summary";
+import { allOf, SqlFilter, tagFilter } from "./browse-filters";
 import {
     decodeCursor,
     encodeCursor,
@@ -16,6 +21,12 @@ export type CollectionSort = "random";
 
 export interface BrowseCollectionsQuery {
     sort?: CollectionSort;
+    /** Only collections that have every one of these tags */
+    tags?: string[];
+    /** Only collections holding these types of files; any by default */
+    fileType?: CollectionFileType;
+    /** Only collections whose name contains this, ignoring case */
+    q?: string;
     /** Keeps the random order of an earlier page; derived from the Shuffle period when absent */
     seed?: string;
     /** Opaque; from the previous page's nextCursor */
@@ -57,6 +68,8 @@ export async function browseCollections(
         ? decodeCursor(query.cursor, isRandomCursor)
         : null;
 
+    const filter = collectionFilter(query);
+
     const db = await Database.getInstance();
     // "C" collation: hex keys compare byte by byte, the same in ORDER BY and the cursor
     const shuffleKey = `md5(c.id::text || :seed) COLLATE "C"`;
@@ -64,6 +77,7 @@ export async function browseCollections(
         `SELECT c.id, c.name, c."createdAt", ${shuffleKey} AS "shuffleKey"
             FROM "Collections" c
             WHERE c."UserId" = :userId
+            ${filter.conditions}
             ${
                 after
                     ? `AND (${shuffleKey}, c.id) > (:afterKey COLLATE "C", CAST(:afterId AS uuid))`
@@ -72,6 +86,7 @@ export async function browseCollections(
             ORDER BY "shuffleKey", c.id
             LIMIT :limit`,
         {
+            ...filter.replacements,
             userId,
             seed,
             afterKey: after?.[0],
@@ -205,6 +220,61 @@ export async function summarizeCollections(
             ).getTime()
         };
     });
+}
+
+/** The SQL conditions that narrow a browse to the query's filters, for any sort */
+function collectionFilter(query: BrowseCollectionsQuery): SqlFilter {
+    return allOf([
+        tagFilter(query.tags, {
+            table: `"CollectionTags"`,
+            ownerColumn: `"CollectionId"`,
+            owner: `c.id`
+        }),
+        fileTypeFilter(query.fileType ?? "any"),
+        nameSearch(query.q)
+    ]);
+}
+
+/** A search longer than this cannot match any collection name worth finding */
+const MAX_SEARCH_LENGTH = 200;
+
+/** Matches collections whose name contains the search, ignoring case and surrounding spaces */
+function nameSearch(q: string | undefined): SqlFilter {
+    const search = q?.trim() ?? "";
+    if (!search) {
+        return { conditions: "", replacements: {} };
+    }
+    if (search.length > MAX_SEARCH_LENGTH) {
+        throw new InvalidArgumentError(
+            `Search for at most ${MAX_SEARCH_LENGTH} characters`
+        );
+    }
+    // The search's own % and _ are plain characters, not wildcards
+    const escaped = search.replace(/[\\%_]/g, (char) => `\\${char}`);
+    return {
+        conditions: `AND c.name ILIKE :namePattern ESCAPE '\\'`,
+        replacements: { namePattern: `%${escaped}%` }
+    };
+}
+
+const HAS_PHOTOS = `EXISTS (SELECT 1 FROM "CollectionFiles" f
+    WHERE f."CollectionId" = c.id AND f."mimeType" LIKE 'image%')`;
+const HAS_VIDEOS = `EXISTS (SELECT 1 FROM "CollectionFiles" f
+    WHERE f."CollectionId" = c.id AND f."mimeType" LIKE 'video%')`;
+
+const FILE_TYPE_CONDITIONS: Record<CollectionFileType, string> = {
+    any: "",
+    hasVideos: `AND ${HAS_VIDEOS}`,
+    // An empty collection has neither, so it is in neither
+    photosOnly: `AND ${HAS_PHOTOS} AND NOT ${HAS_VIDEOS}`,
+    videosOnly: `AND ${HAS_VIDEOS} AND NOT ${HAS_PHOTOS}`
+};
+
+function fileTypeFilter(fileType: CollectionFileType): SqlFilter {
+    if (!COLLECTION_FILE_TYPES.includes(fileType)) {
+        throw new InvalidArgumentError(`Unknown file type '${fileType}'`);
+    }
+    return { conditions: FILE_TYPE_CONDITIONS[fileType], replacements: {} };
 }
 
 function isRandomCursor(parts: string[]): parts is RandomCursor {

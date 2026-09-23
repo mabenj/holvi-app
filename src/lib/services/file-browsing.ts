@@ -3,6 +3,7 @@ import { InvalidArgumentError } from "../common/errors";
 import { getFileSrc } from "../common/utilities";
 import { FILE_SORTS, FileSort } from "../types/file-sort";
 import { FileSummary } from "../types/file-summary";
+import { tagFilter } from "./browse-filters";
 import {
     decodeCursor,
     encodeCursor,
@@ -15,6 +16,8 @@ export type { FileSort } from "../types/file-sort";
 export interface BrowseFilesQuery {
     /** Newest first by default */
     sort?: FileSort;
+    /** Only files that have every one of these file tags */
+    tags?: string[];
     /** Opaque; from the previous page's nextCursor */
     cursor?: string;
     limit?: number;
@@ -106,6 +109,11 @@ export async function browseFiles(
         throw new InvalidArgumentError("Malformed cursor");
     }
 
+    const filter = tagFilter(query.tags, {
+        table: `"CollectionFileTags"`,
+        ownerColumn: `"CollectionFileId"`,
+        owner: `f.id`
+    });
     const { key, direction, keyText, keyFromCursor } = ORDERS[sort];
     const comparison = direction === "ASC" ? ">" : "<";
 
@@ -118,6 +126,7 @@ export async function browseFiles(
                 ${FILE_DATE} AS date, ${keyText} AS "sortKey"
             FROM "CollectionFiles" f
             WHERE f."CollectionId" = :collectionId
+            ${filter.conditions}
             ${
                 after
                     ? `AND (${key}, f.id) ${comparison} (${keyFromCursor}, CAST(:afterId AS uuid))`
@@ -126,6 +135,7 @@ export async function browseFiles(
             ORDER BY ${key} ${direction}, f.id ${direction}
             LIMIT :limit`,
         {
+            ...filter.replacements,
             collectionId,
             afterKey: after?.[1],
             afterId: after?.[2],

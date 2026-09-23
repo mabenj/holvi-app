@@ -12,6 +12,7 @@ import {
     BrowseCollectionsQuery,
     BrowseFilesPage,
     BrowseFilesQuery,
+    CollectionFileType,
     CollectionService,
     FileSort
 } from "./collection.service";
@@ -288,6 +289,141 @@ describe("Browsing collections (integration)", () => {
     });
 });
 
+describe("Filtering and searching collections (integration)", () => {
+    beforeEach(async () => {
+        await resetDatabase();
+    });
+
+    it("matches only collections that have every selected tag, ignoring case", async () => {
+        const user = await createUser("alice");
+        await createCollection(user.id, "Beach", { tags: ["travel", "summer"] });
+        await createCollection(user.id, "Alps", { tags: ["travel", "winter"] });
+        await createCollection(user.id, "Garden", { tags: ["summer"] });
+        await createCollection(user.id, "Untagged");
+        const service = new CollectionService(user.id);
+
+        expect(
+            (await browseAllNames(service, { tags: ["travel"] })).sort()
+        ).toEqual(["Alps", "Beach"]);
+        expect(
+            await browseAllNames(service, { tags: ["Travel", "SUMMER"] })
+        ).toEqual(["Beach"]);
+        expect(
+            await browseAllNames(service, { tags: ["winter", "summer"] })
+        ).toEqual([]);
+    });
+
+    it("matches collections by file type: has videos, photos only or videos only", async () => {
+        const user = await createUser("alice");
+        await createCollectionWithFiles(user.id, "Photos", ["image/jpeg", "image/png"]);
+        await createCollectionWithFiles(user.id, "Videos", ["video/mp4"]);
+        await createCollectionWithFiles(user.id, "Mixed", ["image/jpeg", "video/quicktime"]);
+        await createCollection(user.id, "Empty");
+        const service = new CollectionService(user.id);
+        const namesFor = async (fileType: CollectionFileType) =>
+            (await browseAllNames(service, { fileType })).sort();
+
+        expect(await namesFor("any")).toEqual(["Empty", "Mixed", "Photos", "Videos"]);
+        expect(await namesFor("hasVideos")).toEqual(["Mixed", "Videos"]);
+        expect(await namesFor("photosOnly")).toEqual(["Photos"]);
+        expect(await namesFor("videosOnly")).toEqual(["Videos"]);
+        await expect(
+            service.browseCollections({ fileType: "gifs" as CollectionFileType })
+        ).rejects.toThrow("Unknown file type");
+    });
+
+    it("searches collection names only, for a substring ignoring case", async () => {
+        const user = await createUser("alice");
+        await createCollection(user.id, "Summer in Lapland");
+        await createCollection(user.id, "LAPLAND 2019");
+        await createCollection(user.id, "Paris", {
+            description: "Lapland was colder",
+            tags: ["lapland"]
+        });
+        const weekend = await createCollection(user.id, "Weekend");
+        await addFile(user.id, weekend.id, "lapland.jpg", Buffer.from("l"));
+        await createCollection(user.id, "100% fun");
+        const service = new CollectionService(user.id);
+
+        expect(
+            (await browseAllNames(service, { q: "lapl" })).sort()
+        ).toEqual(["LAPLAND 2019", "Summer in Lapland"]);
+        expect(await browseAllNames(service, { q: "  in lap " })).toEqual([
+            "Summer in Lapland"
+        ]);
+        // Wildcards in the search are plain characters
+        expect(await browseAllNames(service, { q: "0%" })).toEqual(["100% fun"]);
+        expect(await browseAllNames(service, { q: "_" })).toEqual([]);
+    });
+
+    it("combines tags, file type and search with the random order and cursors, each match exactly once", async () => {
+        const user = await createUser("alice");
+        const matching: string[] = [];
+        for (let i = 0; i < 24; i++) {
+            const trip = i % 2 === 0;
+            const tagged = i % 3 !== 0;
+            const withVideo = i % 4 !== 1;
+            const name = `${trip ? "Trip" : "Day"} ${i}`;
+            await createCollectionWithFiles(
+                user.id,
+                name,
+                withVideo ? ["image/jpeg", "video/mp4"] : ["image/jpeg"],
+                { tags: tagged ? ["travel", "family"] : ["travel"] }
+            );
+            if (trip && tagged && withVideo) matching.push(name);
+        }
+        const service = new CollectionService(user.id, {
+            clock: () => new Date("2026-03-01T10:05:00Z")
+        });
+        const query: BrowseCollectionsQuery = {
+            tags: ["family", "travel"],
+            fileType: "hasVideos",
+            q: "trip"
+        };
+
+        const pages = await browseAllPages(service, { ...query, limit: 2 });
+        const names = pages.flatMap((page) =>
+            page.collections.map((c) => c.name)
+        );
+        const wholeRandomOrder = await browseAllNames(service, { limit: 50 });
+
+        expect(matching.length).toBeGreaterThan(4);
+        expect(pages.length).toBe(Math.ceil(matching.length / 2));
+        expect([...names].sort()).toEqual([...matching].sort());
+        expect(new Set(names).size).toBe(names.length);
+        // The filtered collections keep their places in the random order
+        expect(names).toEqual(
+            wholeRandomOrder.filter((name) => matching.includes(name))
+        );
+    });
+
+    it("filters and searches only the requesting user's collections", async () => {
+        const alice = await createUser("alice");
+        const bob = await createUser("bob");
+        await createCollectionWithFiles(alice.id, "Alice trip", ["image/jpeg"], {
+            tags: ["travel"]
+        });
+        await createCollectionWithFiles(bob.id, "Bob trip", ["image/jpeg"], {
+            tags: ["travel"]
+        });
+        await createCollectionWithFiles(bob.id, "Bob videos", ["video/mp4"]);
+        const service = new CollectionService(alice.id);
+
+        expect(await browseAllNames(service, { tags: ["travel"] })).toEqual([
+            "Alice trip"
+        ]);
+        expect(await browseAllNames(service, { q: "trip" })).toEqual([
+            "Alice trip"
+        ]);
+        expect(
+            await browseAllNames(service, { fileType: "photosOnly" })
+        ).toEqual(["Alice trip"]);
+        expect(
+            await browseAllNames(service, { fileType: "videosOnly" })
+        ).toEqual([]);
+    });
+});
+
 describe("Browsing a collection's files (integration)", () => {
     beforeEach(async () => {
         await resetDatabase();
@@ -505,6 +641,45 @@ describe("Browsing a collection's files (integration)", () => {
         ).rejects.toThrow(NotFoundError);
     });
 
+    it("filters files by file tag, matching only files that have every tag, with any sort and cursors", async () => {
+        const user = await createUser("alice");
+        // A collection tag does not tag its files
+        const trip = await createCollection(user.id, "Trip", {
+            tags: ["sunset"]
+        });
+        const files: [string, string[]][] = [
+            ["a.jpg", ["sunset", "beach"]],
+            ["b.jpg", ["Sunset"]],
+            ["c.jpg", ["beach"]],
+            ["d.jpg", ["sunset", "beach", "family"]],
+            ["e.jpg", []],
+            ["f.jpg", ["SUNSET", "Beach"]]
+        ];
+        for (const [name, tags] of files) {
+            await addFile(user.id, trip.id, name, Buffer.from(name), { tags });
+        }
+        const service = new CollectionService(user.id);
+
+        for (const sort of ["newest", "oldest", "name"] as const) {
+            const names = await browseAllFileNames(service, trip.id, {
+                sort,
+                tags: ["beach", "sunset"]
+            });
+            expect(names.sort()).toEqual(["a.jpg", "d.jpg", "f.jpg"]);
+        }
+        expect(
+            await browseAllFileNames(service, trip.id, {
+                sort: "name",
+                tags: ["sunset"]
+            })
+        ).toEqual(["a.jpg", "b.jpg", "d.jpg", "f.jpg"]);
+        expect(
+            await browseAllFileNames(service, trip.id, {
+                tags: ["family", "missing"]
+            })
+        ).toEqual([]);
+    });
+
     it("rejects a malformed cursor, an unknown sort and another sort's cursor", async () => {
         const user = await createUser("alice");
         const trip = await createCollection(user.id, "Trip");
@@ -577,6 +752,22 @@ async function browseAllFileNames(
 ) {
     const files = await browseAllFiles(service, collectionId, query);
     return files.map((file) => file.name);
+}
+
+/** A collection with one file of each of the given types */
+async function createCollectionWithFiles(
+    userId: string,
+    name: string,
+    mimeTypes: string[],
+    options: { tags?: string[] } = {}
+) {
+    const collection = await createCollection(userId, name, options);
+    for (let i = 0; i < mimeTypes.length; i++) {
+        await addFile(userId, collection.id, `file-${i}`, Buffer.from(name), {
+            mimeType: mimeTypes[i]
+        });
+    }
+    return collection;
 }
 
 async function createCollections(userId: string, count: number) {
