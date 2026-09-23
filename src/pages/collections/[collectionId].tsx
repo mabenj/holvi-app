@@ -20,6 +20,7 @@ import FileTagFilter from "@/lib/components/collection-page/FileTagFilter";
 import UploadStatus from "@/lib/components/collection-page/UploadStatus";
 import CollectionEditor from "@/lib/components/collections/CollectionEditor";
 import FileSelectionBar from "@/lib/components/files/FileSelectionBar";
+import { showSelectionChanges } from "@/lib/components/files/selection-changes";
 import FileLightbox from "@/lib/components/lightbox/FileLightbox";
 import ConfirmationSurface from "@/lib/components/surfaces/ConfirmationSurface";
 import { useCollectionFiles } from "@/lib/hooks/useCollectionFiles";
@@ -34,7 +35,6 @@ import { useSelection } from "@/lib/hooks/useSelection";
 import { isUploading, startUpload, useUpload } from "@/lib/hooks/useUpload";
 import { CollectionDetails as Collection } from "@/lib/types/collection-details";
 import { FileSort } from "@/lib/types/file-sort";
-import { FileSummary } from "@/lib/types/file-summary";
 import { Box, Button, EmptyState, Flex, Text, VStack } from "@chakra-ui/react";
 import { mdiImagePlusOutline, mdiTagOffOutline, mdiUpload } from "@mdi/js";
 import Icon from "@mdi/react";
@@ -102,10 +102,10 @@ function CollectionScreen({
         selection.exit();
         changeTags(tags);
     };
-    // Files whose tags changed may no longer match the tag filter
-    const changeTaggedFiles = (
-        change: (files: FileSummary[]) => FileSummary[]
-    ) => (tags.length > 0 ? reload() : changeFiles(change));
+    const selectionChanges = showSelectionChanges(
+        { reload, changeFiles },
+        tags.length > 0
+    );
 
     // Deleting or renaming files can change the counts and the Cover, here
     // and on the Collections tab
@@ -195,28 +195,14 @@ function CollectionScreen({
                         )}
                         collectionId={collectionId}
                         onDeleted={(ids) => {
-                            changeFiles((loaded) =>
-                                loaded.filter((file) => !ids.includes(file.id))
-                            );
+                            selectionChanges.onDeleted(ids);
                             void refreshCollection();
                         }}
                         onEdited={(id, fields) => {
-                            changeTaggedFiles((loaded) =>
-                                loaded.map((file) =>
-                                    file.id === id ? { ...file, ...fields } : file
-                                )
-                            );
+                            selectionChanges.onEdited(id, fields);
                             void refreshCollection();
                         }}
-                        onTagged={(tagsById) =>
-                            changeTaggedFiles((loaded) =>
-                                loaded.map((file) =>
-                                    tagsById[file.id]
-                                        ? { ...file, tags: tagsById[file.id] }
-                                        : file
-                                )
-                            )
-                        }
+                        onTagged={selectionChanges.onTagged}
                     />
                 ) : undefined
             }>

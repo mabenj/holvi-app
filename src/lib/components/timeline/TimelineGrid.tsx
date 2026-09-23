@@ -59,6 +59,8 @@ export default function TimelineGrid({
     );
 
     const listRef = useRef<HTMLDivElement>(null);
+    // The selection gestures listen on the list, so they need it as state
+    // to attach once it mounts; the virtualizer reads it through the ref
     const [list, setList] = useState<HTMLDivElement | null>(null);
     const attachList = useCallback((element: HTMLDivElement | null) => {
         listRef.current = element;

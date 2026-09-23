@@ -20,7 +20,7 @@ import Icon from "@mdi/react";
 import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import {
-    ClearFiltersChip,
+    ActiveFilterChips,
     FilterButton,
     FilterChip
 } from "../filters/FilterControls";
@@ -144,17 +144,8 @@ function SearchField({
 function ActiveFilters({ filter, onChange }: CollectionsFilterBarProps) {
     const search = filter.q.trim();
     return (
-        <Flex
-            role="group"
-            aria-label="Active filters"
-            gap="1.5"
-            overflowX="auto"
-            alignItems="center"
-            // Chips scroll sideways instead of wrapping into many rows
-            css={{ scrollbarWidth: "none" }}>
-            <ClearFiltersChip
-                onClear={() => onChange({ tags: [], fileType: "any", q: "" })}
-            />
+        <ActiveFilterChips
+            onClearAll={() => onChange({ tags: [], fileType: "any", q: "" })}>
             {search && (
                 <FilterChip
                     label={`“${search}”`}
@@ -179,7 +170,7 @@ function ActiveFilters({ filter, onChange }: CollectionsFilterBarProps) {
                     }
                 />
             ))}
-        </Flex>
+        </ActiveFilterChips>
     );
 }
 

@@ -1,4 +1,12 @@
-import { Button, Circle, Float, IconButton, Text } from "@chakra-ui/react";
+import {
+    Button,
+    Circle,
+    Flex,
+    FlexProps,
+    Float,
+    IconButton,
+    Text
+} from "@chakra-ui/react";
 import { mdiClose, mdiFilterVariant } from "@mdi/js";
 import Icon from "@mdi/react";
 
@@ -34,8 +42,32 @@ export function FilterButton({
     );
 }
 
-/** Clears every filter in effect in one tap; first in a row of filter chips */
-export function ClearFiltersChip({ onClear }: { onClear: () => void }) {
+/**
+ * The filters in effect as a row of chips (`FilterChip`s as children), led by
+ * one that clears them all in one tap
+ */
+export function ActiveFilterChips({
+    onClearAll,
+    children,
+    ...flexProps
+}: FlexProps & { onClearAll: () => void }) {
+    return (
+        <Flex
+            role="group"
+            aria-label="Active filters"
+            gap="1.5"
+            overflowX="auto"
+            alignItems="center"
+            // Chips scroll sideways instead of wrapping into many rows
+            css={{ scrollbarWidth: "none" }}
+            {...flexProps}>
+            <ClearFiltersChip onClear={onClearAll} />
+            {children}
+        </Flex>
+    );
+}
+
+function ClearFiltersChip({ onClear }: { onClear: () => void }) {
     return (
         <Button
             size="xs"

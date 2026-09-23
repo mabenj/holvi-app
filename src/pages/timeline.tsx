@@ -6,6 +6,7 @@ import {
 import AppShell from "@/lib/components/app-shell/AppShell";
 import FileGrid from "@/lib/components/collection-page/FileGrid";
 import FileSelectionBar from "@/lib/components/files/FileSelectionBar";
+import { showSelectionChanges } from "@/lib/components/files/selection-changes";
 import TimelineGrid from "@/lib/components/timeline/TimelineGrid";
 import {
     ActiveTagFilters,
@@ -15,7 +16,6 @@ import { replaceCollection } from "@/lib/hooks/useCollectionsBrowse";
 import { useNextPageSentinel } from "@/lib/hooks/useNextPageSentinel";
 import { useSelection } from "@/lib/hooks/useSelection";
 import { useTimelineFiles } from "@/lib/hooks/useTimelineFiles";
-import { FileSummary } from "@/lib/types/file-summary";
 import { Box, Button, EmptyState, Text, VStack } from "@chakra-ui/react";
 import { mdiTagOffOutline, mdiTimelineClockOutline } from "@mdi/js";
 import Icon from "@mdi/react";
@@ -27,7 +27,11 @@ export const getServerSideProps = signedInPageProps;
 /** Skeleton tiles while the first page of the Timeline loads */
 const FIRST_PAGE_SKELETONS = 12;
 
-/** Every file the user owns, newest first, under sticky month headers; no floating action button */
+/**
+ * Every file the user owns, newest first, under sticky month headers, with no
+ * floating action button. It can be filtered by tag, on a file or its
+ * collection, and its files selected for bulk actions as on a collection page.
+ */
 export default function TimelineTab({ user }: SignedInPageProps) {
     const [tags, changeTags] = useState<string[]>([]);
     const {
@@ -47,10 +51,10 @@ export default function TimelineTab({ user }: SignedInPageProps) {
         selection.exit();
         changeTags(tags);
     };
-    // Files whose tags changed may no longer match the tag filter
-    const changeTaggedFiles = (
-        change: (files: FileSummary[]) => FileSummary[]
-    ) => (tags.length > 0 ? reload() : changeFiles(change));
+    const selectionChanges = showSelectionChanges(
+        { reload, changeFiles },
+        tags.length > 0
+    );
 
     // Deleting or renaming files can change their collections' counts and
     // Covers, on the Collections tab and the collection pages
@@ -98,27 +102,13 @@ export default function TimelineTab({ user }: SignedInPageProps) {
                         )}
                         onDeleted={(ids) => {
                             refreshCollections(collectionsOf(ids));
-                            changeFiles((loaded) =>
-                                loaded.filter((file) => !ids.includes(file.id))
-                            );
+                            selectionChanges.onDeleted(ids);
                         }}
                         onEdited={(id, fields) => {
                             refreshCollections(collectionsOf([id]));
-                            changeTaggedFiles((loaded) =>
-                                loaded.map((file) =>
-                                    file.id === id ? { ...file, ...fields } : file
-                                )
-                            );
+                            selectionChanges.onEdited(id, fields);
                         }}
-                        onTagged={(tagsById) =>
-                            changeTaggedFiles((loaded) =>
-                                loaded.map((file) =>
-                                    tagsById[file.id]
-                                        ? { ...file, tags: tagsById[file.id] }
-                                        : file
-                                )
-                            )
-                        }
+                        onTagged={selectionChanges.onTagged}
                     />
                 ) : undefined
             }>

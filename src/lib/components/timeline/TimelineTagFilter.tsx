@@ -1,10 +1,10 @@
 import { fetchTagCounts, tagCountsUrl } from "@/lib/client/tags";
 import type { TagCount } from "@/lib/types/tag-count";
-import { Button, Flex, Stack, Text } from "@chakra-ui/react";
+import { Button, Stack, Text } from "@chakra-ui/react";
 import { useState } from "react";
 import useSWR from "swr";
 import {
-    ClearFiltersChip,
+    ActiveFilterChips,
     FilterButton,
     FilterChip
 } from "../filters/FilterControls";
@@ -48,17 +48,7 @@ export function ActiveTagFilters({ value, onChange }: TimelineTagFilterProps) {
         return null;
     }
     return (
-        <Flex
-            role="group"
-            aria-label="Active filters"
-            gap="1.5"
-            px="4"
-            pb="3"
-            overflowX="auto"
-            alignItems="center"
-            // Chips scroll sideways instead of wrapping into many rows
-            css={{ scrollbarWidth: "none" }}>
-            <ClearFiltersChip onClear={() => onChange([])} />
+        <ActiveFilterChips px="4" pb="3" onClearAll={() => onChange([])}>
             {value.map((tag) => (
                 <FilterChip
                     key={tag}
@@ -67,7 +57,7 @@ export function ActiveTagFilters({ value, onChange }: TimelineTagFilterProps) {
                     onRemove={() => onChange(toggleTag(value, tag))}
                 />
             ))}
-        </Flex>
+        </ActiveFilterChips>
     );
 }
 
