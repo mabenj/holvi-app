@@ -117,7 +117,7 @@ export interface PositionTracker {
 /**
  * Resumes a video where its playback stopped last time, then remembers its
  * position as it plays, pauses and seeks, and forgets it once playback
- * reaches the end. Call it when the video becomes the active slide, so a
+ * reaches the end or while the video loops. Call it when the video becomes the active slide, so a
  * neighbouring slide's video never overwrites the position before it has
  * been resumed.
  */
@@ -146,7 +146,8 @@ export function resumeAndTrackPosition(
     let savedAt = saved ?? 0;
     const save = () => {
         if (listening.signal.aborted) return;
-        if (video.ended) {
+        // A looping video keeps reaching its end without ending
+        if (video.ended || video.loop) {
             clearSavedPosition(fileId);
         } else if (isLongEnoughToResume(video.duration)) {
             savedAt = video.currentTime;

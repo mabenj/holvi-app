@@ -46,11 +46,19 @@ const ARROW_SEEK_SECONDS = 5;
 /** How much the up and down arrow keys change the volume, from 0 to 1 */
 const ARROW_VOLUME_CHANGE = 0.1;
 
+export type SkipDirection = "back" | "forward";
+
+/** How far a skip in this direction moves, in seconds */
+export function skipSeconds(direction: SkipDirection) {
+    return direction === "back" ? -SKIP_SECONDS : SKIP_SECONDS;
+}
+
 /**
- * Which way a double tap this far across a video skips: back on its left
- * third, forward on its right third, and not at all in between
+ * Which way a double tap this far across the screen skips: back on its left
+ * third, forward on its right third, and not at all in between. Thirds of
+ * the screen rather than of the video, so a narrow video's are wide enough.
  */
-export function skipZone(x: number, width: number): "back" | "forward" | null {
+export function skipZone(x: number, width: number): SkipDirection | null {
     if (x < width / 3) return "back";
     if (x > (width * 2) / 3) return "forward";
     return null;
@@ -85,9 +93,9 @@ export function keyboardAction(event: {
         case "k":
             return { type: "togglePlay" };
         case "j":
-            return { type: "seek", seconds: -SKIP_SECONDS };
+            return { type: "seek", seconds: skipSeconds("back") };
         case "l":
-            return { type: "seek", seconds: SKIP_SECONDS };
+            return { type: "seek", seconds: skipSeconds("forward") };
         case "ArrowLeft":
             return { type: "seek", seconds: -ARROW_SEEK_SECONDS };
         case "ArrowRight":
@@ -99,4 +107,20 @@ export function keyboardAction(event: {
         default:
             return null;
     }
+}
+
+/** Plays a paused or finished video, and pauses a playing one */
+export function togglePlay(video: HTMLVideoElement) {
+    if (video.paused || video.ended) {
+        // A refused play leaves the play button showing, which says enough
+        video.play().catch(() => undefined);
+    } else {
+        video.pause();
+    }
+}
+
+/** Sets a video's volume, from 0 to 1; none at all is muted */
+export function setVolume(video: HTMLVideoElement, volume: number) {
+    video.volume = Math.min(1, Math.max(0, volume));
+    video.muted = video.volume === 0;
 }

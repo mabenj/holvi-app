@@ -1,11 +1,10 @@
 import { Box, Flex, Text } from "@chakra-ui/react";
 import { mdiFastForward10, mdiRewind10 } from "@mdi/js";
 import Icon from "@mdi/react";
-import type { SkipDirection } from "./usePlayerShortcuts";
-import { SKIP_SECONDS } from "./video-player";
+import { SKIP_SECONDS, type SkipDirection } from "./video-player";
 
 /**
- * A ripple over the side of the video a double tap skipped on, which fades
+ * A ripple over the side of the screen a double tap skipped on, which fades
  * by itself. Give it a new `key` for each skip, so the ripple starts over.
  */
 export default function SkipCue({ direction }: { direction: SkipDirection }) {

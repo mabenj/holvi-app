@@ -35,11 +35,18 @@ export function usePictureInPicture(video: HTMLVideoElement): PictureInPicture {
     const toggle = () => {
         // A refusal leaves the video where it is, which says enough
         if (document.pictureInPictureElement === video) {
-            document.exitPictureInPicture().catch(() => undefined);
+            leavePictureInPicture(video);
         } else {
             video.requestPictureInPicture().catch(() => undefined);
         }
     };
 
     return { supported, active, toggle };
+}
+
+/** Ends picture-in-picture for a video, if it is playing picture-in-picture */
+export function leavePictureInPicture(video: HTMLVideoElement) {
+    if (document.pictureInPictureElement === video) {
+        document.exitPictureInPicture().catch(() => undefined);
+    }
 }

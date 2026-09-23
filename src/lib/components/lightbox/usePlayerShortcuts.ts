@@ -4,11 +4,12 @@ import { useEffect, useRef } from "react";
 import {
     keyboardAction,
     seekTarget,
-    SKIP_SECONDS,
-    skipZone
+    setVolume,
+    skipSeconds,
+    skipZone,
+    togglePlay,
+    type SkipDirection
 } from "./video-player";
-
-export type SkipDirection = "back" | "forward";
 
 // Keys typed here belong to what has focus, e.g. the actions menu
 const KEYBOARD_OWNERS =
@@ -19,8 +20,8 @@ const KEYBOARD_OWNERS =
 const PRESSABLE = "button, a, [role=menuitem]";
 
 /**
- * Double-tapping the left or right third of the active video skips 10 s
- * back or forward, instead of PhotoSwipe's zoom. A double tap in the middle
+ * Double-tapping the left or right third of the screen skips the active
+ * video 10 s back or forward, instead of PhotoSwipe's zoom. A double tap in the middle
  * third does nothing. PhotoSwipe tells taps from double taps on touch only;
  * a mouse has the keyboard instead.
  */
@@ -35,10 +36,9 @@ export function useDoubleTapSkip(
             event.preventDefault();
             const direction = skipZone(event.point.x ?? 0, pswp.viewportSize.x);
             if (!direction) return;
-            const seconds = direction === "back" ? -SKIP_SECONDS : SKIP_SECONDS;
             video.currentTime = seekTarget(
                 video.currentTime,
-                seconds,
+                skipSeconds(direction),
                 video.duration
             );
             latestOnSkip.current(direction);
@@ -80,11 +80,7 @@ export function useKeyboardControls(
             key.preventDefault();
             switch (action.type) {
                 case "togglePlay":
-                    if (video.paused || video.ended) {
-                        video.play().catch(() => undefined);
-                    } else {
-                        video.pause();
-                    }
+                    togglePlay(video);
                     break;
                 case "seek":
                     video.currentTime = seekTarget(
@@ -93,16 +89,12 @@ export function useKeyboardControls(
                         video.duration
                     );
                     break;
-                case "volume": {
-                    const volume = video.muted ? 0 : video.volume;
-                    const next = Math.min(
-                        1,
-                        Math.max(0, volume + action.change)
+                case "volume":
+                    setVolume(
+                        video,
+                        (video.muted ? 0 : video.volume) + action.change
                     );
-                    video.volume = next;
-                    video.muted = next === 0;
                     break;
-                }
             }
             latestOnUse.current();
         };

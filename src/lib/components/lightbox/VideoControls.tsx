@@ -23,12 +23,14 @@ import {
 import PlayerSlider from "./PlayerSlider";
 import SkipCue from "./SkipCue";
 import { usePictureInPicture } from "./usePictureInPicture";
+import { useDoubleTapSkip, useKeyboardControls } from "./usePlayerShortcuts";
 import {
+    CONTROLS_AUTO_HIDE_MS,
+    formatPlaybackTime,
+    setVolume,
     SkipDirection,
-    useDoubleTapSkip,
-    useKeyboardControls
-} from "./usePlayerShortcuts";
-import { CONTROLS_AUTO_HIDE_MS, formatPlaybackTime } from "./video-player";
+    togglePlay
+} from "./video-player";
 import { useVideoPlayback } from "./useVideoPlayback";
 
 // Volume can be set only where there is a mouse: phones use their hardware
@@ -120,14 +122,6 @@ export default function VideoControls({
     // A refused play leaves the play button showing, which says enough
     const play = () => video.play().catch(() => undefined);
 
-    const togglePlay = () => {
-        if (video.paused || video.ended) {
-            play();
-        } else {
-            video.pause();
-        }
-    };
-
     const seekTo = (fraction: number) => {
         if (!Number.isFinite(duration)) return;
         const time = fraction * duration;
@@ -183,7 +177,7 @@ export default function VideoControls({
                     <ControlButton
                         label={playing ? "Pause" : "Play"}
                         icon={playing ? mdiPause : mdiPlay}
-                        onClick={togglePlay}
+                        onClick={() => togglePlay(video)}
                     />
                     <Text
                         fontSize="sm"
@@ -233,10 +227,7 @@ export default function VideoControls({
                                 label="Volume"
                                 value={audibleVolume}
                                 valueText={`${Math.round(audibleVolume * 100)}%`}
-                                onChange={(volume) => {
-                                    video.volume = volume;
-                                    video.muted = volume === 0;
-                                }}
+                                onChange={(volume) => setVolume(video, volume)}
                             />
                         </Flex>
                     )}
