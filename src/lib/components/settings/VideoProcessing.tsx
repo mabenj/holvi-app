@@ -19,7 +19,9 @@ import { mdiMovieCogOutline } from "@mdi/js";
 import Icon from "@mdi/react";
 import { useState } from "react";
 
-const COUNTS: { key: keyof Omit<VideoProcessingStatus, "currentFile">; label: string; color?: string }[] = [
+type StatusCount = keyof Omit<VideoProcessingStatus, "currentFile">;
+
+const COUNTS: { key: StatusCount; label: string; color?: string }[] = [
     { key: "pending", label: "Pending" },
     { key: "processing", label: "Processing" },
     { key: "done", label: "Done" },

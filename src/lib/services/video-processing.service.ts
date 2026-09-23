@@ -178,8 +178,13 @@ class VideoProcessingWorker {
             { where: { id: next.id, processingStatus: "pending" } }
         );
         if (claimed > 0) {
+            const ref = {
+                userId: next.userId,
+                collectionId: next.collectionId,
+                fileId: next.id
+            };
             await processVideo(
-                { userId: next.userId, collectionId: next.collectionId, fileId: next.id },
+                ref,
                 this.dependencies.get(next.userId) ?? realDependencies
             );
         }
@@ -192,8 +197,15 @@ class VideoProcessingWorker {
  * Rendition if it is not web-safe, encrypts the Rendition and moves it next to
  * the original, records the result and deletes the temporary plaintext.
  */
-async function processVideo(ref: VideoFileRef, dependencies: WorkerDependencies) {
-    const workDir = path.join(appConfig.dataDir, PROCESSING_DIR_NAME, ref.fileId);
+async function processVideo(
+    ref: VideoFileRef,
+    dependencies: WorkerDependencies
+) {
+    const workDir = path.join(
+        appConfig.dataDir,
+        PROCESSING_DIR_NAME,
+        ref.fileId
+    );
     const renditionPath = new UserFileSystem(ref.userId).getRenditionPath(
         ref.collectionId,
         ref.fileId
@@ -236,9 +248,13 @@ async function processVideo(ref: VideoFileRef, dependencies: WorkerDependencies)
             // Deleted while it was being processed
             await rm(renditionPath, { force: true });
         }
-        logger.info(
-            `Processed video '${ref.fileId}' (${plan ? `${plan}d to a Rendition` : "web-safe"})`
-        );
+        const outcome =
+            plan === "remux"
+                ? "remuxed to a Rendition"
+                : plan === "transcode"
+                ? "transcoded to a Rendition"
+                : "web-safe, no Rendition";
+        logger.info(`Processed video '${ref.fileId}' (${outcome})`);
     } catch (error) {
         logger.error(`Could not process video '${ref.fileId}'`, error);
         if (storedRendition) {
@@ -249,7 +265,10 @@ async function processVideo(ref: VideoFileRef, dependencies: WorkerDependencies)
             processingError: getErrorMessage(error),
             hasRendition: false
         }).catch((updateError) =>
-            logger.error(`Could not mark video '${ref.fileId}' failed`, updateError)
+            logger.error(
+                `Could not mark video '${ref.fileId}' failed`,
+                updateError
+            )
         );
     } finally {
         await rm(workDir, { recursive: true, force: true }).catch((error) =>
@@ -261,7 +280,10 @@ async function processVideo(ref: VideoFileRef, dependencies: WorkerDependencies)
 /** Records a processed video's result; false if it no longer exists or is no longer being processed */
 async function recordResult(
     fileId: string,
-    fields: Pick<CollectionFile, "processingStatus" | "processingError" | "hasRendition">
+    fields: Pick<
+        CollectionFile,
+        "processingStatus" | "processingError" | "hasRendition"
+    >
 ) {
     const db = await Database.getInstance();
     const [updated] = await db.models.CollectionFile.update(fields, {
