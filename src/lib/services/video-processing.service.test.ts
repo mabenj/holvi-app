@@ -1,6 +1,8 @@
-import { readFile, rename } from "fs/promises";
+import crypto from "crypto";
+import { mkdir, readFile, rename, writeFile } from "fs/promises";
 import path from "path";
 import sharp from "sharp";
+import { Readable } from "stream";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
     addFile,
@@ -16,7 +18,7 @@ import {
     readZip,
     releaseHoldingOpeners
 } from "../../../test/backup-fixtures";
-import { resetDatabase } from "../../../test/database";
+import { getTestDatabase, resetDatabase } from "../../../test/database";
 import {
     addVideo,
     generateVideo,
@@ -25,6 +27,7 @@ import {
     topLevelBoxes
 } from "../../../test/video-fixtures";
 import appConfig from "../common/app-config";
+import { UserFileSystem } from "../common/user-file-system";
 import { isActiveBackupJobStatus } from "../types/backup-job-dto";
 import { BackupService } from "./backup.service";
 import { CollectionService } from "./collection.service";
@@ -32,6 +35,22 @@ import {
     VideoProcessingService,
     VideoProcessingStatus
 } from "./video-processing.service";
+
+/** Longer than the worker takes to check again whether a Backup job is still queued or running */
+const WAIT_LONGER_THAN_A_BACKUP_CHECK_MS = 3_000;
+
+function sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** A decrypted-file opener whose stream fails, as when the disk cannot be read */
+function failingOpener() {
+    return new Readable({
+        read() {
+            this.destroy(new Error("The disk could not be read"));
+        }
+    });
+}
 
 function isIdle(status: VideoProcessingStatus) {
     return status.pending === 0 && status.processing === 0;
@@ -471,5 +490,178 @@ describe("VideoProcessingService (integration)", () => {
         expect(await playbackSrcOf(bob.id, bobsTrip.id, bobsVideo.id)).toBe(
             originalSrc(bobsTrip.id, bobsVideo.id)
         );
+    });
+
+    it("waits while a Backup job is queued or running, and processes the video once none is", async () => {
+        const db = await getTestDatabase();
+        const alice = await createUser("alice");
+        const bob = await createUser("bob");
+        const trip = await createCollection(alice.id, "Trip");
+        const bobsTrip = await createCollection(bob.id, "Bob's trip");
+        await addFile(bob.id, bobsTrip.id, "a.jpg", Buffer.from("photo"));
+        await addVideo(alice.id, trip.id, "clip", {
+            videoCodec: "h264",
+            audio: "none",
+            container: "mp4"
+        });
+        // Queued, and not yet started by the instance's backup runner
+        const queued = await db.models.BackupJob.create({
+            UserId: bob.id,
+            status: "queued",
+            queuedAt: new Date()
+        });
+        const service = new VideoProcessingService(alice.id);
+
+        await service.processVideos();
+        await sleep(WAIT_LONGER_THAN_A_BACKUP_CHECK_MS);
+        const whileQueued = await service.getStatus();
+        // Starting Alice's backup starts the runner, which runs Bob's queued job first
+        const holding = createHoldingOpener();
+        const aliceBackups = new BackupService(alice.id, {
+            openDecryptedFile: holding.openDecryptedFile
+        });
+        const aliceJob = await aliceBackups.start();
+        await waitFor(
+            () => aliceBackups.getJob(aliceJob.id),
+            (job) => job.status === "running"
+        );
+        await sleep(WAIT_LONGER_THAN_A_BACKUP_CHECK_MS);
+        const whileRunning = await service.getStatus();
+        holding.release();
+        const finished = await waitFor(() => service.getStatus(), isIdle, 60_000);
+
+        expect(whileQueued).toMatchObject({ pending: 1, processing: 0, done: 0 });
+        expect(whileRunning).toMatchObject({ pending: 1, processing: 0, done: 0 });
+        expect(finished).toMatchObject({ done: 1, failed: 0 });
+        expect((await new BackupService(bob.id).getJob(queued.id)).status).toBe(
+            "completed"
+        );
+        expect((await aliceBackups.getJob(aliceJob.id)).status).toBe("completed");
+    });
+
+    it("on startup returns videos left processing to pending, empties the processing directory and resumes", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const original = await generateVideo({
+            videoCodec: "hevc",
+            audio: "aac",
+            container: "mov"
+        });
+        // Left behind by a server that stopped mid-processing
+        const interrupted = await addFile(user.id, trip.id, "iphone.mov", original, {
+            mimeType: "video/quicktime",
+            processingStatus: "processing"
+        });
+        const leftPending = await addVideo(
+            user.id,
+            trip.id,
+            "web",
+            { videoCodec: "h264", audio: "aac", container: "mp4" },
+            { processingStatus: "pending" }
+        );
+        const processingDir = path.join(appConfig.dataDir, "processing");
+        for (const staged of [interrupted.id, crypto.randomUUID()]) {
+            await mkdir(path.join(processingDir, staged), { recursive: true });
+            await writeFile(path.join(processingDir, staged, "original"), original);
+        }
+        const service = new VideoProcessingService(user.id);
+        const beforeRecovery = await service.getStatus();
+
+        await VideoProcessingService.recover();
+        const finished = await waitFor(() => service.getStatus(), isIdle, 60_000);
+
+        expect(beforeRecovery).toMatchObject({ pending: 1, processing: 1 });
+        expect(finished).toMatchObject({ done: 2, failed: 0 });
+        expect(await playbackSrcOf(user.id, trip.id, interrupted.id)).not.toBe(
+            originalSrc(trip.id, interrupted.id)
+        );
+        expect(await scrubPreviewOf(user.id, trip.id, leftPending.id)).toBeDefined();
+        expect(await listFiles(processingDir)).toEqual([]);
+        expect(await findPlaintextFiles()).toEqual([]);
+    });
+
+    it("records a failed video's error, and keeps playing it from its untouched original", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const original = await generateVideo({
+            videoCodec: "hevc",
+            audio: "aac",
+            container: "mov"
+        });
+        const video = await addFile(user.id, trip.id, "iphone.mov", original, {
+            mimeType: "video/quicktime"
+        });
+        const service = new VideoProcessingService(user.id, {
+            openDecryptedFile: failingOpener
+        });
+
+        const status = await processVideos(service);
+
+        expect(status).toMatchObject({ done: 0, failed: 1 });
+        expect(await service.getFailedVideos()).toEqual([
+            {
+                id: video.id,
+                collectionId: trip.id,
+                name: "iphone.mov",
+                error: "The disk could not be read"
+            }
+        ]);
+        const playbackSrc = await playbackSrcOf(user.id, trip.id, video.id);
+        expect(playbackSrc).toBe(originalSrc(trip.id, video.id));
+        expect((await readPlaybackSrc(user.id, playbackSrc!)).equals(original)).toBe(
+            true
+        );
+        expect(await scrubPreviewOf(user.id, trip.id, video.id)).toBeUndefined();
+    });
+
+    it("retries a failed video when videos are queued again", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const video = await addVideo(user.id, trip.id, "iphone", {
+            videoCodec: "hevc",
+            audio: "aac",
+            container: "mov"
+        });
+        await processVideos(
+            new VideoProcessingService(user.id, { openDecryptedFile: failingOpener })
+        );
+        const service = new VideoProcessingService(user.id);
+
+        const status = await processVideos(service);
+
+        expect(status).toMatchObject({ done: 1, failed: 0 });
+        expect(await service.getFailedVideos()).toEqual([]);
+        expect(await playbackSrcOf(user.id, trip.id, video.id)).not.toBe(
+            originalSrc(trip.id, video.id)
+        );
+        expect(await scrubPreviewOf(user.id, trip.id, video.id)).toBeDefined();
+    });
+
+    it("goes on to process the other videos after one fails", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const webSafe = { videoCodec: "h264", audio: "aac", container: "mp4" } as const;
+        const first = await addVideo(user.id, trip.id, "first", webSafe);
+        const failing = await addVideo(user.id, trip.id, "failing", webSafe);
+        const last = await addVideo(user.id, trip.id, "last", webSafe);
+        const service = new VideoProcessingService(user.id, {
+            openDecryptedFile: (ref) =>
+                ref.fileId === failing.id
+                    ? failingOpener()
+                    : new UserFileSystem(ref.userId).openDecryptedFile(
+                          ref.collectionId,
+                          ref.fileId
+                      )
+        });
+
+        const status = await processVideos(service);
+
+        expect(status).toMatchObject({ done: 2, failed: 1 });
+        expect((await service.getFailedVideos()).map((video) => video.id)).toEqual([
+            failing.id
+        ]);
+        for (const video of [first, last]) {
+            expect(await scrubPreviewOf(user.id, trip.id, video.id)).toBeDefined();
+        }
     });
 });

@@ -86,6 +86,7 @@ export type FileMetadata = Partial<
         | "gpsAltitude"
         | "gpsLabel"
         | "blurDataUrl"
+        | "processingStatus"
     >
 > & { tags?: string[] };
 

@@ -21,6 +21,14 @@ export interface VideoFileRef {
     fileId: string;
 }
 
+/** A video whose processing failed; it still plays from its original */
+export interface FailedVideo {
+    id: string;
+    collectionId: string;
+    name: string;
+    error: string | null;
+}
+
 /** Opens a video's whole decrypted original. Failures must be emitted as stream errors. */
 export type DecryptedVideoOpener = (file: VideoFileRef) => Readable;
 
@@ -40,6 +48,9 @@ const realDependencies: WorkerDependencies = {
 
 /** Where the worker stages a video's plaintext while processing it; only ever holds the video in progress */
 const PROCESSING_DIR_NAME = "processing";
+
+/** How often the worker checks again whether the Backup job it waits for has finished */
+const BACKUP_CHECK_INTERVAL_MS = 2_000;
 
 const logger = new Log("VIDEO", LogColor.CYAN);
 
@@ -113,9 +124,32 @@ export class VideoProcessingService {
         };
     }
 
+    /** The user's videos whose processing failed, oldest first, with the error each failed with */
+    async getFailedVideos(): Promise<FailedVideo[]> {
+        const db = await Database.getInstance();
+        return (await db.select(
+            `SELECT f.id, f."CollectionId" AS "collectionId", f.name,
+                    f."processingError" AS error
+                FROM "CollectionFiles" f
+                JOIN "Collections" c ON c.id = f."CollectionId"
+                WHERE c."UserId" = :userId AND f."processingStatus" = 'failed'
+                ORDER BY f."createdAt", f.id`,
+            { userId: this.userId }
+        )) as FailedVideo[];
+    }
+
     /** Starts the worker on videos already pending, such as uploads just stored */
     static kick() {
         getWorker().kick();
+    }
+
+    /**
+     * Run once on server start: returns videos a previous process left
+     * processing to pending, empties the processing directory and starts the
+     * worker. Resolves once recovery is done.
+     */
+    static recover(): Promise<void> {
+        return getWorker().recover();
     }
 }
 
@@ -123,6 +157,11 @@ export class VideoProcessingService {
 class VideoProcessingWorker {
     private draining = false;
     private queueChanged = false;
+    private waitingForBackup = false;
+    private recoveryRequests: {
+        resolve: () => void;
+        reject: (error: unknown) => void;
+    }[] = [];
     /** Dependencies injected by the service that queued each user's videos; others use the real file system */
     private readonly dependencies = new Map<string, WorkerDependencies>();
 
@@ -133,6 +172,19 @@ class VideoProcessingWorker {
         } else {
             this.dependencies.delete(userId);
         }
+    }
+
+    /**
+     * Recovers from a previous server process once no video of this worker is
+     * being processed, then goes on to process pending videos. Resolves once
+     * recovery is done.
+     */
+    recover() {
+        const recovered = new Promise<void>((resolve, reject) =>
+            this.recoveryRequests.push({ resolve, reject })
+        );
+        this.kick();
+        return recovered;
     }
 
     kick() {
@@ -161,6 +213,8 @@ class VideoProcessingWorker {
 
     /** Claims and processes the oldest pending video; returns false if none is pending */
     private async processNextVideo() {
+        // Between videos, so recovery never touches a video this process is processing
+        await this.runRequestedRecovery();
         const db = await Database.getInstance();
         const [next] = (await db.select(
             `SELECT f.id, f."CollectionId" AS "collectionId", c."UserId" AS "userId"
@@ -173,6 +227,16 @@ class VideoProcessingWorker {
         if (!next) {
             return false;
         }
+        if (await isBackupJobActive()) {
+            // Backups need the disk and CPU more; check again after a while
+            if (!this.waitingForBackup) {
+                logger.info("Waiting for the Backup job to finish");
+                this.waitingForBackup = true;
+            }
+            await sleep(BACKUP_CHECK_INTERVAL_MS);
+            return true;
+        }
+        this.waitingForBackup = false;
         // Conditional, so another instance's worker cannot process it too
         const [claimed] = await db.models.CollectionFile.update(
             { processingStatus: "processing" },
@@ -191,6 +255,34 @@ class VideoProcessingWorker {
         }
         return true;
     }
+
+    private async runRequestedRecovery() {
+        const requests = this.recoveryRequests.splice(0);
+        if (requests.length === 0) {
+            return;
+        }
+        try {
+            await recoverInterruptedVideos();
+            requests.forEach((request) => request.resolve());
+        } catch (error) {
+            logger.error("Could not recover video processing", error);
+            requests.forEach((request) => request.reject(error));
+        }
+    }
+}
+
+/** Returns videos a previous server process left processing to pending, and deletes the plaintext it staged */
+async function recoverInterruptedVideos() {
+    const db = await Database.getInstance();
+    const [requeuedCount] = await db.models.CollectionFile.update(
+        { processingStatus: "pending" },
+        { where: { processingStatus: "processing" } }
+    );
+    const processingDir = path.join(appConfig.dataDir, PROCESSING_DIR_NAME);
+    await rm(processingDir, { recursive: true, force: true });
+    logger.info(
+        `Recovered video processing: ${requeuedCount} interrupted videos pending again, processing directory emptied`
+    );
 }
 
 /**
@@ -294,6 +386,20 @@ async function processVideo(
             logger.error(`Could not delete '${workDir}'`, error)
         );
     }
+}
+
+/** Whether any Backup job on the instance is queued or running */
+async function isBackupJobActive() {
+    const db = await Database.getInstance();
+    const activeJob = await db.models.BackupJob.findOne({
+        attributes: ["id"],
+        where: { status: ["queued", "running"] }
+    });
+    return activeJob !== null;
+}
+
+function sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
