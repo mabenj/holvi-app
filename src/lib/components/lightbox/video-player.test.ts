@@ -4,6 +4,7 @@ import {
     fractionAtPointer,
     isTap,
     keyboardAction,
+    scrubPreviewTile,
     seekTarget,
     skipZone
 } from "./video-player";
@@ -126,5 +127,31 @@ describe("keyboardAction", () => {
         expect(key("ArrowLeft", { altKey: true })).toBeNull();
         expect(key("l", { ctrlKey: true })).toBeNull();
         expect(key(" ", { metaKey: true })).toBeNull();
+    });
+});
+
+describe("scrubPreviewTile", () => {
+    // Seven frames two seconds apart, in rows of three
+    const layout = {
+        intervalSeconds: 2,
+        frames: 7,
+        columns: 3,
+        rows: 3,
+        tileWidth: 160,
+        tileHeight: 90
+    };
+
+    it("finds the frame sampled at or just before the time, left to right and top to bottom", () => {
+        expect(scrubPreviewTile(layout, 0)).toEqual({ left: 0, top: 0 });
+        expect(scrubPreviewTile(layout, 1.99)).toEqual({ left: 0, top: 0 });
+        expect(scrubPreviewTile(layout, 2)).toEqual({ left: 160, top: 0 });
+        expect(scrubPreviewTile(layout, 7)).toEqual({ left: 0, top: 90 });
+        expect(scrubPreviewTile(layout, 12.5)).toEqual({ left: 0, top: 180 });
+    });
+
+    it("keeps to the frames there are", () => {
+        expect(scrubPreviewTile(layout, -1)).toEqual({ left: 0, top: 0 });
+        expect(scrubPreviewTile(layout, 100)).toEqual({ left: 0, top: 180 });
+        expect(scrubPreviewTile(layout, NaN)).toEqual({ left: 0, top: 0 });
     });
 });

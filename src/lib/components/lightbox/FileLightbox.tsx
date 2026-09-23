@@ -125,6 +125,7 @@ export default function FileLightbox({
                             pswp={ui.pswp}
                             video={video}
                             knownDuration={file.durationInSeconds}
+                            scrubPreview={file.scrubPreview}
                         />
                     )}
                 </Caption>,

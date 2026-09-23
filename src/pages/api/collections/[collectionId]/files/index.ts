@@ -102,11 +102,15 @@ async function handleGetCollectionImage(
     collectionId: string,
     imageId: string
 ) {
+    const variant = singleQueryParam(req.query.variant);
+    if (variant !== undefined && variant !== "scrubPreview") {
+        throw new InvalidArgumentError(`Unknown variant '${variant}'`);
+    }
     const service = new CollectionService(req.session.user.id);
-    const { file, mimeType, filename } = await service.getFileBuffer(
-        collectionId,
-        imageId
-    );
+    const { file, mimeType, filename } =
+        variant === "scrubPreview"
+            ? await service.getScrubPreview(collectionId, imageId)
+            : await service.getFileBuffer(collectionId, imageId);
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Cache-Control", "public, max-age=86400"); // 24h
     res.setHeader(
