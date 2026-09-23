@@ -118,6 +118,9 @@ function openLightbox(
         // The slides come from the loaded files, which grow while it is open
         dataSource: [],
         bgOpacity: 1,
+        // Wrapping round would jump from the last loaded file to the first
+        // while the next page is on its way
+        loop: false,
         wheelToZoom: true,
         // The loaded files are not all of them, so "3 / 48" would mislead
         counter: false,
