@@ -18,7 +18,13 @@ import {
   browseCollections,
   summarizeCollections,
 } from "./collection-browsing";
-import { BrowseFilesPage, BrowseFilesQuery, browseFiles } from "./file-browsing";
+import {
+  BrowseFilesPage,
+  BrowseFilesQuery,
+  BrowseTimelineQuery,
+  browseFiles,
+  browseTimeline,
+} from "./file-browsing";
 import { UUID_PATTERN } from "./keyset-paging";
 import { VideoProcessingService } from "./video-processing.service";
 
@@ -27,7 +33,12 @@ export type {
   BrowseCollectionsQuery,
 } from "./collection-browsing";
 export type { CollectionFileType } from "../types/collection-file-type";
-export type { BrowseFilesPage, BrowseFilesQuery, FileSort } from "./file-browsing";
+export type {
+  BrowseFilesPage,
+  BrowseFilesQuery,
+  BrowseTimelineQuery,
+  FileSort,
+} from "./file-browsing";
 
 interface CreateResult {
   collection?: CollectionDto;
@@ -78,6 +89,13 @@ export class CollectionService {
   ): Promise<BrowseFilesPage> {
     await this.throwIfNotUserCollection(collectionId);
     return browseFiles(collectionId, query);
+  }
+
+  /** One page of the Timeline: every file the user owns, across their collections, newest first */
+  async browseTimeline(
+    query: BrowseTimelineQuery = {}
+  ): Promise<BrowseFilesPage> {
+    return browseTimeline(this.userId, query);
   }
 
   async getAllFiles(): Promise<CollectionFileDto[]> {

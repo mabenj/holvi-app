@@ -16,6 +16,7 @@ import {
     BrowseCollectionsQuery,
     BrowseFilesPage,
     BrowseFilesQuery,
+    BrowseTimelineQuery,
     CollectionFileType,
     CollectionService,
     FileSort
@@ -881,6 +882,142 @@ describe("Deleting collections (integration)", () => {
     });
 });
 
+describe("Browsing the Timeline (integration)", () => {
+    beforeEach(async () => {
+        await resetDatabase();
+    });
+
+    const day = (d: number, hour = 0) => new Date(Date.UTC(2022, 0, d, hour));
+
+    it("lists files from every collection newest first, dated by taken-at time or else creation time, then by id", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const home = await createCollection(user.id, "Home");
+        const ids: Record<string, string> = {};
+        const files: [string, string, FileMetadata][] = [
+            // Dated by taken-at time, although created last
+            [trip.id, "beach.jpg", { createdAt: day(20), takenAt: day(1) }],
+            // No taken-at time: dated by creation time
+            [home.id, "scan.jpg", { createdAt: day(5) }],
+            // Three files on the same date in two collections: only the id orders them
+            [trip.id, "tie-1.jpg", { createdAt: day(10) }],
+            [home.id, "tie-2.jpg", { createdAt: day(12), takenAt: day(10) }],
+            [home.id, "tie-3.jpg", { createdAt: day(10) }],
+            [trip.id, "clip.mp4", { createdAt: day(15), mimeType: "video/mp4" }]
+        ];
+        for (const [collectionId, name, metadata] of files) {
+            const file = await addFile(
+                user.id,
+                collectionId,
+                name,
+                Buffer.from(name),
+                metadata
+            );
+            ids[name] = file.id;
+        }
+        const tiedByIdDescending = ["tie-1.jpg", "tie-2.jpg", "tie-3.jpg"].sort(
+            (a, b) => compareUuids(ids[b], ids[a])
+        );
+
+        const timeline = await browseWholeTimeline(
+            new CollectionService(user.id),
+            { limit: 2 }
+        );
+
+        expect(timeline.map((file) => file.name)).toEqual([
+            "clip.mp4",
+            ...tiedByIdDescending,
+            "scan.jpg",
+            "beach.jpg"
+        ]);
+        expect(timeline.find((file) => file.name === "scan.jpg")).toMatchObject(
+            {
+                collectionId: home.id,
+                timestamp: day(5).getTime(),
+                thumbnailSrc: `/api/collections/${home.id}/files?thumbnail=${ids["scan.jpg"]}`
+            }
+        );
+    });
+
+    it("pages concatenated through cursors contain every file exactly once", async () => {
+        const user = await createUser("alice");
+        const collections = [
+            await createCollection(user.id, "Trip"),
+            await createCollection(user.id, "Home"),
+            await createCollection(user.id, "Empty")
+        ];
+        const names: string[] = [];
+        for (let i = 0; i < 13; i++) {
+            const name = `photo-${i}.jpg`;
+            names.push(name);
+            // Pairs of files share a date across collections, so pages end inside ties
+            await addFile(
+                user.id,
+                collections[i % 2].id,
+                name,
+                Buffer.from(name),
+                {
+                    createdAt: day(1 + Math.floor(i / 2))
+                }
+            );
+        }
+        const service = new CollectionService(user.id);
+
+        const pages = await browseTimelinePages(service, { limit: 3 });
+        const whole = await service.browseTimeline({ limit: 100 });
+
+        expect(pages.map((page) => page.files.length)).toEqual([3, 3, 3, 3, 1]);
+        expect(pages.at(-1)!.nextCursor).toBeNull();
+        expect(
+            pages.flatMap((page) => page.files.map((file) => file.name))
+        ).toEqual(whole.files.map((file) => file.name));
+        expect(whole.files.map((file) => file.name).sort()).toEqual(
+            [...names].sort()
+        );
+    });
+
+    it("lists only the requesting user's files", async () => {
+        const alice = await createUser("alice");
+        const bob = await createUser("bob");
+        const alices = await createCollection(alice.id, "Mine");
+        const bobs = await createCollection(bob.id, "Secrets");
+        await addFile(alice.id, alices.id, "mine.jpg", Buffer.from("m"), {
+            createdAt: day(1)
+        });
+        // Newer than alice's file, so it would come first if it leaked
+        await addFile(bob.id, bobs.id, "secret.jpg", Buffer.from("s"), {
+            createdAt: day(2)
+        });
+
+        const timeline = await browseWholeTimeline(
+            new CollectionService(alice.id),
+            {}
+        );
+
+        expect(timeline.map((file) => file.name)).toEqual(["mine.jpg"]);
+    });
+
+    it("rejects a malformed cursor and a cursor of another order", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        for (const name of ["a.jpg", "b.jpg"]) {
+            await addFile(user.id, trip.id, name, Buffer.from(name));
+        }
+        const service = new CollectionService(user.id);
+        const byName = await service.browseFiles(trip.id, {
+            sort: "name",
+            limit: 1
+        });
+
+        await expect(
+            service.browseTimeline({ cursor: "not-a-cursor" })
+        ).rejects.toThrow("Malformed cursor");
+        await expect(
+            service.browseTimeline({ cursor: byName.nextCursor! })
+        ).rejects.toThrow("Malformed cursor");
+    });
+});
+
 /** Postgres orders uuids by their bytes, which is the order of their lower-case text */
 function compareUuids(a: string, b: string) {
     const [x, y] = [a.toLowerCase(), b.toLowerCase()];
@@ -974,4 +1111,28 @@ async function browseAllPages(
         cursor = page.nextCursor ?? undefined;
     } while (cursor);
     return pages;
+}
+
+/** Every page of the Timeline, following the cursors until the last page */
+async function browseTimelinePages(
+    service: CollectionService,
+    query: BrowseTimelineQuery
+) {
+    const pages: BrowseFilesPage[] = [];
+    let cursor: string | undefined = query.cursor;
+    do {
+        const page = await service.browseTimeline({ ...query, cursor });
+        pages.push(page);
+        cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    return pages;
+}
+
+/** Every file on the Timeline in the order it lists them, across all pages */
+async function browseWholeTimeline(
+    service: CollectionService,
+    query: BrowseTimelineQuery
+) {
+    const pages = await browseTimelinePages(service, query);
+    return pages.flatMap((page) => page.files);
 }

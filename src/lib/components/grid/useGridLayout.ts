@@ -1,5 +1,6 @@
 import { GridDensity, useGridDensity } from "@/lib/hooks/useGridDensity";
-import { useEffect, useState } from "react";
+import { useBreakpointValue } from "@chakra-ui/react";
+import { useEffect, useMemo, useState } from "react";
 
 /** Columns per breakpoint (base, sm, md, lg, xl, 2xl) at the default density of 3 */
 const COLUMNS = [3, 3, 4, 6, 8, 9];
@@ -32,4 +33,57 @@ export function useGridLayout(): GridLayout | null {
     const [mounted, setMounted] = useState(false);
     useEffect(() => setMounted(true), []);
     return mounted ? gridLayout(density) : null;
+}
+
+/** The grid's column count and tile height at the current screen width, in pixels */
+export interface ResolvedGridLayout {
+    columns: number;
+    tileHeightPx: number;
+}
+
+/** Breakpoint names in the order of the layout's per-breakpoint values */
+const BREAKPOINTS = ["base", "sm", "md", "lg", "xl", "2xl"] as const;
+
+/** Per-breakpoint values as Chakra's responsive object; the last value holds from there up */
+function byBreakpoint<T>(values: T[]) {
+    return Object.fromEntries(
+        BREAKPOINTS.map((name, i) => [
+            name,
+            values[Math.min(i, values.length - 1)]
+        ])
+    ) as Record<(typeof BREAKPOINTS)[number], T>;
+}
+
+/**
+ * The grid layout resolved for the current screen width, for grids that
+ * position tiles themselves, like the virtualized Timeline. It matches the
+ * responsive layout of `useGridLayout`. Null until mounted.
+ */
+export function useResolvedGridLayout(): ResolvedGridLayout | null {
+    const layout = useGridLayout();
+    const [columnsByBreakpoint, heightsByBreakpoint] = useMemo(
+        () => [
+            byBreakpoint(layout?.columns ?? [0]),
+            byBreakpoint(layout?.tileHeights ?? ["0rem"])
+        ],
+        // The layout is a new object each render, but follows the density
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [layout?.columns.join(), layout?.tileHeights.join()]
+    );
+    const columns = useBreakpointValue(columnsByBreakpoint);
+    const tileHeight = useBreakpointValue(heightsByBreakpoint);
+    // The root font size, which rem heights are measured in
+    const remPx = useMemo(
+        () =>
+            layout
+                ? parseFloat(
+                      getComputedStyle(document.documentElement).fontSize
+                  )
+                : 16,
+        [layout === null] // eslint-disable-line react-hooks/exhaustive-deps
+    );
+    if (!layout || !columns || !tileHeight) {
+        return null;
+    }
+    return { columns, tileHeightPx: parseFloat(tileHeight) * remPx };
 }
