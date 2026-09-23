@@ -1,6 +1,6 @@
 import { deleteSelection, fetchCollection } from "@/lib/client/collections";
 import { revalidateTagCounts } from "@/lib/client/tags";
-import { getErrorMessage } from "@/lib/common/utilities";
+import { getErrorMessage, plural } from "@/lib/common/utilities";
 import {
     removeCollection,
     replaceCollection
@@ -66,7 +66,9 @@ export default function CollectionSelectionBar({
                 deleteWarning={
                     fileCount === 0
                         ? undefined
-                        : `The selected ${selected.length === 1 ? "collection" : "collections"} and ${fileCount === 1 ? "its file" : `their ${fileCount} files`} will be deleted.`
+                        : selected.length === 1
+                          ? `The collection and ${fileCount === 1 ? "its file" : `its ${fileCount} files`} will be deleted.`
+                          : `The collections and their ${plural(fileCount, "file", "files")} will be deleted.`
                 }
                 onEdit={edit}
                 onTag={() => setTagging(true)}
@@ -92,7 +94,7 @@ export default function CollectionSelectionBar({
                 open={tagging}
                 onClose={() => setTagging(false)}
                 target="collections"
-                items={selected}
+                selected={selected}
                 onApplied={(tags) => {
                     selected.forEach((collection) =>
                         replaceCollection(userId, {

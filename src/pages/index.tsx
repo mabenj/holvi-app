@@ -99,13 +99,16 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
         refresh();
     }, [refresh]);
 
-    // Another filter shows its own collections from the top
+    // Another filter shows its own collections from the top. A selection
+    // would keep collections it no longer shows, so it ends.
+    const exitSelection = selection.exit;
     const narrow = useCallback(
         (changes: Partial<CollectionsFilter>) => {
             window.scrollTo({ top: 0 });
+            exitSelection();
             changeFilter(changes);
         },
-        [changeFilter]
+        [changeFilter, exitSelection]
     );
     const clearFilter = useCallback(
         () => narrow(NO_COLLECTIONS_FILTER),

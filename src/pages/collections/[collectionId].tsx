@@ -34,6 +34,7 @@ import { useSelection } from "@/lib/hooks/useSelection";
 import { isUploading, startUpload, useUpload } from "@/lib/hooks/useUpload";
 import { CollectionDetails as Collection } from "@/lib/types/collection-details";
 import { FileSort } from "@/lib/types/file-sort";
+import { FileSummary } from "@/lib/types/file-summary";
 import { Box, Button, EmptyState, Flex, Text, VStack } from "@chakra-ui/react";
 import { mdiImagePlusOutline, mdiTagOffOutline, mdiUpload } from "@mdi/js";
 import Icon from "@mdi/react";
@@ -78,8 +79,8 @@ function CollectionScreen({
         { revalidateOnFocus: false }
     );
 
-    const [sort, setSort] = useState<FileSort>("newest");
-    const [tags, setTags] = useState<string[]>([]);
+    const [sort, changeSort] = useState<FileSort>("newest");
+    const [tags, changeTags] = useState<string[]>([]);
     const {
         files,
         pages,
@@ -92,6 +93,19 @@ function CollectionScreen({
         retry
     } = useCollectionFiles(collectionId, sort, tags);
     const selection = useSelection();
+    // Another sort or tags loads the files afresh, so a selection ends
+    const setSort = (sort: FileSort) => {
+        selection.exit();
+        changeSort(sort);
+    };
+    const setTags = (tags: string[]) => {
+        selection.exit();
+        changeTags(tags);
+    };
+    // Files whose tags changed may no longer match the tag filter
+    const changeTaggedFiles = (
+        change: (files: FileSummary[]) => FileSummary[]
+    ) => (tags.length > 0 ? reload() : changeFiles(change));
 
     // Deleting or renaming files can change the counts and the Cover, here
     // and on the Collections tab
@@ -187,7 +201,7 @@ function CollectionScreen({
                             void refreshCollection();
                         }}
                         onEdited={(id, fields) => {
-                            changeFiles((loaded) =>
+                            changeTaggedFiles((loaded) =>
                                 loaded.map((file) =>
                                     file.id === id ? { ...file, ...fields } : file
                                 )
@@ -195,7 +209,7 @@ function CollectionScreen({
                             void refreshCollection();
                         }}
                         onTagged={(tagsById) =>
-                            changeFiles((loaded) =>
+                            changeTaggedFiles((loaded) =>
                                 loaded.map((file) =>
                                     tagsById[file.id]
                                         ? { ...file, tags: tagsById[file.id] }

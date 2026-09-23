@@ -1,4 +1,4 @@
-import { getErrorMessage } from "@/lib/common/utilities";
+import { getErrorMessage, plural } from "@/lib/common/utilities";
 import ConfirmationSurface from "@/lib/components/surfaces/ConfirmationSurface";
 import { Box, chakra, Flex, IconButton, Text } from "@chakra-ui/react";
 import {
@@ -12,9 +12,9 @@ import { useEffect, useState } from "react";
 import { TAB_BAR_HEIGHT } from "../theme/system";
 
 interface SelectionBarProps {
-    /** How many items are selected */
+    /** How many collections or files are selected */
     count: number;
-    /** What an item is called, e.g. ["collection", "collections"] */
+    /** What the selected things are called, e.g. ["collection", "collections"] */
     noun: [one: string, many: string];
     /** Leaves selection mode */
     onExit: () => void;
@@ -22,7 +22,7 @@ interface SelectionBarProps {
     onDelete: () => Promise<void>;
     /** What deleting also deletes, e.g. the collections' files */
     deleteWarning?: string;
-    /** Edits the one selected item; offered only while exactly one is selected */
+    /** Edits the selected collection or file; offered only while exactly one is selected */
     onEdit: () => void;
     /** Opens the bulk-tag sheet */
     onTag: () => void;
@@ -48,7 +48,7 @@ export default function SelectionBar({
     const [confirming, setConfirming] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const named = `${count} ${count === 1 ? noun[0] : noun[1]}`;
+    const named = plural(count, ...noun);
 
     useEffect(() => {
         if (!escapeLeaves || confirming) return;

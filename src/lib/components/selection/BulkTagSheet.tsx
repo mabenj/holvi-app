@@ -4,10 +4,10 @@ import {
     revalidateTagCounts,
     tagCountsUrl
 } from "@/lib/client/tags";
-import { getErrorMessage } from "@/lib/common/utilities";
+import { getErrorMessage, plural } from "@/lib/common/utilities";
 import EditorSurface from "@/lib/components/surfaces/EditorSurface";
 import type { TagsById } from "@/lib/types/bulk-tag";
-import type { TagScope } from "@/lib/types/tag-count";
+import { TAG_MAX_LENGTH, TagScope } from "@/lib/types/tag-count";
 import {
     Button,
     Checkbox,
@@ -22,7 +22,6 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 
 const FORM_ID = "bulk-tag-sheet";
-const TAG_MAX_LENGTH = 50;
 
 /** How much of the selection has a tag */
 type Coverage = "all" | "some" | "none";
@@ -41,10 +40,10 @@ interface BulkTagSheetProps {
     /** What is selected: collections or files */
     target: TagScope;
     /** The selected collections or files, with their tags */
-    items: { id: string; tags: string[] }[];
+    selected: { id: string; tags: string[] }[];
     /** Files only: offer the tags of this collection's files rather than of every file */
     collectionId?: string;
-    /** Once the changes are saved, with each item's tags; the sheet stays open until the parent closes it */
+    /** Once the changes are saved, with each one's tags; the sheet stays open until the parent closes it */
     onApplied: (tags: TagsById) => void;
 }
 
@@ -57,7 +56,7 @@ export default function BulkTagSheet({
     open,
     onClose,
     target,
-    items,
+    selected,
     collectionId,
     onApplied
 }: BulkTagSheetProps) {
@@ -72,8 +71,8 @@ export default function BulkTagSheet({
 
     // The tags on the selection, then the rest in scope, most used first
     const startingRows = useMemo(
-        () => tagRows(items, tagCounts?.map((tag) => tag.name) ?? []),
-        [items, tagCounts]
+        () => tagRows(selected, tagCounts?.map((tag) => tag.name) ?? []),
+        [selected, tagCounts]
     );
     // Every opening starts afresh. Tags in scope may arrive after the sheet
     // opened; they join the list without undoing the user's changes.
@@ -132,7 +131,7 @@ export default function BulkTagSheet({
         try {
             const tags = await bulkTag({
                 target,
-                ids: items.map((item) => item.id),
+                ids: selected.map(({ id }) => id),
                 add,
                 remove
             });
@@ -146,12 +145,11 @@ export default function BulkTagSheet({
         }
     };
 
-    const noun = target === "collections" ? "collection" : "file";
     return (
         <EditorSurface
             open={open}
             onClose={onClose}
-            title={`Tag ${items.length} ${items.length === 1 ? noun : `${noun}s`}`}
+            title={`Tag ${plural(selected.length, target === "collections" ? "collection" : "file", target)}`}
             submitLabel="Apply"
             formId={FORM_ID}
             submitting={saving}>
@@ -254,13 +252,13 @@ function sameTag(a: string, b: string) {
 
 /** Each tag on the selection with how much of it has the tag, then the other tags in scope */
 function tagRows(
-    items: { tags: string[] }[],
+    selected: { tags: string[] }[],
     tagsInScope: string[]
 ): TagRow[] {
     const counts = new Map<string, { name: string; count: number }>();
-    for (const item of items) {
-        for (const tag of Array.from(new Set(item.tags.map((t) => t.toLowerCase())))) {
-            const name = item.tags.find((t) => t.toLowerCase() === tag)!;
+    for (const { tags } of selected) {
+        for (const tag of Array.from(new Set(tags.map((t) => t.toLowerCase())))) {
+            const name = tags.find((t) => t.toLowerCase() === tag)!;
             const entry = counts.get(tag) ?? { name, count: 0 };
             entry.count++;
             counts.set(tag, entry);
@@ -269,7 +267,7 @@ function tagRows(
     const onSelection = Array.from(counts.values())
         .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
         .map(({ name, count }): TagRow => {
-            const coverage = count === items.length ? "all" : "some";
+            const coverage = count === selected.length ? "all" : "some";
             return { name, initial: coverage, current: coverage };
         });
     const others = tagsInScope

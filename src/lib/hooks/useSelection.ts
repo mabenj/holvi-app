@@ -16,16 +16,16 @@ function urlWithSelecting(selecting: boolean) {
 }
 
 export interface Selection {
-    /** Whether selection mode is on: tapping then adds or removes items */
+    /** Whether selection mode is on: tapping then selects or deselects */
     selecting: boolean;
     /** Ids of the selected collections or files, in the order they were selected */
     selected: string[];
     isSelected: (id: string) => boolean;
-    /** Enters selection mode with the item selected, e.g. on a long-press */
+    /** Enters selection mode with the collection or file selected, e.g. on a long-press */
     start: (id: string) => void;
-    /** Adds the item to the selection, or removes it */
+    /** Adds the collection or file to the selection, or takes it out */
     toggle: (id: string) => void;
-    /** Takes items out of the selection, e.g. once they are deleted */
+    /** Takes collections or files out of the selection, e.g. once they are deleted */
     deselect: (ids: string[]) => void;
     /** Leaves selection mode */
     exit: () => void;
@@ -33,7 +33,7 @@ export interface Selection {
 
 /**
  * Selecting collections or files: a long-press enters selection mode (see
- * `useSelectionGestures`), taps then add or remove items, and Back (including
+ * `useSelectionGestures`), taps then select or deselect, and Back (including
  * the phone's back gesture) leaves it, as does Escape in the selection bar.
  * Selection mode is a shallow `?selecting=1` history entry on the page, so
  * Back leaves it instead of the page.
@@ -94,7 +94,7 @@ export function useSelection(): Selection {
         }
     }, []);
 
-    // Deselecting the last item leaves selection mode
+    // Deselecting the last one leaves selection mode
     useEffect(() => {
         if (selecting && selected.length === 0) exit();
     }, [selecting, selected.length, exit]);

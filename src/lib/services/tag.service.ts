@@ -2,7 +2,12 @@ import Database from "@/db/Database";
 import { QueryTypes } from "sequelize";
 import { InvalidArgumentError, NotFoundError } from "../common/errors";
 import { BulkTagChanges, TagsById } from "../types/bulk-tag";
-import { TAG_SCOPES, TagCount, TagScope } from "../types/tag-count";
+import {
+    TAG_MAX_LENGTH,
+    TAG_SCOPES,
+    TagCount,
+    TagScope
+} from "../types/tag-count";
 import { UUID_PATTERN } from "./keyset-paging";
 
 export type { BulkTagChanges, TagsById } from "../types/bulk-tag";
@@ -13,9 +18,6 @@ export interface CountTagsQuery {
     /** With the files scope: count only the files of this collection */
     collectionId?: string;
 }
-
-/** The editors' limit on a tag's length */
-const TAG_MAX_LENGTH = 50;
 
 /** The tags trimmed, once each ignoring case; rejects empty and overlong ones */
 function tagNames(tags: string[]) {
@@ -35,17 +37,17 @@ function tagNames(tags: string[]) {
 /** Where each target's tags are, and which of the ids are the user's own */
 const TAGGED: Record<
     TagScope,
-    { junction: string; itemColumn: string; owned: string }
+    { junction: string; taggedColumn: string; owned: string }
 > = {
     collections: {
         junction: "CollectionTags",
-        itemColumn: "CollectionId",
+        taggedColumn: "CollectionId",
         owned: `SELECT c.id FROM "Collections" c
             WHERE c.id IN (:ids) AND c."UserId" = :userId`
     },
     files: {
         junction: "CollectionFileTags",
-        itemColumn: "CollectionFileId",
+        taggedColumn: "CollectionFileId",
         owned: `SELECT f.id FROM "CollectionFiles" f
             JOIN "Collections" c ON c.id = f."CollectionId"
             WHERE f.id IN (:ids) AND c."UserId" = :userId`
@@ -120,7 +122,7 @@ export default class TagService {
                 "A tag cannot be both added and removed"
             );
         }
-        const { junction, itemColumn, owned } = TAGGED[target];
+        const { junction, taggedColumn, owned } = TAGGED[target];
         // Another user's, or none at all: the same to the user
         const notFound = new NotFoundError(`Some of the ${target} were not found`);
         if (!ids.every((id) => UUID_PATTERN.test(id))) {
@@ -145,7 +147,7 @@ export default class TagService {
                     { ignoreDuplicates: true, returning: false, transaction }
                 );
                 await sequelize.query(
-                    `INSERT INTO "${junction}" ("${itemColumn}", "TagName", "createdAt", "updatedAt")
+                    `INSERT INTO "${junction}" ("${taggedColumn}", "TagName", "createdAt", "updatedAt")
                         SELECT owned.id, tag.name, now(), now()
                         FROM (${owned}) owned, "Tags" tag
                         WHERE tag.name IN (:add)
@@ -156,7 +158,7 @@ export default class TagService {
             if (remove.length > 0) {
                 await sequelize.query(
                     `DELETE FROM "${junction}"
-                        WHERE "${itemColumn}" IN (${owned})
+                        WHERE "${taggedColumn}" IN (${owned})
                         AND "TagName" IN (:remove)`,
                     { replacements, transaction }
                 );
@@ -167,9 +169,9 @@ export default class TagService {
             throw error;
         }
         const rows = (await db.select(
-            `SELECT "${itemColumn}" AS id, "TagName" AS name
+            `SELECT "${taggedColumn}" AS id, "TagName" AS name
                 FROM "${junction}"
-                WHERE "${itemColumn}" IN (${owned})`,
+                WHERE "${taggedColumn}" IN (${owned})`,
             replacements
         )) as { id: string; name: string }[];
         const tagsById: TagsById = Object.fromEntries(ids.map((id) => [id, []]));

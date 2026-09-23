@@ -7,6 +7,7 @@ import { z } from "zod";
 
 /** Adds and removes tags on a selection of the user's collections or files, all at once */
 async function bulkTag(
+    // The service rejects any target it does not know
     req: ApiRequest<BulkTagChanges>,
     res: ApiResponse<{ tags: TagsById }>
 ) {
@@ -18,9 +19,9 @@ async function bulkTag(
 export default ApiRoute.create({
     post: {
         handler: bulkTag,
-        // The service checks the tags themselves, and which ids are the user's
+        // The service checks the target, the tags themselves, and which ids are the user's
         validator: z.object({
-            target: z.enum(["collections", "files"]),
+            target: z.string(),
             ids: z.array(z.string().uuid()).min(1),
             add: z.array(z.string()),
             remove: z.array(z.string())

@@ -75,7 +75,7 @@ export default function FileSelectionBar({
                 open={tagging}
                 onClose={() => setTagging(false)}
                 target="files"
-                items={selected}
+                selected={selected}
                 collectionId={collectionId}
                 onApplied={(tags) => {
                     onTagged(tags);
