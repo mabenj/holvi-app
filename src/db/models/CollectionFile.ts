@@ -117,6 +117,14 @@ export class CollectionFile extends Model<
                             "id"
                         ]
                     },
+                    // The Timeline pages through every file by date, newest first
+                    {
+                        name: "collection_files_date_id",
+                        fields: [
+                            literal(`COALESCE("takenAt", "createdAt")`),
+                            "id"
+                        ]
+                    },
                     // The video processing worker takes the oldest pending video
                     { fields: ["processingStatus", "createdAt", "id"] }
                 ]

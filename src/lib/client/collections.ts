@@ -280,3 +280,18 @@ export function uploadFiles(
         xhr.send(form);
     });
 }
+
+/** One page of the Timeline: every file the user owns, newest first */
+export async function fetchTimelinePage(
+    cursor: string | undefined,
+    signal?: AbortSignal
+): Promise<FilesPage> {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    const data = await getJson(
+        `/api/files?${params}`,
+        "Could not load the Timeline",
+        { signal }
+    );
+    return { files: data.files, nextCursor: data.nextCursor };
+}
