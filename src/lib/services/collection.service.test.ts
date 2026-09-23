@@ -1116,6 +1116,119 @@ describe("Browsing the Timeline (integration)", () => {
         expect(timeline.map((file) => file.name)).toEqual(["mine.jpg"]);
     });
 
+    it("matches every file of a collection that has the tag", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip", {
+            tags: ["travel"]
+        });
+        const home = await createCollection(user.id, "Home");
+        await addFile(user.id, trip.id, "beach.jpg", Buffer.from("b"), {
+            createdAt: day(2)
+        });
+        await addFile(user.id, trip.id, "untagged.jpg", Buffer.from("u"), {
+            createdAt: day(1)
+        });
+        await addFile(user.id, home.id, "sofa.jpg", Buffer.from("s"), {
+            createdAt: day(3)
+        });
+
+        const timeline = await browseWholeTimeline(
+            new CollectionService(user.id),
+            // Tags compare ignoring case
+            { tags: ["Travel"] }
+        );
+
+        expect(timeline.map((file) => file.name)).toEqual([
+            "beach.jpg",
+            "untagged.jpg"
+        ]);
+    });
+
+    it("matches a file that has the tag itself", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        await addFile(user.id, trip.id, "sunset.jpg", Buffer.from("s"), {
+            createdAt: day(1),
+            tags: ["sunset"]
+        });
+        await addFile(user.id, trip.id, "lunch.jpg", Buffer.from("l"), {
+            createdAt: day(2),
+            tags: ["food"]
+        });
+
+        const timeline = await browseWholeTimeline(
+            new CollectionService(user.id),
+            { tags: ["sunset"] }
+        );
+
+        expect(timeline.map((file) => file.name)).toEqual(["sunset.jpg"]);
+    });
+
+    it("matches only files that have every tag, each on the file or on its collection", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip", {
+            tags: ["travel"]
+        });
+        const home = await createCollection(user.id, "Home", {
+            tags: ["family"]
+        });
+        const files: [string, string, string[]][] = [
+            // travel from the collection, sunset on the file
+            [trip.id, "trip-sunset.jpg", ["sunset"]],
+            // both on the file, though its collection has neither
+            [home.id, "home-both.jpg", ["travel", "sunset"]],
+            // travel from the collection only
+            [trip.id, "trip-plain.jpg", []],
+            // sunset only
+            [home.id, "home-sunset.jpg", ["sunset"]]
+        ];
+        for (let i = 0; i < files.length; i++) {
+            const [collectionId, name, tags] = files[i];
+            await addFile(user.id, collectionId, name, Buffer.from(name), {
+                createdAt: day(10 - i),
+                tags
+            });
+        }
+
+        const timeline = await browseWholeTimeline(
+            new CollectionService(user.id),
+            { tags: ["travel", "sunset"], limit: 1 }
+        );
+
+        expect(timeline.map((file) => file.name)).toEqual([
+            "trip-sunset.jpg",
+            "home-both.jpg"
+        ]);
+    });
+
+    it("filters only the requesting user's files by tag", async () => {
+        const alice = await createUser("alice");
+        const bob = await createUser("bob");
+        const alices = await createCollection(alice.id, "Mine");
+        const bobs = await createCollection(bob.id, "Secrets", {
+            tags: ["travel"]
+        });
+        await addFile(alice.id, alices.id, "mine.jpg", Buffer.from("m"), {
+            createdAt: day(1),
+            tags: ["travel"]
+        });
+        // Both of bob's files have the tag, on the file or its collection
+        await addFile(bob.id, bobs.id, "secret.jpg", Buffer.from("s"), {
+            createdAt: day(2)
+        });
+        await addFile(bob.id, bobs.id, "tagged.jpg", Buffer.from("t"), {
+            createdAt: day(3),
+            tags: ["travel"]
+        });
+
+        const timeline = await browseWholeTimeline(
+            new CollectionService(alice.id),
+            { tags: ["travel"] }
+        );
+
+        expect(timeline.map((file) => file.name)).toEqual(["mine.jpg"]);
+    });
+
     it("rejects a malformed cursor and a cursor of another order", async () => {
         const user = await createUser("alice");
         const trip = await createCollection(user.id, "Trip");
