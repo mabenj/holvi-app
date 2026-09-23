@@ -16,7 +16,8 @@ const TEXT_OUTLINE = `-1px -1px 0 rgba(0, 0, 0, 0.4),
 const ICON_SHADOW = "drop-shadow(0 0 2px black)";
 const OVERLAY_FONT_SIZE = ["x-small", "x-small", "xs", "sm"];
 /** Where hover cycles a card, its name and counts fade out of the way, as before */
-const HOVER_CYCLING = "@media (hover: hover) and (prefers-reduced-motion: no-preference)";
+const HOVER_CYCLING =
+    "@media (hover: hover) and (prefers-reduced-motion: no-preference)";
 
 interface CollectionCardProps {
     collection: CollectionSummary;
@@ -94,7 +95,9 @@ function CollectionCard({
                 opacity={0.9}
                 backgroundImage="linear-gradient(rgba(0, 0, 0, 0) 80%, rgba(0, 0, 0, 0.9) 100%)"
                 transition="opacity 0.3s"
-                css={{ [HOVER_CYCLING]: { ".group:hover &": { opacity: 0 } } }}
+                css={{
+                    [HOVER_CYCLING]: { ".group:hover &": { opacity: 0 } }
+                }}
                 style={{ textShadow: TEXT_OUTLINE }}>
                 <Heading
                     as="h2"

@@ -3,7 +3,7 @@ import { RefObject, useCallback, useEffect, useState } from "react";
 import { useMediaQuery } from "./useMediaQuery";
 
 /** How long each thumbnail shows while a card cycles */
-export const CYCLE_FRAME_MS = 500;
+const CYCLE_FRAME_MS = 500;
 /** How long scrolling must be idle before the centred row starts cycling */
 const SCROLL_IDLE_MS = 150;
 /** The attribute that marks a collection card's cell in the grid, holding its id */
@@ -56,7 +56,9 @@ export function useThumbnailCycling(
                 }
             );
             const row = findCentredRow(cards, window.innerHeight);
-            setFocused((current) => (sameIds(current, row) ? current : new Set(row)));
+            setFocused((current) =>
+                sameIds(current, row) ? current : new Set(row)
+            );
         };
         const waitForIdle = () => {
             window.clearTimeout(idleTimer);
@@ -77,6 +79,9 @@ export function useThumbnailCycling(
         };
     }, [touchMode, gridRef, layoutKey]);
 
+    // Leaving a mode drops what it focused, so no row keeps cycling after it
+    useEffect(() => () => setFocused(NONE), [touchMode, hoverMode]);
+
     const onCardHover = useCallback(
         (id: string, hovering: boolean) => {
             if (!hoverMode) return;
@@ -91,19 +96,18 @@ export function useThumbnailCycling(
         [hoverMode]
     );
 
-    // A change of mode (say, reduced motion switched on) drops what was focused
     const cycling = enabled ? focused : NONE;
     // Frames count for one set of cycling cards, so a new set starts at the Cover
     // on its very first render
-    const [tick, setTick] = useState({ of: cycling, frame: 0 });
-    const frame = tick.of === cycling ? tick.frame : 0;
+    const [tick, setTick] = useState({ cards: cycling, frame: 0 });
+    const frame = tick.cards === cycling ? tick.frame : 0;
     useEffect(() => {
         if (cycling.size === 0) return;
         const timer = window.setInterval(
             () =>
                 setTick((current) => ({
-                    of: cycling,
-                    frame: current.of === cycling ? current.frame + 1 : 1
+                    cards: cycling,
+                    frame: current.cards === cycling ? current.frame + 1 : 1
                 })),
             CYCLE_FRAME_MS
         );
