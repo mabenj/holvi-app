@@ -273,10 +273,24 @@ async function summarizeFiles(rows: FileRow[]): Promise<FileSummary[]> {
                 : summary.src,
             scrubPreview: row.scrubPreviewLayout
                 ? {
-                      src: getFileSrc({ ...source, scrubPreview: true }),
+                      src: scrubPreviewSrc(source, row.scrubPreviewLayout),
                       layout: row.scrubPreviewLayout
                   }
                 : undefined
         };
     });
+}
+
+/**
+ * Where a video's Scrub preview is served. The image is cached, so its source
+ * names its layout: a video processed again into another layout gets a new
+ * source, and the player never tiles an old image by the new layout.
+ */
+function scrubPreviewSrc(
+    source: { collectionId: string; fileId: string; mimeType: string },
+    layout: ScrubPreviewLayout
+) {
+    const { intervalSeconds, frames, columns, tileWidth, tileHeight } = layout;
+    const version = [intervalSeconds, frames, columns, tileWidth, tileHeight];
+    return `${getFileSrc({ ...source, scrubPreview: true })}&layout=${version.join("-")}`;
 }
