@@ -8,7 +8,7 @@ import { useRouter } from "next/router";
 import { useEffect, useRef, useState } from "react";
 
 /** Height of the compact title bar, not counting the safe-area inset above it */
-const TITLE_BAR_HEIGHT = "52px";
+export const TITLE_BAR_HEIGHT = "52px";
 /** CSS variable with how far the hero has collapsed, from 0 to 1 */
 const COLLAPSE = "--hero-collapse";
 const HERO_HEIGHT = { base: "min(62vh, 440px)", md: "min(56vh, 520px)" };

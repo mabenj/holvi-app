@@ -19,6 +19,10 @@ const config = defineConfig({
         },
         body: {
             minHeight: "100dvh"
+        },
+        // The lightbox's controls stay clear of the notch
+        ".pswp__top-bar": {
+            top: "env(safe-area-inset-top)"
         }
     },
     theme: {

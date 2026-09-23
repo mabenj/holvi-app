@@ -5,8 +5,9 @@ let navigations = 0;
 
 /** Counts the app's own navigations, so Back knows whether it would leave the app */
 export function countNavigations(events: NextRouter["events"]) {
-    const count = () => {
-        navigations++;
+    const count = (_url: string, { shallow }: { shallow: boolean }) => {
+        // Shallow changes stay on the same screen, e.g. the lightbox's query
+        if (!shallow) navigations++;
     };
     events.on("routeChangeComplete", count);
     return () => events.off("routeChangeComplete", count);
