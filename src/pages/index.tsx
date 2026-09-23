@@ -6,10 +6,12 @@ import AppShell from "@/lib/components/app-shell/AppShell";
 import PullToRefresh from "@/lib/components/app-shell/PullToRefresh";
 import CollectionGrid from "@/lib/components/collections/CollectionGrid";
 import { useCollectionsBrowse } from "@/lib/hooks/useCollectionsBrowse";
+import { useNextPageSentinel } from "@/lib/hooks/useNextPageSentinel";
 import { Box, Button, EmptyState, Text, VStack } from "@chakra-ui/react";
 import { mdiImageMultipleOutline } from "@mdi/js";
 import Icon from "@mdi/react";
-import { useCallback, useEffect, useRef } from "react";
+import { useRouter } from "next/router";
+import { useCallback, useEffect, useState } from "react";
 
 export const getServerSideProps = signedInPageProps;
 
@@ -26,16 +28,36 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
         error,
         hasMore,
         loadMore,
+        loadFirstPage,
+        saveScrollPosition,
+        takeScrollPosition,
         retry,
         refresh
     } = useCollectionsBrowse(user.id);
     const collections = pages.flatMap((page) => page.collections);
+    const router = useRouter();
 
     // The first visit in this app session fetches the first page; coming back
     // from another screen keeps the pages already loaded
     useEffect(() => {
-        loadMore();
-    }, [loadMore]);
+        loadFirstPage();
+    }, [loadFirstPage]);
+
+    // Leaving the tab remembers the place in the grid...
+    useEffect(() => {
+        const save = () => saveScrollPosition(window.scrollY);
+        router.events.on("routeChangeStart", save);
+        return () => router.events.off("routeChangeStart", save);
+    }, [router.events, saveScrollPosition]);
+
+    // ...and coming back scrolls there once every cached page is in the grid.
+    // Until then, the next page must not load: the grid's end is still in view.
+    const [restored, setRestored] = useState(false);
+    const restoreScrollPosition = useCallback(() => {
+        const position = takeScrollPosition();
+        if (position !== null) window.scrollTo({ top: position });
+        setRestored(true);
+    }, [takeScrollPosition]);
 
     const startOver = useCallback(() => {
         window.scrollTo({ top: 0 });
@@ -43,7 +65,7 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
     }, [refresh]);
 
     const sentinel = useNextPageSentinel(
-        hasMore && !error ? loadMore : undefined,
+        restored && hasMore && !error ? loadMore : undefined,
         pages.length
     );
 
@@ -64,6 +86,7 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
                     <CollectionGrid
                         collections={collections}
                         skeletons={skeletons}
+                        onLaidOut={restoreScrollPosition}
                     />
                 )}
                 {error && (
@@ -78,31 +101,6 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
             </PullToRefresh>
         </AppShell>
     );
-}
-
-/**
- * A ref for an element at the end of the grid. It calls `onNear` once the element
- * comes within one screen of the viewport. `pageCount` re-arms it after every
- * page, in case the element is still that close.
- */
-function useNextPageSentinel(
-    onNear: (() => void) | undefined,
-    pageCount: number
-) {
-    const ref = useRef<HTMLDivElement>(null);
-    useEffect(() => {
-        const element = ref.current;
-        if (!element || !onNear) return;
-        const observer = new IntersectionObserver(
-            (entries) => {
-                if (entries.some((entry) => entry.isIntersecting)) onNear();
-            },
-            { rootMargin: "0px 0px 100% 0px" }
-        );
-        observer.observe(element);
-        return () => observer.disconnect();
-    }, [onNear, pageCount]);
-    return ref;
 }
 
 function FirstCollectionPrompt() {

@@ -19,6 +19,11 @@ interface AppShellProps {
     floatingAction?: FloatingAction;
     /** What tapping the tab of this screen does, e.g. refresh and scroll to the top */
     onActiveTabReselect?: () => void;
+    /**
+     * The content starts at the very top, under the notch, and shows its own
+     * heading instead of the page header, e.g. a collection page's hero
+     */
+    bleedTop?: boolean;
 }
 
 /** Frame of every signed-in screen: page header, content and the bottom tab bar */
@@ -26,7 +31,8 @@ export default function AppShell({
     title,
     children,
     floatingAction,
-    onActiveTabReselect
+    onActiveTabReselect,
+    bleedTop = false
 }: AppShellProps) {
     return (
         <>
@@ -37,14 +43,16 @@ export default function AppShell({
                 as="main"
                 direction="column"
                 minH="100dvh"
-                pt="env(safe-area-inset-top)"
+                pt={bleedTop ? undefined : "env(safe-area-inset-top)"}
                 pl="env(safe-area-inset-left)"
                 pr="env(safe-area-inset-right)"
                 // Keep the end of the content clear of the fixed tab bar
                 pb={`calc(${TAB_BAR_HEIGHT} + env(safe-area-inset-bottom))`}>
-                <Heading as="h1" textStyle="2xl" px="4" pt="4" pb="2">
-                    {title}
-                </Heading>
+                {!bleedTop && (
+                    <Heading as="h1" textStyle="2xl" px="4" pt="4" pb="2">
+                        {title}
+                    </Heading>
+                )}
                 <Box flex="1">{children}</Box>
             </Flex>
             {floatingAction && <FloatingActionButton {...floatingAction} />}

@@ -1,11 +1,22 @@
+import { countNavigations } from "@/lib/client/navigation";
 import ThemeColor from "@/lib/components/theme/ThemeColor";
 import { system } from "@/lib/components/theme/system";
 import { ChakraProvider } from "@chakra-ui/react";
 import { ThemeProvider } from "next-themes";
 import type { AppProps } from "next/app";
 import Head from "next/head";
+import Router from "next/router";
+import { useEffect } from "react";
 
 export default function App({ Component, pageProps }: AppProps) {
+    // Screens restore their own scroll position once their content is back
+    // (the Collections tab does); the browser would scroll before that
+    useEffect(() => {
+        window.history.scrollRestoration = "manual";
+    }, []);
+
+    useEffect(() => countNavigations(Router.events), []);
+
     return (
         <ChakraProvider value={system}>
             {/* Chakra's dark styles key off the `dark` class that next-themes sets */}

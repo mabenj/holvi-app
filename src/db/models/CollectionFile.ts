@@ -6,6 +6,7 @@ import {
     ForeignKey,
     InferAttributes,
     InferCreationAttributes,
+    literal,
     Model,
     NonAttribute,
     Sequelize
@@ -72,8 +73,21 @@ export class CollectionFile extends Model<
             },
             {
                 sequelize,
-                // Collection summaries read each collection's first files by name
-                indexes: [{ fields: ["CollectionId", "name", "id"] }]
+                indexes: [
+                    // Collection summaries read each collection's first files
+                    // by name, and a collection page pages through them by name
+                    { fields: ["CollectionId", "name", "id"] },
+                    // A collection page pages through its files by date: the
+                    // taken-at time, or else the creation time
+                    {
+                        name: "collection_files_collection_id_date_id",
+                        fields: [
+                            "CollectionId",
+                            literal(`COALESCE("takenAt", "createdAt")`),
+                            "id"
+                        ]
+                    }
+                ]
             }
         );
     }
