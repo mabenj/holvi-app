@@ -5,13 +5,14 @@ import CollectionDetails from "@/lib/components/collection-page/CollectionDetail
 import CollectionHero from "@/lib/components/collection-page/CollectionHero";
 import FileGrid from "@/lib/components/collection-page/FileGrid";
 import FileSortSelect from "@/lib/components/collection-page/FileSortSelect";
+import FileTagFilter from "@/lib/components/collection-page/FileTagFilter";
 import FileLightbox from "@/lib/components/lightbox/FileLightbox";
 import { useCollectionFiles } from "@/lib/hooks/useCollectionFiles";
 import { useLightboxHistory } from "@/lib/hooks/useLightboxHistory";
 import { useNextPageSentinel } from "@/lib/hooks/useNextPageSentinel";
 import { FileSort } from "@/lib/types/file-sort";
 import { Box, Button, EmptyState, Flex, Text, VStack } from "@chakra-ui/react";
-import { mdiImagePlusOutline } from "@mdi/js";
+import { mdiImagePlusOutline, mdiTagOffOutline } from "@mdi/js";
 import Icon from "@mdi/react";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
@@ -39,10 +40,11 @@ function CollectionScreen({ collectionId }: { collectionId: string }) {
     );
 
     const [sort, setSort] = useState<FileSort>("newest");
+    const [tags, setTags] = useState<string[]>([]);
     const { files, pages, loading, error, hasMore, loadMore, retry } =
-        useCollectionFiles(collectionId, sort);
+        useCollectionFiles(collectionId, sort, tags);
 
-    // Opening the collection or choosing another sort fetches the first page
+    // Opening the collection or choosing another sort or tags fetches the first page
     useEffect(() => {
         if (pages.length === 0) loadMore();
     }, [pages.length, loadMore]);
@@ -77,10 +79,22 @@ function CollectionScreen({ collectionId }: { collectionId: string }) {
                             tags={collection.tags}
                         />
                     )}
-                    <Flex justifyContent="flex-end" px="4" py="2">
+                    <Flex
+                        justifyContent="flex-end"
+                        alignItems="center"
+                        gap="3"
+                        px="4"
+                        py="2">
+                        <FileTagFilter
+                            collectionId={collectionId}
+                            value={tags}
+                            onChange={setTags}
+                        />
                         <FileSortSelect value={sort} onChange={setSort} />
                     </Flex>
-                    {isEmpty ? (
+                    {isEmpty && tags.length > 0 ? (
+                        <NoTaggedFiles onClear={() => setTags([])} />
+                    ) : isEmpty ? (
                         <NoFilesYet />
                     ) : (
                         <FileGrid
@@ -123,6 +137,27 @@ function NoFilesYet() {
                         here.
                     </EmptyState.Description>
                 </VStack>
+            </EmptyState.Content>
+        </EmptyState.Root>
+    );
+}
+
+function NoTaggedFiles({ onClear }: { onClear: () => void }) {
+    return (
+        <EmptyState.Root>
+            <EmptyState.Content>
+                <EmptyState.Indicator>
+                    <Icon path={mdiTagOffOutline} size="48px" aria-hidden />
+                </EmptyState.Indicator>
+                <VStack textAlign="center">
+                    <EmptyState.Title>No matching files</EmptyState.Title>
+                    <EmptyState.Description>
+                        No file in this collection has every selected tag.
+                    </EmptyState.Description>
+                </VStack>
+                <Button variant="outline" size="sm" onClick={onClear}>
+                    Clear tags
+                </Button>
             </EmptyState.Content>
         </EmptyState.Root>
     );

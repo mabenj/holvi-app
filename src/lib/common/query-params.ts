@@ -8,6 +8,12 @@ export function singleQueryParam(value: string | string[] | undefined) {
     return value || undefined;
 }
 
+/** A query parameter that can be repeated, e.g. ?tags=a&tags=b; empty values are dropped */
+export function listQueryParam(value: string | string[] | undefined) {
+    const values = Array.isArray(value) ? value : value ? [value] : [];
+    return values.filter((item) => item !== "");
+}
+
 /** A numeric query parameter; the service checks its range */
 export function numberQueryParam(value: string | string[] | undefined) {
     const single = singleQueryParam(value);
