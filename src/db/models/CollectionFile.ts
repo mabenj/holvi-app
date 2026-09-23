@@ -14,6 +14,20 @@ import {
 import { Collection } from "./Collection";
 import { Tag } from "./Tag";
 
+/** Where a video is in video processing; null for a video never processed, and for images */
+export type VideoProcessingStatusValue =
+    | "pending"
+    | "processing"
+    | "done"
+    | "failed";
+
+export const VIDEO_PROCESSING_STATUSES: VideoProcessingStatusValue[] = [
+    "pending",
+    "processing",
+    "done",
+    "failed"
+];
+
 export class CollectionFile extends Model<
     InferAttributes<CollectionFile>,
     InferCreationAttributes<CollectionFile>
@@ -32,6 +46,11 @@ export class CollectionFile extends Model<
     declare takenAt: CreationOptional<Date | null>;
     declare durationInSeconds: CreationOptional<number | null>;
     declare blurDataUrl: CreationOptional<string | null>;
+    declare processingStatus: CreationOptional<VideoProcessingStatusValue | null>;
+    /** Why video processing last failed */
+    declare processingError: CreationOptional<string | null>;
+    /** Whether video processing stored a Rendition next to the original */
+    declare hasRendition: CreationOptional<boolean>;
 
     declare createdAt: CreationOptional<Date>;
     declare updatedAt: CreationOptional<Date>;
@@ -69,7 +88,18 @@ export class CollectionFile extends Model<
                 gpsLabel: DataTypes.STRING,
                 createdAt: DataTypes.DATE,
                 updatedAt: DataTypes.DATE,
-                blurDataUrl: DataTypes.TEXT
+                blurDataUrl: DataTypes.TEXT,
+                processingStatus: {
+                    type: DataTypes.STRING,
+                    allowNull: true,
+                    validate: { isIn: [VIDEO_PROCESSING_STATUSES] }
+                },
+                processingError: DataTypes.TEXT,
+                hasRendition: {
+                    type: DataTypes.BOOLEAN,
+                    allowNull: false,
+                    defaultValue: false
+                }
             },
             {
                 sequelize,
@@ -86,7 +116,9 @@ export class CollectionFile extends Model<
                             literal(`COALESCE("takenAt", "createdAt")`),
                             "id"
                         ]
-                    }
+                    },
+                    // The video processing worker takes the oldest pending video
+                    { fields: ["processingStatus", "createdAt", "id"] }
                 ]
             }
         );

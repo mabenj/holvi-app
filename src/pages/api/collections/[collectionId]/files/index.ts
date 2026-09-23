@@ -114,6 +114,7 @@ async function handleGetCollectionImage(
     res.status(200).end(file);
 }
 
+/** A range of a video's original, or of its Rendition with &variant=rendition */
 async function handleGetCollectionVideo(
     req: ApiRequest,
     res: ApiResponse,
@@ -129,9 +130,15 @@ async function handleGetCollectionVideo(
         throw new InvalidArgumentError(`Unsupported range header '${range}'`);
     }
     const chunkStart = Number(rangeStart);
+    const variant = singleQueryParam(req.query.variant);
+    if (variant !== undefined && variant !== "rendition") {
+        throw new InvalidArgumentError(`Unknown variant '${variant}'`);
+    }
     const service = new CollectionService(req.session.user.id);
     const { stream, chunkStartEnd, totalLengthBytes, mimeType, filename } =
-        await service.getVideoStream(collectionId, videoId, chunkStart);
+        await service.getVideoStream(collectionId, videoId, chunkStart, {
+            rendition: variant === "rendition"
+        });
 
     const contentLength = chunkStartEnd[1] - chunkStartEnd[0] + 1;
     res.writeHead(206, {
