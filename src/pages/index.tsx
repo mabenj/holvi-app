@@ -13,6 +13,7 @@ import DropOverlay from "@/lib/components/app-shell/DropOverlay";
 import PullToRefresh from "@/lib/components/app-shell/PullToRefresh";
 import CollectionEditor from "@/lib/components/collections/CollectionEditor";
 import CollectionGrid from "@/lib/components/collections/CollectionGrid";
+import CollectionSelectionBar from "@/lib/components/collections/CollectionSelectionBar";
 import CollectionsFilterBar from "@/lib/components/collections/CollectionsFilterBar";
 import {
     featureCollection,
@@ -20,6 +21,7 @@ import {
 } from "@/lib/hooks/useCollectionsBrowse";
 import { DroppedFiles, useFileDrop } from "@/lib/hooks/useFileDrop";
 import { useNextPageSentinel } from "@/lib/hooks/useNextPageSentinel";
+import { useSelection } from "@/lib/hooks/useSelection";
 import { startUpload } from "@/lib/hooks/useUpload";
 import { Box, Button, EmptyState, Text, VStack } from "@chakra-ui/react";
 import {
@@ -58,6 +60,11 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
     } = useCollectionsBrowse(user.id);
     const router = useRouter();
     const creator = useCollectionCreator(user.id);
+    const selection = useSelection();
+    const [selectionError, setSelectionError] = useState<string | null>(null);
+    useEffect(() => {
+        if (!selection.selecting) setSelectionError(null);
+    }, [selection.selecting]);
 
     // The first visit in this app session fetches the first page; coming back
     // from another screen keeps the pages already loaded
@@ -68,7 +75,9 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
     // Leaving the tab remembers the place in the grid, and ends the visit that
     // showed a collection just uploaded into first...
     useEffect(() => {
-        const leave = () => {
+        const leave = (_url: string, { shallow }: { shallow: boolean }) => {
+            // Shallow changes stay on the tab, e.g. entering selection mode
+            if (shallow) return;
             saveScrollPosition(window.scrollY);
             endVisit();
         };
@@ -124,8 +133,25 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
                 label: "New collection",
                 icon: mdiPlus,
                 onClick: () => creator.open()
-            }}>
+            }}
+            contextualBar={
+                selection.selecting ? (
+                    <CollectionSelectionBar
+                        userId={user.id}
+                        selection={selection}
+                        selected={collections.filter((collection) =>
+                            selection.isSelected(collection.id)
+                        )}
+                        onError={setSelectionError}
+                    />
+                ) : undefined
+            }>
             <CollectionsFilterBar filter={filter} onChange={narrow} />
+            {selectionError && (
+                <Text px="4" py="2" color="fg.error" textStyle="sm" role="alert">
+                    {selectionError}
+                </Text>
+            )}
             <PullToRefresh onRefresh={startOver} refreshing={refreshing}>
                 {isEmpty && isFiltering(filter) ? (
                     <NoMatches onClear={clearFilter} />
@@ -136,6 +162,7 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
                         collections={collections}
                         skeletons={skeletons}
                         onLaidOut={restoreScrollPosition}
+                        selection={selection}
                     />
                 )}
                 {error && (

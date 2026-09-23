@@ -24,6 +24,8 @@ interface AppShellProps {
      * heading instead of the page header, e.g. a collection page's hero
      */
     bleedTop?: boolean;
+    /** Replaces the tab bar and the floating action button while present, e.g. the selection bar */
+    contextualBar?: ReactNode;
 }
 
 /** Frame of every signed-in screen: page header, content and the bottom tab bar */
@@ -32,7 +34,8 @@ export default function AppShell({
     children,
     floatingAction,
     onActiveTabReselect,
-    bleedTop = false
+    bleedTop = false,
+    contextualBar
 }: AppShellProps) {
     return (
         <>
@@ -55,8 +58,14 @@ export default function AppShell({
                 )}
                 <Box flex="1">{children}</Box>
             </Flex>
-            {floatingAction && <FloatingActionButton {...floatingAction} />}
-            <TabBar onActiveTabReselect={onActiveTabReselect} />
+            {contextualBar ?? (
+                <>
+                    {floatingAction && (
+                        <FloatingActionButton {...floatingAction} />
+                    )}
+                    <TabBar onActiveTabReselect={onActiveTabReselect} />
+                </>
+            )}
         </>
     );
 }

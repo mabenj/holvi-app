@@ -3,7 +3,12 @@ import { Box, chakra, Flex, SimpleGrid, Skeleton } from "@chakra-ui/react";
 import { mdiPlay } from "@mdi/js";
 import Icon from "@mdi/react";
 import Image from "next/image";
+import type { Selection } from "@/lib/hooks/useSelection";
+import { useSelectionGestures } from "@/lib/hooks/useSelectionGestures";
+import { useState } from "react";
+import { SELECTABLE_GRID } from "../grid/selectable-grid";
 import { useGridLayout } from "../grid/useGridLayout";
+import SelectionMark from "../selection/SelectionMark";
 import { FILE_TILE_ATTRIBUTE } from "../lightbox/lightbox-slides";
 import { TAB_BAR_HEIGHT } from "../theme/system";
 import { TITLE_BAR_HEIGHT } from "./CollectionHero";
@@ -14,28 +19,43 @@ interface FileGridProps {
     skeletons?: number;
     /** Tapping a file's tile, e.g. to open it in the lightbox */
     onOpen?: (fileId: string) => void;
+    /** Where files can be selected: a long-press starts selecting, and taps then toggle files instead of opening them */
+    selection?: Selection;
 }
 
 /** A collection's files in the same tight grid and density as the Collections grid */
 export default function FileGrid({
     files,
     skeletons = 0,
-    onOpen
+    onOpen,
+    selection
 }: FileGridProps) {
     const layout = useGridLayout();
+    const [grid, setGrid] = useState<HTMLDivElement | null>(null);
+    useSelectionGestures(grid, FILE_TILE_ATTRIBUTE, selection);
     if (!layout) {
         return null;
     }
     const { columns, tileHeights } = layout;
     return (
-        <SimpleGrid columns={columns} gap="2px">
+        <SimpleGrid
+            ref={setGrid}
+            columns={columns}
+            gap="2px"
+            css={selection ? SELECTABLE_GRID : undefined}>
             {files.map((file) => (
                 <chakra.button
                     key={file.id}
                     type="button"
                     aria-label={file.name}
+                    aria-pressed={
+                        selection?.selecting
+                            ? selection.isSelected(file.id)
+                            : undefined
+                    }
                     {...{ [FILE_TILE_ATTRIBUTE]: file.id }}
                     display="block"
+                    position="relative"
                     h={tileHeights}
                     cursor="pointer"
                     // Scrolling a tile into view keeps it clear of the bars
@@ -43,6 +63,9 @@ export default function FileGrid({
                     scrollMarginBottom={`calc(${TAB_BAR_HEIGHT} + env(safe-area-inset-bottom))`}
                     onClick={() => onOpen?.(file.id)}>
                     <FileTile file={file} />
+                    {selection?.selecting && (
+                        <SelectionMark selected={selection.isSelected(file.id)} />
+                    )}
                 </chakra.button>
             ))}
             {Array.from({ length: skeletons }, (_, i) => (

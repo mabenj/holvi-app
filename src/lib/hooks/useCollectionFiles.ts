@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FilesPage, fetchFilesPage } from "../client/collections";
 import { getErrorMessage } from "../common/utilities";
 import { FileSort } from "../types/file-sort";
+import type { FileSummary } from "../types/file-summary";
 
 interface FilesState {
     /** The collection, sort and tags these pages belong to */
@@ -101,6 +102,20 @@ export function useCollectionFiles(
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [collectionId, sort, query]);
 
+    /** Applies a change to the loaded files, e.g. after an edit or a delete, without fetching them again */
+    const changeFiles = useCallback(
+        (change: (files: FileSummary[]) => FileSummary[]) => {
+            setState((previous) => ({
+                ...previous,
+                pages: previous.pages.map((page) => ({
+                    ...page,
+                    files: change(page.files)
+                }))
+            }));
+        },
+        []
+    );
+
     const retry = useCallback(() => {
         setState((previous) => ({ ...previous, error: null }));
     }, []);
@@ -113,6 +128,7 @@ export function useCollectionFiles(
         hasMore,
         loadMore,
         reload,
+        changeFiles,
         retry
     };
 }
