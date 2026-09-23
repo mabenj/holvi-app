@@ -8,6 +8,7 @@ import {
 } from "react";
 import { FilesPage } from "../client/collections";
 import { getErrorMessage } from "../common/utilities";
+import type { FileSummary } from "../types/file-summary";
 
 interface PagedFilesState {
     /** The query these pages belong to */
@@ -108,6 +109,20 @@ export function usePagedFiles(query: string, fetchPage: FetchFilesPage) {
             });
     }, [query]);
 
+    /** Applies a change to the loaded files, e.g. after an edit or a delete, without fetching them again */
+    const changeFiles = useCallback(
+        (change: (files: FileSummary[]) => FileSummary[]) => {
+            setState((previous) => ({
+                ...previous,
+                pages: previous.pages.map((page) => ({
+                    ...page,
+                    files: change(page.files)
+                }))
+            }));
+        },
+        []
+    );
+
     const retry = useCallback(() => {
         setState((previous) => ({ ...previous, error: null }));
     }, []);
@@ -126,6 +141,7 @@ export function usePagedFiles(query: string, fetchPage: FetchFilesPage) {
         hasMore,
         loadMore,
         reload,
+        changeFiles,
         retry
     };
 }

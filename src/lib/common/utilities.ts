@@ -18,6 +18,11 @@ const DIVISIONS = [
 
 export const EMPTY_UUIDV4 = "00000000-0000-0000-0000-000000000000";
 
+/** "1 file", "3 files" */
+export function plural(count: number, one: string, many: string) {
+    return `${count} ${count === 1 ? one : many}`;
+}
+
 export function isUuidv4(uuid?: string) {
   if (!uuid) {
     return false;

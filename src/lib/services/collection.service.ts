@@ -118,7 +118,10 @@ export class CollectionService {
   ): Promise<CollectionFileDto> {
     const db = await Database.getInstance();
     await this.throwIfNotUserCollection(collectionId);
-    const fileInDb = await db.models.CollectionFile.findByPk(data.id);
+    // Only a file of that collection, which the check above made sure is the user's
+    const fileInDb = await db.models.CollectionFile.findOne({
+      where: { id: data.id, CollectionId: collectionId },
+    });
     if (!fileInDb) {
       throw new NotFoundError(`File '${data.id}' not found`);
     }

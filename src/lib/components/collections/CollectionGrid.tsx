@@ -4,8 +4,12 @@ import {
 } from "@/lib/hooks/useThumbnailCycling";
 import { CollectionSummary } from "@/lib/types/collection-summary";
 import { Box, SimpleGrid, Skeleton } from "@chakra-ui/react";
-import { useLayoutEffect, useRef } from "react";
+import type { Selection } from "@/lib/hooks/useSelection";
+import { useSelectionGestures } from "@/lib/hooks/useSelectionGestures";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { SELECTABLE_GRID } from "../grid/selectable-grid";
 import { useGridLayout } from "../grid/useGridLayout";
+import SelectionMark from "../selection/SelectionMark";
 import CollectionCard from "./CollectionCard";
 
 interface CollectionGridProps {
@@ -14,20 +18,29 @@ interface CollectionGridProps {
     skeletons?: number;
     /** Called once the tiles are in the page and before it paints, e.g. to restore the scroll position */
     onLaidOut?: () => void;
+    /** Where collections can be selected: a long-press starts selecting */
+    selection?: Selection;
 }
 
 /** The tight collections grid: hairline gaps and cover-cropped tiles */
 export default function CollectionGrid({
     collections,
     skeletons = 0,
-    onLaidOut
+    onLaidOut,
+    selection
 }: CollectionGridProps) {
     const layout = useGridLayout();
     const laidOut = layout !== null;
     useLayoutEffect(() => {
         if (laidOut) onLaidOut?.();
     }, [laidOut, onLaidOut]);
-    const gridRef = useRef<HTMLDivElement>(null);
+    const gridRef = useRef<HTMLDivElement | null>(null);
+    const [grid, setGrid] = useState<HTMLDivElement | null>(null);
+    const setGridRef = useCallback((element: HTMLDivElement | null) => {
+        gridRef.current = element;
+        setGrid(element);
+    }, []);
+    useSelectionGestures(grid, CARD_ID_ATTRIBUTE, selection);
     const { cycling, frame, onCardHover } = useThumbnailCycling(
         gridRef,
         // The columns follow the grid density
@@ -39,10 +52,15 @@ export default function CollectionGrid({
 
     const { columns, tileHeights } = layout;
     return (
-        <SimpleGrid ref={gridRef} columns={columns} gap="2px">
+        <SimpleGrid
+            ref={setGridRef}
+            columns={columns}
+            gap="2px"
+            css={selection ? SELECTABLE_GRID : undefined}>
             {collections.map((collection) => (
                 <Box
                     key={collection.id}
+                    position="relative"
                     h={tileHeights}
                     {...{ [CARD_ID_ATTRIBUTE]: collection.id }}>
                     <CollectionCard
@@ -50,6 +68,11 @@ export default function CollectionGrid({
                         frame={cycling.has(collection.id) ? frame : null}
                         onHoverChange={onCardHover}
                     />
+                    {selection?.selecting && (
+                        <SelectionMark
+                            selected={selection.isSelected(collection.id)}
+                        />
+                    )}
                 </Box>
             ))}
             {Array.from({ length: skeletons }, (_, i) => (
