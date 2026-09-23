@@ -16,6 +16,7 @@ import {
   BrowseCollectionsPage,
   BrowseCollectionsQuery,
   browseCollections,
+  recordOpen,
   summarizeCollections,
 } from "./collection-browsing";
 import {
@@ -75,11 +76,27 @@ export class CollectionService {
     this.clock = options.clock ?? realClock;
   }
 
-  /** One page of the user's collections as summaries, in random order for the seed or the current Shuffle period */
+  /**
+   * One page of the user's collections as summaries, in the query's sort:
+   * random for the seed or the current Shuffle period by default
+   */
   async browseCollections(
     query: BrowseCollectionsQuery = {}
   ): Promise<BrowseCollectionsPage> {
     return browseCollections(this.userId, this.clock(), query);
+  }
+
+  /**
+   * Records a visit to one of the user's collections: another Open, unless it
+   * comes less than 30 minutes after the previous visit
+   */
+  async recordOpen(collectionId: string) {
+    const recorded =
+      UUID_PATTERN.test(collectionId) &&
+      (await recordOpen(this.userId, collectionId, this.clock()));
+    if (!recorded) {
+      throw new NotFoundError(`Collection not found '${collectionId}'`);
+    }
   }
 
   /** One page of the files of one of the user's collections, newest first unless another sort is asked for */

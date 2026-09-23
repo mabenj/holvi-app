@@ -1,5 +1,6 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
 import {
+    booleanQueryParam,
     listQueryParam,
     numberQueryParam,
     singleQueryParam
@@ -18,7 +19,7 @@ import {
 
 /**
  * One page of the user's collections:
- * ?sort=random&tags=&tags=&fileType=&q=&seed=&cursor=&limit=
+ * ?sort=&tags=&tags=&fileType=&forgotten=&q=&seed=&cursor=&limit=
  */
 async function browseCollections(
     req: ApiRequest,
@@ -32,6 +33,7 @@ async function browseCollections(
         fileType: singleQueryParam(req.query.fileType) as
             | CollectionFileType
             | undefined,
+        forgotten: booleanQueryParam(req.query.forgotten),
         q: singleQueryParam(req.query.q),
         seed: singleQueryParam(req.query.seed),
         cursor: singleQueryParam(req.query.cursor),
