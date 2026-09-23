@@ -1,6 +1,7 @@
 import type Ffmpeg from "fluent-ffmpeg";
-import { rename, unlink } from "fs/promises";
+import { mkdir, readdir, rename, unlink } from "fs/promises";
 import path from "path";
+import type { ScrubPreviewLayout } from "../types/scrub-preview";
 import appConfig from "./app-config";
 import { HolviError } from "./errors";
 import { createDirIfNotExists } from "./file-system-helpers";
@@ -39,8 +40,110 @@ export function planRendition(codecs: VideoCodecs): RenditionPlan {
     return codecs.isMp4 ? null : "remux";
 }
 
+/** A Scrub preview holds at most this many frames */
+export const SCRUB_PREVIEW_MAX_FRAMES = 100;
+/** Frames of a short video are this far apart, in seconds */
+const SCRUB_PREVIEW_MIN_INTERVAL_SECONDS = 1;
+/** How wide each frame is, in pixels; its height keeps the video's proportions */
+const SCRUB_PREVIEW_TILE_WIDTH = 160;
+/** A full Scrub preview is a square of frames */
+const SCRUB_PREVIEW_MAX_COLUMNS = 10;
+
+/**
+ * Seconds between a Scrub preview's frames: a second, or more for a video
+ * too long to preview every second in its frames, rounded up to the
+ * millisecond so the frames never outnumber the maximum.
+ */
+export function scrubPreviewInterval(durationSeconds: number) {
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+        return SCRUB_PREVIEW_MIN_INTERVAL_SECONDS;
+    }
+    const interval =
+        Math.ceil((durationSeconds / SCRUB_PREVIEW_MAX_FRAMES) * 1000) / 1000;
+    return Math.max(SCRUB_PREVIEW_MIN_INTERVAL_SECONDS, interval);
+}
+
+/** How a Scrub preview tiles its frames: rows of up to ten, as square as they fit */
+export function scrubPreviewGrid(frames: number) {
+    const columns = Math.min(SCRUB_PREVIEW_MAX_COLUMNS, frames);
+    return { columns, rows: Math.ceil(frames / columns) };
+}
+
 export class VideoHelper {
     private static readonly logger = new Log("VID", LogColor.YELLOW);
+
+    /**
+     * Writes a video's Scrub preview as one JPEG: a frame every interval from
+     * the start, each scaled to about 160 px wide, tiled left to right and top
+     * to bottom. The frames are staged in `workDir`, which the caller deletes.
+     */
+    static async produceScrubPreview(
+        sourcePath: string,
+        workDir: string,
+        targetPath: string
+    ): Promise<ScrubPreviewLayout> {
+        const { durationInSeconds } = await this.getVideoMetadata(sourcePath);
+        const intervalSeconds = scrubPreviewInterval(durationInSeconds ?? NaN);
+        const framesDir = path.join(workDir, "scrub-frames");
+        await mkdir(framesDir, { recursive: true });
+        const ffmpeg = await this.importFfmpeg();
+        await new Promise<void>((resolve, reject) =>
+            ffmpeg(sourcePath)
+                .outputOptions([
+                    "-an",
+                    // The first frame at or after each multiple of the interval
+                    "-vf",
+                    `select=gte(t\\,selected_n*${intervalSeconds}),scale=${SCRUB_PREVIEW_TILE_WIDTH}:-2`,
+                    // One output frame per selected frame, not a constant rate
+                    ...["-vsync", "vfr"],
+                    ...["-frames:v", String(SCRUB_PREVIEW_MAX_FRAMES)],
+                    ...["-q:v", "4"]
+                ])
+                .on("end", () => resolve())
+                .on("error", (error) => reject(error))
+                .save(path.join(framesDir, "%03d.jpg"))
+        );
+        const frameFiles = (await readdir(framesDir))
+            .filter((name) => name.endsWith(".jpg"))
+            .sort();
+        if (frameFiles.length === 0) {
+            throw new HolviError("No frames for the Scrub preview");
+        }
+        const { default: sharp } = await import("sharp");
+        const framePaths = frameFiles.map((name) => path.join(framesDir, name));
+        const { width: tileWidth, height: tileHeight } = await sharp(
+            framePaths[0]
+        ).metadata();
+        if (!tileWidth || !tileHeight) {
+            throw new HolviError("Could not read a Scrub preview frame");
+        }
+        const { columns, rows } = scrubPreviewGrid(framePaths.length);
+        await sharp({
+            create: {
+                width: columns * tileWidth,
+                height: rows * tileHeight,
+                channels: 3,
+                background: { r: 0, g: 0, b: 0 }
+            }
+        })
+            .composite(
+                framePaths.map((input, index) => ({
+                    input,
+                    left: (index % columns) * tileWidth,
+                    top: Math.floor(index / columns) * tileHeight
+                }))
+            )
+            .jpeg({ quality: 70 })
+            .toFile(targetPath);
+        return {
+            intervalSeconds,
+            frames: framePaths.length,
+            columns,
+            rows,
+            tileWidth,
+            tileHeight
+        };
+    }
 
     static async convertToMov(sourcePath: string) {
         const ffmpeg = await this.importFfmpeg();

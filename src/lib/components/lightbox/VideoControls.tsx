@@ -1,4 +1,5 @@
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
+import type { ScrubPreview } from "@/lib/types/scrub-preview";
 import { Box, Flex, IconButton, Text } from "@chakra-ui/react";
 import {
     mdiPause,
@@ -21,6 +22,9 @@ import {
     useControlsVisible
 } from "./lightbox-controls";
 import PlayerSlider from "./PlayerSlider";
+import ScrubPreviewFrame, {
+    usePreloadedScrubPreview
+} from "./ScrubPreviewFrame";
 import SkipCue from "./SkipCue";
 import { usePictureInPicture } from "./usePictureInPicture";
 import { useDoubleTapSkip, useKeyboardControls } from "./usePlayerShortcuts";
@@ -43,11 +47,14 @@ interface VideoControlsProps {
     video: HTMLVideoElement;
     /** Seconds, from the file's metadata, until the video knows its own */
     knownDuration?: number;
+    /** Shows the frame being scrubbed to, if video processing has made one */
+    scrubPreview?: ScrubPreview;
 }
 
 /**
  * The active video's controls: play and pause, position and duration, a
- * progress bar to scrub with, loop, picture-in-picture where the browser
+ * progress bar to scrub with (showing the frame being scrubbed to from the
+ * video's Scrub preview, if it has one), loop, picture-in-picture where the browser
  * supports it, and volume or mute. They show and hide with the rest of the
  * lightbox's controls, and hide by themselves once playback has run for a
  * few seconds.
@@ -58,9 +65,11 @@ interface VideoControlsProps {
 export default function VideoControls({
     pswp,
     video,
-    knownDuration
+    knownDuration,
+    scrubPreview
 }: VideoControlsProps) {
     const playback = useVideoPlayback(video);
+    usePreloadedScrubPreview(scrubPreview);
     const visible = useControlsVisible(pswp);
     const canSetVolume = useMediaQuery(FINE_POINTER_QUERY, false);
 
@@ -154,7 +163,14 @@ export default function VideoControls({
                     event.pointerType === "mouse" && setHovered(true)
                 }
                 onPointerLeave={() => setHovered(false)}>
-                <Flex alignItems="center">
+                <Flex alignItems="center" position="relative">
+                    {scrubPreview && scrubTime !== null && (
+                        <ScrubPreviewFrame
+                            preview={scrubPreview}
+                            time={scrubTime}
+                            progress={progress}
+                        />
+                    )}
                     <PlayerSlider
                         label="Seek"
                         value={progress}

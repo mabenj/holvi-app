@@ -1,5 +1,6 @@
 import { getFileSrc } from "@/lib/common/utilities";
 import { CollectionFileDto } from "@/lib/types/collection-file-dto";
+import { ScrubPreviewLayout } from "@/lib/types/scrub-preview";
 import {
     CreationOptional,
     DataTypes,
@@ -51,6 +52,8 @@ export class CollectionFile extends Model<
     declare processingError: CreationOptional<string | null>;
     /** Whether video processing stored a Rendition next to the original */
     declare hasRendition: CreationOptional<boolean>;
+    /** How the video's Scrub preview is tiled; null while it has none */
+    declare scrubPreviewLayout: CreationOptional<ScrubPreviewLayout | null>;
 
     declare createdAt: CreationOptional<Date>;
     declare updatedAt: CreationOptional<Date>;
@@ -99,7 +102,8 @@ export class CollectionFile extends Model<
                     type: DataTypes.BOOLEAN,
                     allowNull: false,
                     defaultValue: false
-                }
+                },
+                scrubPreviewLayout: DataTypes.JSONB
             },
             {
                 sequelize,

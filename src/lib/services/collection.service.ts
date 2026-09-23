@@ -12,6 +12,7 @@ import { CollectionFileDto } from "../types/collection-file-dto";
 import { CollectionFileFormData } from "../validators/collection-file.validator";
 import { CollectionFormData } from "../validators/collection.validator";
 import { CollectionDetails } from "../types/collection-details";
+import { SCRUB_PREVIEW_MIME_TYPE } from "../types/scrub-preview";
 import {
   BrowseCollectionsPage,
   BrowseCollectionsQuery,
@@ -320,6 +321,29 @@ export class CollectionService {
       mimeType: rendition ? "video/mp4" : fileInfo.mimeType,
       chunkStartEnd,
       totalLengthBytes,
+    };
+  }
+
+  /** A video's Scrub preview, a JPEG image */
+  async getScrubPreview(
+    collectionId: string,
+    videoId: string
+  ): Promise<GetBufferResult> {
+    const fileInfo = await this.getCollectionFileInfo(collectionId, videoId);
+    if (!fileInfo) {
+      throw new NotFoundError(`File not found '${videoId}'`);
+    }
+    if (!fileInfo.hasScrubPreview) {
+      throw new NotFoundError(`Video '${videoId}' has no Scrub preview`);
+    }
+    const file = await new UserFileSystem(this.userId).readScrubPreview(
+      collectionId,
+      fileInfo.id
+    );
+    return {
+      mimeType: SCRUB_PREVIEW_MIME_TYPE,
+      file,
+      filename: `${fileInfo.label.replace(/\.[^.]*$/, "")}_scrub.jpg`,
     };
   }
 
@@ -641,7 +665,13 @@ export class CollectionService {
         CollectionId: collectionId,
         id: fileId,
       },
-      attributes: ["mimeType", "id", "name", "hasRendition"],
+      attributes: [
+        "mimeType",
+        "id",
+        "name",
+        "hasRendition",
+        "scrubPreviewLayout",
+      ],
       include: {
         model: db.models.Collection,
         required: true,
@@ -659,6 +689,7 @@ export class CollectionService {
       label: collectionFile.name,
       mimeType: collectionFile.mimeType,
       hasRendition: collectionFile.hasRendition,
+      hasScrubPreview: collectionFile.scrubPreviewLayout !== null,
     };
   }
 

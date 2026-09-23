@@ -101,6 +101,8 @@ export function getFileSrc(options: {
   thumbnail?: boolean;
   /** A video's Rendition instead of its original */
   rendition?: boolean;
+  /** A video's Scrub preview, an image variant of the video */
+  scrubPreview?: boolean;
 }) {
   const {
     collectionId,
@@ -108,7 +110,11 @@ export function getFileSrc(options: {
     mimeType,
     thumbnail = false,
     rendition = false,
+    scrubPreview = false,
   } = options;
+  if (scrubPreview) {
+    return `/api/collections/${collectionId}/files?image=${fileId}&variant=scrubPreview`;
+  }
   const isImage = mimeType.includes("image");
   return `/api/collections/${collectionId}/files?${
     thumbnail ? "thumbnail" : isImage ? "image" : "video"
