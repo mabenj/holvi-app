@@ -4,23 +4,27 @@ import { getErrorMessage } from "../common/utilities";
 import { FileSort } from "../types/file-sort";
 
 interface FilesState {
-    /** The collection and sort these pages belong to */
+    /** The collection, sort and tags these pages belong to */
     query: string;
     pages: FilesPage[];
     loading: boolean;
     error: string | null;
 }
 
-function queryKey(collectionId: string, sort: FileSort) {
-    return `${collectionId}:${sort}`;
+function queryKey(collectionId: string, sort: FileSort, tags: string[]) {
+    return JSON.stringify([collectionId, sort, tags]);
 }
 
 /**
- * A collection's files in the given order, a page at a time. Changing the sort
- * starts again from the first page of the new order.
+ * A collection's files that have every one of the tags, in the given order, a
+ * page at a time. Changing the sort or the tags starts again from the first page.
  */
-export function useCollectionFiles(collectionId: string, sort: FileSort) {
-    const query = queryKey(collectionId, sort);
+export function useCollectionFiles(
+    collectionId: string,
+    sort: FileSort,
+    tags: string[]
+) {
+    const query = queryKey(collectionId, sort, tags);
     const [state, setState] = useState<FilesState>({
         query,
         pages: [],
@@ -50,7 +54,7 @@ export function useCollectionFiles(collectionId: string, sort: FileSort) {
                 : { query, pages: [], error: null }),
             loading: true
         }));
-        fetchFilesPage(collectionId, { sort, cursor }, controller.signal)
+        fetchFilesPage(collectionId, { sort, tags, cursor }, controller.signal)
             .then((page) => {
                 if (controller.signal.aborted) return;
                 setState((previous) => ({
@@ -68,9 +72,11 @@ export function useCollectionFiles(collectionId: string, sort: FileSort) {
                     error: getErrorMessage(error)
                 }));
             });
+        // The query key stands for the tags
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [canLoad, collectionId, sort, cursor, query]);
 
-    // Leaving the collection or changing the sort drops the page on its way
+    // Leaving the collection or changing the sort or tags drops the page on its way
     useEffect(() => () => request.current?.abort(), [query]);
 
     const retry = useCallback(() => {
