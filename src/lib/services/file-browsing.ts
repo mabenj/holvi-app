@@ -21,8 +21,11 @@ export interface BrowseFilesQuery extends PageQuery {
     tags?: string[];
 }
 
-/** The Timeline has one fixed order, newest first, so only the page is asked for */
-export type BrowseTimelineQuery = PageQuery;
+/** The Timeline has one fixed order, newest first */
+export interface BrowseTimelineQuery extends PageQuery {
+    /** Only files that have every one of these tags, each on the file or on its collection */
+    tags?: string[];
+}
 
 export interface BrowseFilesPage {
     files: FileSummary[];
@@ -123,12 +126,25 @@ export async function browseTimeline(
     userId: string,
     query: BrowseTimelineQuery
 ): Promise<BrowseFilesPage> {
+    // A file has a tag if it or its collection has it
+    const tags = tagFilter(query.tags, [
+        {
+            table: `"CollectionFileTags"`,
+            ownerColumn: `"CollectionFileId"`,
+            owner: `f.id`
+        },
+        {
+            table: `"CollectionTags"`,
+            ownerColumn: `"CollectionId"`,
+            owner: `f."CollectionId"`
+        }
+    ]);
     return browseFilePage(
         {
             from: `"CollectionFiles" f
                 JOIN "Collections" c ON c.id = f."CollectionId"`,
-            conditions: `c."UserId" = :userId`,
-            replacements: { userId }
+            conditions: `c."UserId" = :userId ${tags.conditions}`,
+            replacements: { ...tags.replacements, userId }
         },
         "newest",
         query

@@ -26,6 +26,8 @@ interface AppShellProps {
     bleedTop?: boolean;
     /** Replaces the tab bar and the floating action button while present, e.g. the selection bar */
     contextualBar?: ReactNode;
+    /** Beside the page header, e.g. a filter button */
+    headerAction?: ReactNode;
 }
 
 /** Frame of every signed-in screen: page header, content and the bottom tab bar */
@@ -35,7 +37,8 @@ export default function AppShell({
     floatingAction,
     onActiveTabReselect,
     bleedTop = false,
-    contextualBar
+    contextualBar,
+    headerAction
 }: AppShellProps) {
     return (
         <>
@@ -52,9 +55,18 @@ export default function AppShell({
                 // Keep the end of the content clear of the fixed tab bar
                 pb={`calc(${TAB_BAR_HEIGHT} + env(safe-area-inset-bottom))`}>
                 {!bleedTop && (
-                    <Heading as="h1" textStyle="2xl" px="4" pt="4" pb="2">
-                        {title}
-                    </Heading>
+                    <Flex
+                        alignItems="center"
+                        justifyContent="space-between"
+                        gap="2"
+                        px="4"
+                        pt="4"
+                        pb="2">
+                        <Heading as="h1" textStyle="2xl">
+                            {title}
+                        </Heading>
+                        {headerAction}
+                    </Flex>
                 )}
                 <Box flex="1">{children}</Box>
             </Flex>
