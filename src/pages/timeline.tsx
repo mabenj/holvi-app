@@ -1,7 +1,10 @@
 import { signedInPageProps } from "@/lib/common/signed-in-page";
 import AppShell from "@/lib/components/app-shell/AppShell";
 import FileGrid from "@/lib/components/collection-page/FileGrid";
+import FileLightbox from "@/lib/components/lightbox/FileLightbox";
+import GoToCollection from "@/lib/components/lightbox/GoToCollection";
 import TimelineGrid from "@/lib/components/timeline/TimelineGrid";
+import { useLightboxHistory } from "@/lib/hooks/useLightboxHistory";
 import { useNextPageSentinel } from "@/lib/hooks/useNextPageSentinel";
 import { useTimelineFiles } from "@/lib/hooks/useTimelineFiles";
 import { Box, Button, EmptyState, Text, VStack } from "@chakra-ui/react";
@@ -14,10 +17,15 @@ export const getServerSideProps = signedInPageProps;
 /** Skeleton tiles while the first page of the Timeline loads */
 const FIRST_PAGE_SKELETONS = 12;
 
-/** Every file the user owns, newest first, under sticky month headers; no floating action button */
+/**
+ * Every file the user owns, newest first, under sticky month headers; no
+ * floating action button. Tapping a file opens the lightbox, which swipes
+ * through the whole Timeline.
+ */
 export default function TimelineTab() {
     const { files, pages, loading, error, hasMore, loadMore, retry } =
         useTimelineFiles();
+    const lightbox = useLightboxHistory();
 
     // Opening the Timeline, or trying again after an error, fetches the first page
     useEffect(() => {
@@ -38,7 +46,12 @@ export default function TimelineTab() {
             ) : isEmpty ? (
                 <NoFilesYet />
             ) : (
-                <TimelineGrid files={files} loadingMore={loading} />
+                <TimelineGrid
+                    files={files}
+                    loadingMore={loading}
+                    onOpen={lightbox.open}
+                    activeFileId={lightbox.photoId}
+                />
             )}
             {error && (
                 <VStack py="8" px="4" gap="3" textAlign="center">
@@ -49,6 +62,14 @@ export default function TimelineTab() {
                 </VStack>
             )}
             <Box ref={sentinel} h="1px" />
+            {/* Swiping on past the loaded files loads the next page */}
+            <FileLightbox
+                files={files}
+                onNearEnd={hasMore && !error ? loadMore : undefined}
+                actions={(file) => (
+                    <GoToCollection collectionId={file.collectionId} />
+                )}
+            />
         </AppShell>
     );
 }

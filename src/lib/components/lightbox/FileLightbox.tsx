@@ -6,8 +6,8 @@ import Icon from "@mdi/react";
 import PhotoSwipe from "photoswipe";
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { revealTile, tileOf, tileThumbnail } from "./file-tiles";
 import {
-    FILE_TILE_ATTRIBUTE,
     FileSlideData,
     formatTakenAt,
     isNearEnd,
@@ -107,7 +107,17 @@ export default function FileLightbox({
         }
     }, [files.length]);
 
-    useEffect(() => () => pswpRef.current?.destroy(), []);
+    // Leaving the page, e.g. for "Go to collection", has left the lightbox's
+    // history entry already: going back as well would undo it
+    useEffect(
+        () => () => {
+            const pswp = pswpRef.current;
+            if (!pswp) return;
+            closedByHistory.add(pswp);
+            pswp.destroy();
+        },
+        []
+    );
 
     const file = ui ? files[ui.index] : undefined;
     if (!ui || !file) {
@@ -231,21 +241,6 @@ function openLightbox(
 
     pswp.init();
     return pswp;
-}
-
-function tileOf(fileId: string) {
-    return document.querySelector<HTMLElement>(
-        `[${FILE_TILE_ATTRIBUTE}="${CSS.escape(fileId)}"]`
-    );
-}
-
-function tileThumbnail(fileId: string) {
-    return tileOf(fileId)?.querySelector<HTMLElement>("img") ?? null;
-}
-
-/** Scrolls a file's tile into view, clear of the bars (the tiles' scroll margins) */
-function revealTile(fileId: string) {
-    tileOf(fileId)?.scrollIntoView({ block: "nearest", behavior: "instant" });
 }
 
 /**
