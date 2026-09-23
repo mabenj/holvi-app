@@ -281,13 +281,17 @@ export function uploadFiles(
     });
 }
 
-/** One page of the Timeline: every file the user owns, newest first */
+/**
+ * One page of the Timeline: every file the user owns that has every one of the
+ * tags, on the file or its collection, newest first
+ */
 export async function fetchTimelinePage(
-    cursor: string | undefined,
+    options: { tags: string[]; cursor?: string },
     signal?: AbortSignal
 ): Promise<FilesPage> {
     const params = new URLSearchParams();
-    if (cursor) params.set("cursor", cursor);
+    options.tags.forEach((tag) => params.append("tags", tag));
+    if (options.cursor) params.set("cursor", options.cursor);
     const data = await getJson(
         `/api/files?${params}`,
         "Could not load the Timeline",

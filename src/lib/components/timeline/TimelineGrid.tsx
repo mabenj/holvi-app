@@ -3,10 +3,15 @@ import {
     firstAbove,
     useWindowVirtualRows
 } from "@/lib/hooks/useWindowVirtualRows";
+import type { Selection } from "@/lib/hooks/useSelection";
+import { useSelectionGestures } from "@/lib/hooks/useSelectionGestures";
 import { FileSummary } from "@/lib/types/file-summary";
 import { Box, Skeleton, Text } from "@chakra-ui/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import FileTile from "../grid/FileTile";
+import { SELECTABLE_GRID } from "../grid/selectable-grid";
+import { FILE_TILE_ATTRIBUTE } from "../lightbox/lightbox-slides";
+import SelectionMark from "../selection/SelectionMark";
 import { TimelineRow, timelineRows } from "./timeline-rows";
 
 /** Height of a month header, in pixels */
@@ -19,6 +24,8 @@ interface TimelineGridProps {
     files: FileSummary[];
     /** A row of skeleton tiles after the files, while the next page loads */
     loadingMore?: boolean;
+    /** Where files can be selected: a long-press starts selecting, and taps then toggle files */
+    selection?: Selection;
 }
 
 /**
@@ -28,7 +35,8 @@ interface TimelineGridProps {
  */
 export default function TimelineGrid({
     files,
-    loadingMore = false
+    loadingMore = false,
+    selection
 }: TimelineGridProps) {
     const layout = useResolvedGridLayout();
     const columns = layout?.columns ?? 1;
@@ -51,6 +59,16 @@ export default function TimelineGrid({
     );
 
     const listRef = useRef<HTMLDivElement>(null);
+    // The selection gestures listen on the list, so they need it as state
+    // to attach once it mounts; the virtualizer reads it through the ref
+    const [list, setList] = useState<HTMLDivElement | null>(null);
+    const attachList = useCallback((element: HTMLDivElement | null) => {
+        listRef.current = element;
+        setList(element);
+    }, []);
+    useSelectionGestures(list, FILE_TILE_ATTRIBUTE, selection);
+    const selecting = selection?.selecting ?? false;
+    const isSelected = selection?.isSelected;
     const stickyRef = useRef<HTMLDivElement>(null);
     const [stuckMonth, setStuckMonth] = useState<string | null>(null);
     // Where the sticky header sticks, below the safe-area inset; read again after a resize
@@ -115,9 +133,10 @@ export default function TimelineGrid({
                 <MonthHeader month={stuckMonth ?? firstMonth} />
             </Box>
             <Box
-                ref={listRef}
+                ref={attachList}
                 aria-label="Timeline"
                 position="relative"
+                css={selection ? SELECTABLE_GRID : undefined}
                 // The first month's own header sits under the sticky one
                 mt={`-${MONTH_HEIGHT}px`}
                 h={`${totalHeight}px`}>
@@ -131,6 +150,8 @@ export default function TimelineGrid({
                             top={offsets[index]}
                             height={height}
                             columns={columns}
+                            selecting={selecting}
+                            isSelected={isSelected}
                         />
                     );
                 })}
@@ -145,6 +166,8 @@ interface VirtualRowProps {
     top: number;
     height: number;
     columns: number;
+    selecting: boolean;
+    isSelected: ((fileId: string) => boolean) | undefined;
 }
 
 /**
@@ -156,6 +179,8 @@ function sameRow(a: VirtualRowProps, b: VirtualRowProps) {
         a.top === b.top &&
         a.height === b.height &&
         a.columns === b.columns &&
+        a.selecting === b.selecting &&
+        a.isSelected === b.isSelected &&
         a.row?.key === b.row?.key &&
         (a.row?.kind === "files" ? a.row.files.length : 0) ===
             (b.row?.kind === "files" ? b.row.files.length : 0)
@@ -167,7 +192,9 @@ const VirtualRow = memo(function VirtualRow({
     row,
     top,
     height,
-    columns
+    columns,
+    selecting,
+    isSelected
 }: VirtualRowProps) {
     return (
         <Box
@@ -190,7 +217,19 @@ const VirtualRow = memo(function VirtualRow({
                     h={`${height - GAP}px`}>
                     {row
                         ? row.files.map((file) => (
-                              <FileTile key={file.id} file={file} />
+                              <Box
+                                  key={file.id}
+                                  {...{ [FILE_TILE_ATTRIBUTE]: file.id }}
+                                  position="relative">
+                                  <FileTile file={file} />
+                                  {selecting && (
+                                      <SelectionMark
+                                          selected={
+                                              isSelected?.(file.id) ?? false
+                                          }
+                                      />
+                                  )}
+                              </Box>
                           ))
                         : Array.from({ length: columns }, (_, i) => (
                               <Skeleton key={i} h="100%" rounded="none" />

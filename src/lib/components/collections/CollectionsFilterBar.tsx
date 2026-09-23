@@ -8,20 +8,22 @@ import {
     Button,
     CloseButton,
     Flex,
-    Float,
-    Circle,
     Heading,
     HStack,
-    IconButton,
     Input,
     InputGroup,
     Stack,
     Text
 } from "@chakra-ui/react";
-import { mdiClose, mdiFilterVariant, mdiMagnify } from "@mdi/js";
+import { mdiMagnify } from "@mdi/js";
 import Icon from "@mdi/react";
 import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
+import {
+    ActiveFilterChips,
+    FilterButton,
+    FilterChip
+} from "../filters/FilterControls";
 import { TagToggles, toggleTag } from "../filters/TagToggle";
 import PanelSurface from "../surfaces/PanelSurface";
 
@@ -55,29 +57,10 @@ export default function CollectionsFilterBar({
         <Stack gap="2" px="4" pb="3">
             <HStack gap="2">
                 <SearchField value={filter.q} onChange={(q) => onChange({ q })} />
-                <IconButton
-                    aria-label={
-                        panelFilters > 0
-                            ? `Filters, ${panelFilters} on`
-                            : "Filters"
-                    }
-                    variant={panelFilters > 0 ? "subtle" : "ghost"}
-                    position="relative"
-                    onClick={() => setPanelOpen(true)}>
-                    <Icon path={mdiFilterVariant} size="24px" aria-hidden />
-                    {panelFilters > 0 && (
-                        <Float placement="top-end" offset="1.5">
-                            <Circle
-                                size="4.5"
-                                bg="colorPalette.solid"
-                                color="colorPalette.contrast"
-                                fontSize="2xs"
-                                fontWeight="bold">
-                                {panelFilters}
-                            </Circle>
-                        </Float>
-                    )}
-                </IconButton>
+                <FilterButton
+                    activeCount={panelFilters}
+                    onClick={() => setPanelOpen(true)}
+                />
             </HStack>
             {isFiltering(filter) && (
                 <ActiveFilters filter={filter} onChange={onChange} />
@@ -161,25 +144,8 @@ function SearchField({
 function ActiveFilters({ filter, onChange }: CollectionsFilterBarProps) {
     const search = filter.q.trim();
     return (
-        <Flex
-            role="group"
-            aria-label="Active filters"
-            gap="1.5"
-            overflowX="auto"
-            alignItems="center"
-            // Chips scroll sideways instead of wrapping into many rows
-            css={{ scrollbarWidth: "none" }}>
-            <Button
-                size="xs"
-                variant="solid"
-                rounded="full"
-                flexShrink="0"
-                onClick={() =>
-                    onChange({ tags: [], fileType: "any", q: "" })
-                }>
-                <Icon path={mdiClose} size="14px" aria-hidden />
-                Clear all
-            </Button>
+        <ActiveFilterChips
+            onClearAll={() => onChange({ tags: [], fileType: "any", q: "" })}>
             {search && (
                 <FilterChip
                     label={`“${search}”`}
@@ -204,33 +170,7 @@ function ActiveFilters({ filter, onChange }: CollectionsFilterBarProps) {
                     }
                 />
             ))}
-        </Flex>
-    );
-}
-
-function FilterChip({
-    label,
-    removeLabel,
-    onRemove
-}: {
-    label: string;
-    removeLabel: string;
-    onRemove: () => void;
-}) {
-    return (
-        <Button
-            size="xs"
-            variant="subtle"
-            rounded="full"
-            flexShrink="0"
-            maxW="60vw"
-            aria-label={removeLabel}
-            onClick={onRemove}>
-            <Text as="span" truncate>
-                {label}
-            </Text>
-            <Icon path={mdiClose} size="14px" aria-hidden />
-        </Button>
+        </ActiveFilterChips>
     );
 }
 

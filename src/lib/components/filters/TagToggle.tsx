@@ -52,16 +52,16 @@ export function hasTag(tags: string[], tag: string) {
 }
 
 interface TagTogglesProps extends Omit<FlexProps, "onChange"> {
-    /** The tags to offer, most used first */
-    tagCounts: TagCount[];
+    /** The tags to offer, most used first, with their counts where they mean something */
+    tagCounts: (Pick<TagCount, "name"> & Partial<TagCount>)[];
     /** The selected tags */
     value: string[];
     onChange: (tags: string[]) => void;
 }
 
 /**
- * A toggle for each tag, with its count. Selected tags that no longer have
- * a count stay first on the list, so they can still be turned off.
+ * A toggle for each tag, with its count if it has one. Selected tags that are
+ * no longer offered stay first on the list, so they can still be turned off.
  */
 export function TagToggles({
     tagCounts,
