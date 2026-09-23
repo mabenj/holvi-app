@@ -3,11 +3,17 @@ import {
     SignedInPageProps,
     signedInPageProps
 } from "@/lib/common/signed-in-page";
+import {
+    CollectionsFilter,
+    isFiltering,
+    NO_COLLECTIONS_FILTER
+} from "@/lib/client/collections";
 import AppShell from "@/lib/components/app-shell/AppShell";
 import DropOverlay from "@/lib/components/app-shell/DropOverlay";
 import PullToRefresh from "@/lib/components/app-shell/PullToRefresh";
 import CollectionEditor from "@/lib/components/collections/CollectionEditor";
 import CollectionGrid from "@/lib/components/collections/CollectionGrid";
+import CollectionsFilterBar from "@/lib/components/collections/CollectionsFilterBar";
 import {
     featureCollection,
     useCollectionsBrowse
@@ -16,7 +22,11 @@ import { DroppedFiles, useFileDrop } from "@/lib/hooks/useFileDrop";
 import { useNextPageSentinel } from "@/lib/hooks/useNextPageSentinel";
 import { startUpload } from "@/lib/hooks/useUpload";
 import { Box, Button, EmptyState, Text, VStack } from "@chakra-ui/react";
-import { mdiImageMultipleOutline, mdiPlus } from "@mdi/js";
+import {
+    mdiImageMultipleOutline,
+    mdiMagnifyRemoveOutline,
+    mdiPlus
+} from "@mdi/js";
 import Icon from "@mdi/react";
 import { useRouter } from "next/router";
 import { useCallback, useEffect, useState } from "react";
@@ -30,6 +40,7 @@ const NEXT_PAGE_SKELETONS = 12;
 
 export default function CollectionsTab({ user }: SignedInPageProps) {
     const {
+        filter,
         pages,
         collections,
         loading,
@@ -38,6 +49,7 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
         hasMore,
         loadMore,
         loadFirstPage,
+        changeFilter,
         saveScrollPosition,
         takeScrollPosition,
         endVisit,
@@ -78,6 +90,19 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
         refresh();
     }, [refresh]);
 
+    // Another filter shows its own collections from the top
+    const narrow = useCallback(
+        (changes: Partial<CollectionsFilter>) => {
+            window.scrollTo({ top: 0 });
+            changeFilter(changes);
+        },
+        [changeFilter]
+    );
+    const clearFilter = useCallback(
+        () => narrow(NO_COLLECTIONS_FILTER),
+        [narrow]
+    );
+
     const sentinel = useNextPageSentinel(
         restored && hasMore && !error ? loadMore : undefined,
         pages.length
@@ -100,8 +125,11 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
                 icon: mdiPlus,
                 onClick: () => creator.open()
             }}>
+            <CollectionsFilterBar filter={filter} onChange={narrow} />
             <PullToRefresh onRefresh={startOver} refreshing={refreshing}>
-                {isEmpty ? (
+                {isEmpty && isFiltering(filter) ? (
+                    <NoMatches onClear={clearFilter} />
+                ) : isEmpty ? (
                     <FirstCollectionPrompt onCreate={() => creator.open()} />
                 ) : (
                     <CollectionGrid
@@ -188,6 +216,32 @@ function FirstCollectionPrompt({ onCreate }: { onCreate: () => void }) {
                 <Button onClick={onCreate}>
                     <Icon path={mdiPlus} size="20px" aria-hidden />
                     New collection
+                </Button>
+            </EmptyState.Content>
+        </EmptyState.Root>
+    );
+}
+
+/** No collection matches the filters, as opposed to there being no collections at all */
+function NoMatches({ onClear }: { onClear: () => void }) {
+    return (
+        <EmptyState.Root>
+            <EmptyState.Content>
+                <EmptyState.Indicator>
+                    <Icon
+                        path={mdiMagnifyRemoveOutline}
+                        size="48px"
+                        aria-hidden
+                    />
+                </EmptyState.Indicator>
+                <VStack textAlign="center">
+                    <EmptyState.Title>No matches</EmptyState.Title>
+                    <EmptyState.Description>
+                        No collection matches your search and filters.
+                    </EmptyState.Description>
+                </VStack>
+                <Button variant="outline" size="sm" onClick={onClear}>
+                    Clear filters
                 </Button>
             </EmptyState.Content>
         </EmptyState.Root>

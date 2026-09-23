@@ -16,6 +16,7 @@ import CollectionHero from "@/lib/components/collection-page/CollectionHero";
 import CollectionMenu from "@/lib/components/collection-page/CollectionMenu";
 import FileGrid from "@/lib/components/collection-page/FileGrid";
 import FileSortSelect from "@/lib/components/collection-page/FileSortSelect";
+import FileTagFilter from "@/lib/components/collection-page/FileTagFilter";
 import UploadStatus from "@/lib/components/collection-page/UploadStatus";
 import CollectionEditor from "@/lib/components/collections/CollectionEditor";
 import ConfirmationSurface from "@/lib/components/surfaces/ConfirmationSurface";
@@ -30,7 +31,7 @@ import { isUploading, startUpload, useUpload } from "@/lib/hooks/useUpload";
 import { CollectionDetails as Collection } from "@/lib/types/collection-details";
 import { FileSort } from "@/lib/types/file-sort";
 import { Box, Button, EmptyState, Flex, Text, VStack } from "@chakra-ui/react";
-import { mdiImagePlusOutline, mdiUpload } from "@mdi/js";
+import { mdiImagePlusOutline, mdiTagOffOutline, mdiUpload } from "@mdi/js";
 import Icon from "@mdi/react";
 import { useRouter } from "next/router";
 import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
@@ -74,8 +75,9 @@ function CollectionScreen({
     );
 
     const [sort, setSort] = useState<FileSort>("newest");
+    const [tags, setTags] = useState<string[]>([]);
     const { files, pages, loading, error, hasMore, loadMore, reload, retry } =
-        useCollectionFiles(collectionId, sort);
+        useCollectionFiles(collectionId, sort, tags);
 
     const { upload, dismiss } = useUpload(collectionId);
     const uploadFiles = useCallback(
@@ -112,7 +114,7 @@ function CollectionScreen({
         !!collection && !editing && !confirmingDelete && !isUploading(upload)
     );
 
-    // Opening the collection or choosing another sort fetches the first page
+    // Opening the collection or choosing another sort or tags fetches the first page
     useEffect(() => {
         if (pages.length === 0) loadMore();
     }, [pages.length, loadMore]);
@@ -167,10 +169,22 @@ function CollectionScreen({
                             tags={collection.tags}
                         />
                     )}
-                    <Flex justifyContent="flex-end" px="4" py="2">
+                    <Flex
+                        justifyContent="flex-end"
+                        alignItems="center"
+                        gap="3"
+                        px="4"
+                        py="2">
+                        <FileTagFilter
+                            collectionId={collectionId}
+                            value={tags}
+                            onChange={setTags}
+                        />
                         <FileSortSelect value={sort} onChange={setSort} />
                     </Flex>
-                    {isEmpty ? (
+                    {isEmpty && tags.length > 0 ? (
+                        <NoTaggedFiles onClear={() => setTags([])} />
+                    ) : isEmpty ? (
                         <NoFilesYet />
                     ) : (
                         <FileGrid files={files} skeletons={skeletons} />
@@ -311,6 +325,27 @@ function NoFilesYet() {
                         here.
                     </EmptyState.Description>
                 </VStack>
+            </EmptyState.Content>
+        </EmptyState.Root>
+    );
+}
+
+function NoTaggedFiles({ onClear }: { onClear: () => void }) {
+    return (
+        <EmptyState.Root>
+            <EmptyState.Content>
+                <EmptyState.Indicator>
+                    <Icon path={mdiTagOffOutline} size="48px" aria-hidden />
+                </EmptyState.Indicator>
+                <VStack textAlign="center">
+                    <EmptyState.Title>No matching files</EmptyState.Title>
+                    <EmptyState.Description>
+                        No file in this collection has every selected tag.
+                    </EmptyState.Description>
+                </VStack>
+                <Button variant="outline" size="sm" onClick={onClear}>
+                    Clear tags
+                </Button>
             </EmptyState.Content>
         </EmptyState.Root>
     );
