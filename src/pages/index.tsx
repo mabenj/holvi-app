@@ -2,13 +2,19 @@ import {
     SignedInPageProps,
     signedInPageProps
 } from "@/lib/common/signed-in-page";
+import {
+    CollectionsFilter,
+    isFiltering,
+    NO_COLLECTIONS_FILTER
+} from "@/lib/client/collections";
 import AppShell from "@/lib/components/app-shell/AppShell";
 import PullToRefresh from "@/lib/components/app-shell/PullToRefresh";
 import CollectionGrid from "@/lib/components/collections/CollectionGrid";
+import CollectionsFilterBar from "@/lib/components/collections/CollectionsFilterBar";
 import { useCollectionsBrowse } from "@/lib/hooks/useCollectionsBrowse";
 import { useNextPageSentinel } from "@/lib/hooks/useNextPageSentinel";
 import { Box, Button, EmptyState, Text, VStack } from "@chakra-ui/react";
-import { mdiImageMultipleOutline } from "@mdi/js";
+import { mdiImageMultipleOutline, mdiMagnifyRemoveOutline } from "@mdi/js";
 import Icon from "@mdi/react";
 import { useRouter } from "next/router";
 import { useCallback, useEffect, useState } from "react";
@@ -22,6 +28,7 @@ const NEXT_PAGE_SKELETONS = 12;
 
 export default function CollectionsTab({ user }: SignedInPageProps) {
     const {
+        filter,
         pages,
         loading,
         refreshing,
@@ -29,6 +36,7 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
         hasMore,
         loadMore,
         loadFirstPage,
+        changeFilter,
         saveScrollPosition,
         takeScrollPosition,
         retry,
@@ -64,6 +72,19 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
         refresh();
     }, [refresh]);
 
+    // Another filter shows its own collections from the top
+    const narrow = useCallback(
+        (changes: Partial<CollectionsFilter>) => {
+            window.scrollTo({ top: 0 });
+            changeFilter(changes);
+        },
+        [changeFilter]
+    );
+    const clearFilter = useCallback(
+        () => narrow(NO_COLLECTIONS_FILTER),
+        [narrow]
+    );
+
     const sentinel = useNextPageSentinel(
         restored && hasMore && !error ? loadMore : undefined,
         pages.length
@@ -79,8 +100,11 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
 
     return (
         <AppShell title="Collections" onActiveTabReselect={startOver}>
+            <CollectionsFilterBar filter={filter} onChange={narrow} />
             <PullToRefresh onRefresh={startOver} refreshing={refreshing}>
-                {isEmpty ? (
+                {isEmpty && isFiltering(filter) ? (
+                    <NoMatches onClear={clearFilter} />
+                ) : isEmpty ? (
                     <FirstCollectionPrompt />
                 ) : (
                     <CollectionGrid
@@ -121,6 +145,32 @@ function FirstCollectionPrompt() {
                         create one, it shows up here.
                     </EmptyState.Description>
                 </VStack>
+            </EmptyState.Content>
+        </EmptyState.Root>
+    );
+}
+
+/** No collection matches the filters, as opposed to there being no collections at all */
+function NoMatches({ onClear }: { onClear: () => void }) {
+    return (
+        <EmptyState.Root>
+            <EmptyState.Content>
+                <EmptyState.Indicator>
+                    <Icon
+                        path={mdiMagnifyRemoveOutline}
+                        size="48px"
+                        aria-hidden
+                    />
+                </EmptyState.Indicator>
+                <VStack textAlign="center">
+                    <EmptyState.Title>No matches</EmptyState.Title>
+                    <EmptyState.Description>
+                        No collection matches your search and filters.
+                    </EmptyState.Description>
+                </VStack>
+                <Button variant="outline" size="sm" onClick={onClear}>
+                    Clear filters
+                </Button>
             </EmptyState.Content>
         </EmptyState.Root>
     );

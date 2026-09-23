@@ -1,11 +1,13 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
 import {
+    listQueryParam,
     numberQueryParam,
     singleQueryParam
 } from "@/lib/common/query-params";
 import { CollectionSort } from "@/lib/services/collection-browsing";
 import {
     BrowseCollectionsPage,
+    CollectionFileType,
     CollectionService
 } from "@/lib/services/collection.service";
 import { CollectionDto } from "@/lib/types/collection-dto";
@@ -14,15 +16,23 @@ import {
     CollectionValidator
 } from "@/lib/validators/collection.validator";
 
-/** One page of the user's collections: ?sort=random&seed=&cursor=&limit= */
+/**
+ * One page of the user's collections:
+ * ?sort=random&tags=&tags=&fileType=&q=&seed=&cursor=&limit=
+ */
 async function browseCollections(
     req: ApiRequest,
     res: ApiResponse<Partial<BrowseCollectionsPage>>
 ) {
     const collectionService = new CollectionService(req.session.user.id);
     const page = await collectionService.browseCollections({
-        // The service rejects any sort it does not know
+        // The service rejects any sort or file type it does not know
         sort: singleQueryParam(req.query.sort) as CollectionSort | undefined,
+        tags: listQueryParam(req.query.tags),
+        fileType: singleQueryParam(req.query.fileType) as
+            | CollectionFileType
+            | undefined,
+        q: singleQueryParam(req.query.q),
         seed: singleQueryParam(req.query.seed),
         cursor: singleQueryParam(req.query.cursor),
         limit: numberQueryParam(req.query.limit)
