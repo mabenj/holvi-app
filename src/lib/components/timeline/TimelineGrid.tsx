@@ -5,8 +5,8 @@ import {
 } from "@/lib/hooks/useWindowVirtualRows";
 import { FileSummary } from "@/lib/types/file-summary";
 import { Box, Skeleton, Text } from "@chakra-ui/react";
-import { memo, useCallback, useMemo, useRef, useState } from "react";
-import { FileTile } from "../collection-page/FileGrid";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import FileTile from "../grid/FileTile";
 import { TimelineRow, timelineRows } from "./timeline-rows";
 
 /** Height of a month header, in pixels */
@@ -53,6 +53,18 @@ export default function TimelineGrid({
     const listRef = useRef<HTMLDivElement>(null);
     const stickyRef = useRef<HTMLDivElement>(null);
     const [stuckMonth, setStuckMonth] = useState<string | null>(null);
+    // Where the sticky header sticks, below the safe-area inset; read again after a resize
+    const stickyTop = useRef<number | null>(null);
+    useEffect(() => {
+        const forget = () => (stickyTop.current = null);
+        window.addEventListener("resize", forget);
+        return () => window.removeEventListener("resize", forget);
+    }, []);
+    // Where each month's header starts, for the rows' latest offsets
+    const monthStarts = useRef({
+        offsets: [] as number[],
+        starts: [] as number[]
+    });
 
     // Shows the month at the top of the screen in the sticky header, and lets
     // the next month's header push it up as it arrives
@@ -60,13 +72,18 @@ export default function TimelineGrid({
         (viewTop: number, offsets: number[]) => {
             const sticky = stickyRef.current;
             if (!sticky || monthRows.length === 0) return;
-            // The sticky header sticks below the safe-area inset
-            const stickyTop = parseFloat(getComputedStyle(sticky).top) || 0;
-            const line = viewTop + stickyTop;
-            const monthStarts = monthRows.map((row) => offsets[row]);
-            const current = Math.max(0, firstAbove(monthStarts, line) - 1);
+            stickyTop.current ??= parseFloat(getComputedStyle(sticky).top) || 0;
+            if (monthStarts.current.offsets !== offsets) {
+                monthStarts.current = {
+                    offsets,
+                    starts: monthRows.map((row) => offsets[row])
+                };
+            }
+            const { starts } = monthStarts.current;
+            const line = viewTop + stickyTop.current;
+            const current = Math.max(0, firstAbove(starts, line) - 1);
             setStuckMonth((rows[monthRows[current]] as TimelineRow).month);
-            const next = monthStarts[current + 1];
+            const next = starts[current + 1];
             const push =
                 next === undefined
                     ? 0
@@ -99,7 +116,6 @@ export default function TimelineGrid({
             </Box>
             <Box
                 ref={listRef}
-                role="list"
                 aria-label="Timeline"
                 position="relative"
                 // The first month's own header sits under the sticky one
@@ -131,6 +147,21 @@ interface VirtualRowProps {
     columns: number;
 }
 
+/**
+ * Whether a row would look the same. The rows are rebuilt as pages arrive, but
+ * a row with the same key and number of files shows the same files.
+ */
+function sameRow(a: VirtualRowProps, b: VirtualRowProps) {
+    return (
+        a.top === b.top &&
+        a.height === b.height &&
+        a.columns === b.columns &&
+        a.row?.key === b.row?.key &&
+        (a.row?.kind === "files" ? a.row.files.length : 0) ===
+            (b.row?.kind === "files" ? b.row.files.length : 0)
+    );
+}
+
 /** One row of the grid, placed at its offset; unchanged rows skip re-rendering */
 const VirtualRow = memo(function VirtualRow({
     row,
@@ -140,7 +171,9 @@ const VirtualRow = memo(function VirtualRow({
 }: VirtualRowProps) {
     return (
         <Box
-            role={row?.kind === "month" ? "heading" : "listitem"}
+            role={row?.kind === "month" ? "heading" : undefined}
+            aria-level={row?.kind === "month" ? 2 : undefined}
+            data-timeline-row={row?.kind ?? "loading"}
             position="absolute"
             top="0"
             left="0"
@@ -166,7 +199,7 @@ const VirtualRow = memo(function VirtualRow({
             )}
         </Box>
     );
-});
+}, sameRow);
 
 function MonthHeader({ month }: { month: string }) {
     return (

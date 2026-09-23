@@ -1,7 +1,7 @@
 import {
     RefObject,
-    useCallback,
     useEffect,
+    useLayoutEffect,
     useMemo,
     useRef,
     useState
@@ -42,13 +42,19 @@ export function useWindowVirtualRows(
     }, [heights]);
     const [range, setRange] = useState({ start: 0, end: 0 });
     const onScrollRef = useRef(onScroll);
-    onScrollRef.current = onScroll;
+    const offsetsRef = useRef(offsets);
+    useLayoutEffect(() => {
+        onScrollRef.current = onScroll;
+        offsetsRef.current = offsets;
+    });
 
-    const update = useCallback(() => {
+    // Reads the latest rows through refs, so one window subscription serves them all
+    const update = useRef(() => {
         const list = listRef.current;
         if (!list) return;
         const viewTop = -list.getBoundingClientRect().top;
         const viewBottom = viewTop + window.innerHeight;
+        const offsets = offsetsRef.current;
         const count = offsets.length - 1;
         // The first row that ends below the overscan above the viewport
         const start = Math.min(
@@ -66,7 +72,7 @@ export function useWindowVirtualRows(
                 : { start, end }
         );
         onScrollRef.current?.(viewTop, offsets);
-    }, [listRef, offsets]);
+    }).current;
 
     useEffect(() => {
         let frame = 0;
@@ -77,7 +83,6 @@ export function useWindowVirtualRows(
                 update();
             });
         };
-        update();
         window.addEventListener("scroll", schedule, { passive: true });
         window.addEventListener("resize", schedule);
         return () => {
@@ -86,6 +91,9 @@ export function useWindowVirtualRows(
             window.removeEventListener("resize", schedule);
         };
     }, [update]);
+
+    // New rows, e.g. another page, may reach into the viewport
+    useLayoutEffect(update, [update, offsets]);
 
     return {
         offsets,

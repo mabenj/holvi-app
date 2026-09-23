@@ -1,6 +1,6 @@
 import { GridDensity, useGridDensity } from "@/lib/hooks/useGridDensity";
 import { useBreakpointValue } from "@chakra-ui/react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 /** Columns per breakpoint (base, sm, md, lg, xl, 2xl) at the default density of 3 */
 const COLUMNS = [3, 3, 4, 6, 8, 9];
@@ -61,15 +61,29 @@ function byBreakpoint<T>(values: T[]) {
  */
 export function useResolvedGridLayout(): ResolvedGridLayout | null {
     const layout = useGridLayout();
-    const columns = useBreakpointValue(byBreakpoint(layout?.columns ?? [0]));
-    const tileHeight = useBreakpointValue(
-        byBreakpoint(layout?.tileHeights ?? ["0rem"])
+    const [columnsByBreakpoint, heightsByBreakpoint] = useMemo(
+        () => [
+            byBreakpoint(layout?.columns ?? [0]),
+            byBreakpoint(layout?.tileHeights ?? ["0rem"])
+        ],
+        // The layout is a new object each render, but follows the density
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [layout?.columns.join(), layout?.tileHeights.join()]
+    );
+    const columns = useBreakpointValue(columnsByBreakpoint);
+    const tileHeight = useBreakpointValue(heightsByBreakpoint);
+    // The root font size, which rem heights are measured in
+    const remPx = useMemo(
+        () =>
+            layout
+                ? parseFloat(
+                      getComputedStyle(document.documentElement).fontSize
+                  )
+                : 16,
+        [layout === null] // eslint-disable-line react-hooks/exhaustive-deps
     );
     if (!layout || !columns || !tileHeight) {
         return null;
     }
-    const remPx = parseFloat(
-        getComputedStyle(document.documentElement).fontSize
-    );
     return { columns, tileHeightPx: parseFloat(tileHeight) * remPx };
 }

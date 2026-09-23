@@ -11,7 +11,7 @@ const MONTH_FORMAT = new Intl.DateTimeFormat(undefined, {
 });
 
 /** The month a file's date falls in, e.g. "September 2026", in the viewer's time zone */
-export function fileMonth(file: FileSummary) {
+function fileMonth(file: FileSummary) {
     return MONTH_FORMAT.format(new Date(file.timestamp));
 }
 

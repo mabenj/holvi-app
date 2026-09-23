@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState
+} from "react";
 import { FilesPage } from "../client/collections";
 import { getErrorMessage } from "../common/utilities";
 
@@ -36,7 +43,9 @@ export function usePagedFiles(query: string, fetchPage: FetchFilesPage) {
     const request = useRef<AbortController | null>(null);
     // The latest fetch, so a new function each render does not re-create loadMore
     const fetchRef = useRef(fetchPage);
-    fetchRef.current = fetchPage;
+    useLayoutEffect(() => {
+        fetchRef.current = fetchPage;
+    });
 
     const last = current.pages.at(-1);
     const hasMore = !last || last.nextCursor !== null;

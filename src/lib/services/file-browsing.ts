@@ -8,27 +8,21 @@ import {
     decodeCursor,
     encodeCursor,
     pageLimit,
+    PageQuery,
     UUID_PATTERN
 } from "./keyset-paging";
 
 export type { FileSort } from "../types/file-sort";
 
-export interface BrowseFilesQuery {
+export interface BrowseFilesQuery extends PageQuery {
     /** Newest first by default */
     sort?: FileSort;
     /** Only files that have every one of these file tags */
     tags?: string[];
-    /** Opaque; from the previous page's nextCursor */
-    cursor?: string;
-    limit?: number;
 }
 
-/** The Timeline has one fixed order, newest first */
-export interface BrowseTimelineQuery {
-    /** Opaque; from the previous page's nextCursor */
-    cursor?: string;
-    limit?: number;
-}
+/** The Timeline has one fixed order, newest first, so only the page is asked for */
+export type BrowseTimelineQuery = PageQuery;
 
 export interface BrowseFilesPage {
     files: FileSummary[];
@@ -154,7 +148,7 @@ interface FileScope {
 async function browseFilePage(
     scope: FileScope,
     sort: FileSort,
-    query: { cursor?: string; limit?: number }
+    query: PageQuery
 ): Promise<BrowseFilesPage> {
     const limit = pageLimit(query.limit);
     const after = query.cursor

@@ -2,6 +2,14 @@ import { InvalidArgumentError } from "../common/errors";
 
 /** Keyset paging shared by the browsing services: page sizes and opaque cursors */
 
+/** Which page a browse asks for */
+export interface PageQuery {
+    /** Opaque; from the previous page's nextCursor */
+    cursor?: string;
+    /** Page size; the default if absent */
+    limit?: number;
+}
+
 export const DEFAULT_BROWSE_LIMIT = 48;
 export const MAX_BROWSE_LIMIT = 200;
 
