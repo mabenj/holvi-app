@@ -7,7 +7,10 @@ import AppShell from "@/lib/components/app-shell/AppShell";
 import FileGrid from "@/lib/components/collection-page/FileGrid";
 import FileSelectionBar from "@/lib/components/files/FileSelectionBar";
 import TimelineGrid from "@/lib/components/timeline/TimelineGrid";
-import TimelineTagFilter from "@/lib/components/timeline/TimelineTagFilter";
+import {
+    ActiveTagFilters,
+    TimelineFilterButton
+} from "@/lib/components/timeline/TimelineTagFilter";
 import { replaceCollection } from "@/lib/hooks/useCollectionsBrowse";
 import { useNextPageSentinel } from "@/lib/hooks/useNextPageSentinel";
 import { useSelection } from "@/lib/hooks/useSelection";
@@ -83,6 +86,9 @@ export default function TimelineTab({ user }: SignedInPageProps) {
     return (
         <AppShell
             title="Timeline"
+            headerAction={
+                <TimelineFilterButton value={tags} onChange={setTags} />
+            }
             contextualBar={
                 selection.selecting ? (
                     <FileSelectionBar
@@ -116,7 +122,7 @@ export default function TimelineTab({ user }: SignedInPageProps) {
                     />
                 ) : undefined
             }>
-            <TimelineTagFilter value={tags} onChange={setTags} />
+            <ActiveTagFilters value={tags} onChange={setTags} />
             {pages.length === 0 && !error ? (
                 <FileGrid files={[]} skeletons={FIRST_PAGE_SKELETONS} />
             ) : isEmpty && tags.length > 0 ? (

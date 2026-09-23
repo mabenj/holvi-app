@@ -1,6 +1,6 @@
 import { fetchTagCounts, tagCountsUrl } from "@/lib/client/tags";
 import type { TagCount } from "@/lib/types/tag-count";
-import { Button, Flex, HStack, Stack, Text } from "@chakra-ui/react";
+import { Button, Flex, Stack, Text } from "@chakra-ui/react";
 import { useState } from "react";
 import useSWR from "swr";
 import {
@@ -17,39 +17,14 @@ interface TimelineTagFilterProps {
     onChange: (tags: string[]) => void;
 }
 
-/**
- * The Timeline's tag filter: a panel to pick tags, and the tags in effect,
- * each removable, with one tap to clear them all
- */
-export default function TimelineTagFilter({
+/** Opens the panel for picking the tags the Timeline is filtered by */
+export function TimelineFilterButton({
     value,
     onChange
 }: TimelineTagFilterProps) {
     const [panelOpen, setPanelOpen] = useState(false);
     return (
-        <HStack gap="2" px="4" pb="2">
-            <Flex
-                role="group"
-                aria-label="Active filters"
-                flex="1"
-                minW="0"
-                gap="1.5"
-                overflowX="auto"
-                alignItems="center"
-                // Chips scroll sideways instead of wrapping into many rows
-                css={{ scrollbarWidth: "none" }}>
-                {value.length > 0 && (
-                    <ClearFiltersChip onClear={() => onChange([])} />
-                )}
-                {value.map((tag) => (
-                    <FilterChip
-                        key={tag}
-                        label={tag}
-                        removeLabel={`Remove tag ${tag}`}
-                        onRemove={() => onChange(toggleTag(value, tag))}
-                    />
-                ))}
-            </Flex>
+        <>
             <FilterButton
                 activeCount={value.length}
                 onClick={() => setPanelOpen(true)}
@@ -60,7 +35,39 @@ export default function TimelineTagFilter({
                 value={value}
                 onChange={onChange}
             />
-        </HStack>
+        </>
+    );
+}
+
+/**
+ * The tags the Timeline is filtered by, each removable, with one tap to clear
+ * them all; nothing while there are none
+ */
+export function ActiveTagFilters({ value, onChange }: TimelineTagFilterProps) {
+    if (value.length === 0) {
+        return null;
+    }
+    return (
+        <Flex
+            role="group"
+            aria-label="Active filters"
+            gap="1.5"
+            px="4"
+            pb="3"
+            overflowX="auto"
+            alignItems="center"
+            // Chips scroll sideways instead of wrapping into many rows
+            css={{ scrollbarWidth: "none" }}>
+            <ClearFiltersChip onClear={() => onChange([])} />
+            {value.map((tag) => (
+                <FilterChip
+                    key={tag}
+                    label={tag}
+                    removeLabel={`Remove tag ${tag}`}
+                    onRemove={() => onChange(toggleTag(value, tag))}
+                />
+            ))}
+        </Flex>
     );
 }
 
