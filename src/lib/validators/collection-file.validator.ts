@@ -1,9 +1,10 @@
 import { z } from "zod";
+import { TAG_MAX_LENGTH } from "../types/tag-count";
 
 const NAME_MIN = 1;
 const NAME_MAX = 255;
 const TAG_MIN = 1;
-const TAG_MAX = 50;
+const TAG_MAX = TAG_MAX_LENGTH;
 
 export const CollectionFileValidator = z.object({
     id: z.string().uuid(),
