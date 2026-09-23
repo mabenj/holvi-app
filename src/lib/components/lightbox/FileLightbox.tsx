@@ -4,14 +4,7 @@ import { Box, Flex, Link, Text } from "@chakra-ui/react";
 import { mdiMapMarkerOutline } from "@mdi/js";
 import Icon from "@mdi/react";
 import PhotoSwipe from "photoswipe";
-import {
-    Dispatch,
-    ReactNode,
-    SetStateAction,
-    useEffect,
-    useRef,
-    useState
-} from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
     FILE_TILE_ATTRIBUTE,
@@ -21,7 +14,8 @@ import {
     mapLink,
     toSlideData
 } from "./lightbox-slides";
-import { addVideoSlides } from "./video-slides";
+import { TAPPABLE_WHILE_VISIBLE } from "./lightbox-controls";
+import { addVideoSlides, VideoSlideEvents } from "./video-slides";
 import VideoControls from "./VideoControls";
 
 interface FileLightboxProps {
@@ -76,7 +70,14 @@ export default function FileLightbox({
                 pswpRef.current = openLightbox(
                     index,
                     latest,
-                    setActiveVideo,
+                    {
+                        onActivate: (video, fileId) =>
+                            setActiveVideo({ fileId, video }),
+                        onDeactivate: (video) =>
+                            setActiveVideo((active) =>
+                                active?.video === video ? null : active
+                            )
+                    },
                     (ui) => {
                         setUi(ui);
                         if (!ui) pswpRef.current = null;
@@ -145,7 +146,7 @@ function openLightbox(
         show: (fileId: string) => void;
         leave: () => void;
     }>,
-    onActiveVideo: Dispatch<SetStateAction<ActiveVideo | null>>,
+    videoEvents: VideoSlideEvents,
     /** The caption and actions to render into, or null once it is gone */
     onUi: (ui: LightboxUi | null) => void
 ) {
@@ -178,11 +179,7 @@ function openLightbox(
             tileThumbnail((data as FileSlideData).fileId) ??
             (thumbnail as HTMLElement)
     );
-    addVideoSlides(pswp, {
-        onActivate: (video, fileId) => onActiveVideo({ fileId, video }),
-        onDeactivate: (video) =>
-            onActiveVideo((active) => (active?.video === video ? null : active))
-    });
+    addVideoSlides(pswp, videoEvents);
 
     let caption: HTMLElement | null = null;
     let actions: HTMLElement | null = null;
@@ -286,7 +283,7 @@ function Caption({
                     rel="noreferrer"
                     color="white"
                     fontSize="sm"
-                    pointerEvents="auto">
+                    css={TAPPABLE_WHILE_VISIBLE}>
                     <Flex as="span" alignItems="center" gap="1">
                         <Icon
                             path={mdiMapMarkerOutline}

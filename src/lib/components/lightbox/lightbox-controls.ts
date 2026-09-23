@@ -8,6 +8,16 @@ import { useCallback, useSyncExternalStore } from "react";
  */
 const CONTROLS_VISIBLE_CLASS = "pswp--ui-visible";
 
+/**
+ * Styles for a control inside the lightbox's caption, which takes pointer
+ * input only while the controls are showing: a tap on a hidden control would
+ * act without the viewer seeing it, instead of showing the controls.
+ */
+export const TAPPABLE_WHILE_VISIBLE = {
+    pointerEvents: "none",
+    [`.${CONTROLS_VISIBLE_CLASS} &`]: { pointerEvents: "auto" }
+} as const;
+
 export function setControlsVisible(pswp: PhotoSwipe, visible: boolean) {
     pswp.element?.classList.toggle(CONTROLS_VISIBLE_CLASS, visible);
 }

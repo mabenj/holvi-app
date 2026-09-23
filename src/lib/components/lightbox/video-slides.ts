@@ -7,7 +7,7 @@ import { applyVideoSettings, saveVideoSettings } from "./video-settings";
 /** Class of a video slide's element, which holds its video */
 const VIDEO_SLIDE_CLASS = "holvi-video-slide";
 
-interface VideoSlideEvents {
+export interface VideoSlideEvents {
     /** A video became the active slide */
     onActivate: (video: HTMLVideoElement, fileId: string) => void;
     /** A video stopped being the active slide, or is gone */
@@ -41,6 +41,13 @@ export function addVideoSlides(pswp: PhotoSwipe, events: VideoSlideEvents) {
         video.poster = data.msrc ?? "";
         video.playsInline = true;
         video.preload = "metadata";
+        // The player has no long-press action, so the browser's own menu
+        // (save, loop, show controls) is kept away too
+        video.setAttribute("controlsList", "nodownload");
+        video.style.setProperty("-webkit-touch-callout", "none");
+        video.addEventListener("contextmenu", (event) =>
+            event.preventDefault()
+        );
         // Takes the thumbnail placeholder away once a frame can show, as
         // PhotoSwipe does for images; it would otherwise stay underneath
         video.addEventListener("loadeddata", () => content.onLoaded(), {

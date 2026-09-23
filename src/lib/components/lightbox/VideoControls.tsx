@@ -10,7 +10,11 @@ import {
 import Icon from "@mdi/react";
 import type PhotoSwipe from "photoswipe";
 import { useEffect, useRef, useState } from "react";
-import { setControlsVisible, useControlsVisible } from "./lightbox-controls";
+import {
+    setControlsVisible,
+    TAPPABLE_WHILE_VISIBLE,
+    useControlsVisible
+} from "./lightbox-controls";
 import PlayerSlider from "./PlayerSlider";
 import { CONTROLS_AUTO_HIDE_MS, formatPlaybackTime } from "./video-player";
 import { useVideoPlayback } from "./useVideoPlayback";
@@ -81,9 +85,12 @@ export default function VideoControls({
         return () => root.removeEventListener("pointermove", onMove);
     }, [pswp]);
 
+    // A refused play leaves the play button showing, which says enough
+    const play = () => video.play().catch(() => undefined);
+
     const togglePlay = () => {
         if (video.paused || video.ended) {
-            video.play().catch(() => undefined);
+            play();
         } else {
             video.pause();
         }
@@ -102,10 +109,13 @@ export default function VideoControls({
             ? Math.min(1, shownTime / duration)
             : 0;
     const silent = playback.muted || playback.volume === 0;
+    const audibleVolume = silent ? 0 : playback.volume;
+    const position = formatPlaybackTime(shownTime);
+    const length = formatPlaybackTime(duration);
 
     return (
         <Box
-            pointerEvents="auto"
+            css={TAPPABLE_WHILE_VISIBLE}
             onPointerDown={(event) => setLastInteraction(event.timeStamp)}
             onPointerEnter={(event) =>
                 event.pointerType === "mouse" && setHovered(true)
@@ -115,7 +125,7 @@ export default function VideoControls({
                 <PlayerSlider
                     label="Seek"
                     value={progress}
-                    valueText={`${formatPlaybackTime(shownTime)} of ${formatPlaybackTime(duration)}`}
+                    valueText={`${position} of ${length}`}
                     onDragStart={() => {
                         // Paused while scrubbing, so the frames follow the pointer
                         resumeAfterScrub.current = !video.paused;
@@ -125,7 +135,7 @@ export default function VideoControls({
                     onDragEnd={() => {
                         setScrubTime(null);
                         if (resumeAfterScrub.current) {
-                            video.play().catch(() => undefined);
+                            play();
                         }
                     }}
                 />
@@ -140,19 +150,12 @@ export default function VideoControls({
                     fontSize="sm"
                     fontVariantNumeric="tabular-nums"
                     whiteSpace="nowrap">
-                    {formatPlaybackTime(shownTime)} /{" "}
-                    {formatPlaybackTime(duration)}
+                    {position} / {length}
                 </Text>
                 <Box flex="1" />
                 <ControlButton
                     label={silent ? "Unmute" : "Mute"}
-                    icon={
-                        silent
-                            ? mdiVolumeOff
-                            : playback.volume < 0.5
-                              ? mdiVolumeMedium
-                              : mdiVolumeHigh
-                    }
+                    icon={volumeIcon(audibleVolume)}
                     onClick={() => {
                         if (silent && playback.volume === 0) {
                             video.volume = 1;
@@ -164,8 +167,8 @@ export default function VideoControls({
                     <Flex w="24" mr="2">
                         <PlayerSlider
                             label="Volume"
-                            value={silent ? 0 : playback.volume}
-                            valueText={`${Math.round((silent ? 0 : playback.volume) * 100)}%`}
+                            value={audibleVolume}
+                            valueText={`${Math.round(audibleVolume * 100)}%`}
                             onChange={(volume) => {
                                 video.volume = volume;
                                 video.muted = volume === 0;
@@ -178,6 +181,12 @@ export default function VideoControls({
     );
 }
 
+function volumeIcon(audibleVolume: number) {
+    if (audibleVolume === 0) return mdiVolumeOff;
+    return audibleVolume < 0.5 ? mdiVolumeMedium : mdiVolumeHigh;
+}
+
+/** A round, icon-only button in the video controls */
 function ControlButton({
     label,
     icon,
