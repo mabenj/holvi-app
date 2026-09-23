@@ -1,3 +1,6 @@
+import appConfig from "@/lib/common/app-config";
+import { existsSync } from "fs";
+import path from "path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetDatabase } from "../../../test/database";
 import {
@@ -6,6 +9,7 @@ import {
     createUser,
     FileMetadata
 } from "../../../test/fixtures";
+import { pngImage, uploadRequest } from "../../../test/upload-fixtures";
 import { NotFoundError } from "../common/errors";
 import {
     BrowseCollectionsPage,
@@ -705,6 +709,176 @@ describe("Browsing a collection's files (integration)", () => {
                 cursor: byName.nextCursor!
             })
         ).rejects.toThrow("Malformed cursor");
+    });
+});
+
+describe("Editing collections (integration)", () => {
+    beforeEach(async () => {
+        await resetDatabase();
+    });
+
+    it("changes a collection's name, description and tags", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip", {
+            description: "Old",
+            tags: ["travel", "summer"]
+        });
+        const service = new CollectionService(user.id);
+
+        await service.updateCollection(trip.id, {
+            name: "Lapland",
+            description: "Northern lights",
+            tags: ["winter", "travel"]
+        });
+
+        expect(await service.getCollection(trip.id)).toMatchObject({
+            name: "Lapland",
+            description: "Northern lights",
+            tags: expect.arrayContaining(["winter", "travel"])
+        });
+        expect((await service.getCollection(trip.id)).tags).toHaveLength(2);
+    });
+
+    it("removes every tag when none are left", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip", {
+            tags: ["travel", "summer"]
+        });
+        const service = new CollectionService(user.id);
+
+        await service.updateCollection(trip.id, { name: "Trip", tags: [] });
+
+        expect((await service.getCollection(trip.id)).tags).toEqual([]);
+    });
+
+    it("rejects a name another of the user's collections has, and keeps serving after many rejections", async () => {
+        const user = await createUser("alice");
+        await createCollection(user.id, "Taken");
+        const trip = await createCollection(user.id, "Trip");
+        const service = new CollectionService(user.id);
+
+        for (let i = 0; i < 6; i++) {
+            expect(
+                await service.updateCollection(trip.id, {
+                    name: "Taken",
+                    tags: []
+                })
+            ).toEqual({ nameError: "Collection name already exists" });
+        }
+
+        expect((await service.getCollection(trip.id)).name).toBe("Trip");
+    }, 15_000);
+
+    it("does not edit or delete another user's collection", async () => {
+        const alice = await createUser("alice");
+        const bob = await createUser("bob");
+        const bobs = await createCollection(bob.id, "Secrets");
+        const service = new CollectionService(alice.id);
+
+        await expect(
+            service.updateCollection(bobs.id, { name: "Mine", tags: [] })
+        ).rejects.toThrow(NotFoundError);
+        await expect(service.deleteCollection(bobs.id)).rejects.toThrow(
+            NotFoundError
+        );
+        expect(
+            (await new CollectionService(bob.id).getCollection(bobs.id)).name
+        ).toBe("Secrets");
+    });
+});
+
+describe("Creating collections and uploading files (integration)", () => {
+    beforeEach(async () => {
+        await resetDatabase();
+    });
+
+    it("creates a collection with its description and tags", async () => {
+        const user = await createUser("alice");
+        const service = new CollectionService(user.id);
+
+        const { collection } = await service.createCollection(
+            "Lapland",
+            ["winter", "travel"],
+            "Northern lights"
+        );
+
+        expect(await service.getCollection(collection!.id)).toMatchObject({
+            name: "Lapland",
+            description: "Northern lights",
+            tags: expect.arrayContaining(["winter", "travel"]),
+            imageCount: 0,
+            cover: null
+        });
+    });
+
+    it("rejects a name another of the user's collections has", async () => {
+        const user = await createUser("alice");
+        await createCollection(user.id, "Lapland");
+
+        expect(
+            await new CollectionService(user.id).createCollection("Lapland", [])
+        ).toEqual({ nameError: "Collection name already exists" });
+    });
+
+    it("uploads files into a collection, skipping one with the same name and time as an existing file", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const service = new CollectionService(user.id);
+        const takenAt = new Date("2024-06-01T12:00:00Z");
+        const first = {
+            name: "a.png",
+            content: await pngImage("#ff0000"),
+            mimeType: "image/png",
+            lastModified: takenAt
+        };
+        await service.uploadFiles(trip.id, uploadRequest([first]));
+
+        const { errors } = await service.uploadFiles(
+            trip.id,
+            uploadRequest([
+                first,
+                {
+                    name: "b.png",
+                    content: await pngImage("#00ff00"),
+                    mimeType: "image/png",
+                    lastModified: takenAt
+                }
+            ])
+        );
+
+        expect(errors).toEqual([
+            "Skipped uploading file 'a.png' because a file with the same name and timestamp already exists in the collection"
+        ]);
+        expect(await browseAllFileNames(service, trip.id, { sort: "name" })).toEqual(
+            ["a.png", "b.png"]
+        );
+        expect(await service.getCollection(trip.id)).toMatchObject({
+            imageCount: 2
+        });
+    });
+});
+
+describe("Deleting collections (integration)", () => {
+    beforeEach(async () => {
+        await resetDatabase();
+    });
+
+    it("removes the collection from the browse and its files from the data directory", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        await createCollection(user.id, "Home");
+        await addFile(user.id, trip.id, "a.jpg", Buffer.from("a"));
+        const service = new CollectionService(user.id);
+
+        await service.deleteCollection(trip.id);
+
+        expect(await browseAllNames(service, {})).toEqual(["Home"]);
+        await expect(service.getCollection(trip.id)).rejects.toThrow(
+            NotFoundError
+        );
+        expect(existsSync(path.join(appConfig.dataDir, user.id, trip.id))).toBe(
+            false
+        );
     });
 });
 

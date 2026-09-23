@@ -117,6 +117,142 @@ export async function fetchFilesPage(
     return { files: data.files, nextCursor: data.nextCursor };
 }
 
+/** What the collection editor saves */
+export interface CollectionFields {
+    name: string;
+    description: string;
+    tags: string[];
+}
+
+/** The saved collection's id, or why its name was rejected */
+export type SaveCollectionResult = { id: string } | { nameError: string };
+
+/**
+ * Sends JSON to an API route. The body goes as plain text: the routes parse
+ * the raw body themselves, so a JSON content type would break them.
+ */
+async function sendJson(
+    url: string,
+    method: "POST" | "DELETE",
+    body: unknown,
+    failure: string
+) {
+    const res = await fetch(url, {
+        method,
+        body: body === undefined ? undefined : JSON.stringify(body)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok && !data.nameError) {
+        throw new Error(data.error || failure);
+    }
+    return data;
+}
+
+export async function createCollection(
+    fields: CollectionFields
+): Promise<SaveCollectionResult> {
+    const data = await sendJson(
+        "/api/collections",
+        "POST",
+        fields,
+        "Could not create the collection"
+    );
+    return data.nameError
+        ? { nameError: data.nameError }
+        : { id: data.collection.id };
+}
+
+export async function updateCollection(
+    collectionId: string,
+    fields: CollectionFields
+): Promise<SaveCollectionResult> {
+    const data = await sendJson(
+        collectionUrl(collectionId),
+        "POST",
+        fields,
+        "Could not save the collection"
+    );
+    return data.nameError ? { nameError: data.nameError } : { id: collectionId };
+}
+
+export async function deleteCollection(collectionId: string) {
+    await sendJson(
+        collectionUrl(collectionId),
+        "DELETE",
+        undefined,
+        "Could not delete the collection"
+    );
+}
+
+/** Existing tags that contain the query, for tag inputs */
+export async function fetchTagSuggestions(
+    query: string,
+    signal?: AbortSignal
+): Promise<string[]> {
+    const data = await getJson(
+        `/api/search/tags?${new URLSearchParams({ query })}`,
+        "Could not load tag suggestions",
+        { signal }
+    );
+    return data.tags;
+}
+
+export interface UploadProgress {
+    loaded: number;
+    total: number;
+}
+
+/** How an upload ended: how many files were added, and the files the server skipped or could not process */
+export interface UploadResult {
+    added: number;
+    errors: string[];
+}
+
+/**
+ * Uploads files into a collection, reporting how much has been sent. XHR
+ * rather than fetch, since fetch cannot report upload progress.
+ */
+export function uploadFiles(
+    collectionId: string,
+    files: File[],
+    onProgress: (progress: UploadProgress) => void
+): Promise<UploadResult> {
+    const form = new FormData();
+    // The server reads each file's last-modified time from its field name
+    files.forEach((file) => form.append(String(file.lastModified), file));
+
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.upload.addEventListener("progress", (event) => {
+            if (event.lengthComputable) {
+                onProgress({ loaded: event.loaded, total: event.total });
+            }
+        });
+        xhr.addEventListener("load", () => {
+            let data: { error?: string; files?: unknown[]; errors?: string[] } =
+                {};
+            try {
+                data = JSON.parse(xhr.responseText);
+            } catch {
+                // Not JSON, e.g. a proxy's error page
+            }
+            if (xhr.status < 200 || xhr.status >= 300) {
+                reject(new Error(data.error || "Could not upload the files"));
+                return;
+            }
+            resolve({
+                added: data.files?.length ?? 0,
+                errors: data.errors ?? []
+            });
+        });
+        xhr.addEventListener("error", () =>
+            reject(new Error("The upload was interrupted"))
+        );
+        xhr.open("POST", `${collectionUrl(collectionId)}/files/upload`);
+        xhr.send(form);
+    });
+}
+
 /** One page of the Timeline: every file the user owns, newest first */
 export async function fetchTimelinePage(
     cursor: string | undefined,

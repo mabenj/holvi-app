@@ -78,6 +78,27 @@ export function usePagedFiles(query: string, fetchPage: FetchFilesPage) {
     // Leaving the screen or changing the query drops the page on its way
     useEffect(() => () => request.current?.abort(), [query]);
 
+    /** Fetches the first page again, e.g. after an upload; the loaded pages stay until it arrives */
+    const reload = useCallback(() => {
+        const controller = new AbortController();
+        request.current?.abort();
+        request.current = controller;
+        fetchRef
+            .current(undefined, controller.signal)
+            .then((page) => {
+                if (controller.signal.aborted) return;
+                setState({ query, pages: [page], loading: false, error: null });
+            })
+            .catch((error) => {
+                if (controller.signal.aborted) return;
+                setState((previous) => ({
+                    ...previous,
+                    loading: false,
+                    error: getErrorMessage(error)
+                }));
+            });
+    }, [query]);
+
     const retry = useCallback(() => {
         setState((previous) => ({ ...previous, error: null }));
     }, []);
@@ -95,6 +116,7 @@ export function usePagedFiles(query: string, fetchPage: FetchFilesPage) {
         error: current.error,
         hasMore,
         loadMore,
+        reload,
         retry
     };
 }

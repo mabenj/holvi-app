@@ -1,14 +1,15 @@
 import { goBack } from "@/lib/client/navigation";
 import { CollectionSummary } from "@/lib/types/collection-summary";
-import { Box, Flex, Heading, IconButton, Skeleton, Text } from "@chakra-ui/react";
+import { Box, Flex, Heading, Skeleton, Text } from "@chakra-ui/react";
 import { mdiArrowLeft, mdiImageOutline } from "@mdi/js";
 import Icon from "@mdi/react";
 import Image from "next/image";
 import { useRouter } from "next/router";
-import { useEffect, useRef, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
+import TitleBarButton from "./TitleBarButton";
 
 /** Height of the compact title bar, not counting the safe-area inset above it */
-const TITLE_BAR_HEIGHT = "52px";
+export const TITLE_BAR_HEIGHT = "52px";
 /** CSS variable with how far the hero has collapsed, from 0 to 1 */
 const COLLAPSE = "--hero-collapse";
 const HERO_HEIGHT = { base: "min(62vh, 440px)", md: "min(56vh, 520px)" };
@@ -19,13 +20,22 @@ interface CollectionHeroProps {
         CollectionSummary,
         "name" | "cover" | "imageCount" | "videoCount"
     > | null;
+    /**
+     * Buttons at the end of the title bar, e.g. an overflow menu. They take the
+     * bar's text colour, and are told whether the bar is over the Cover or has
+     * collapsed onto the page.
+     */
+    actions?: (collapsed: boolean) => ReactNode;
 }
 
 /**
  * A large hero of the Cover with the collection's name over it. As the page
  * scrolls past it, a compact title bar with the name takes its place.
  */
-export default function CollectionHero({ collection }: CollectionHeroProps) {
+export default function CollectionHero({
+    collection,
+    actions
+}: CollectionHeroProps) {
     const router = useRouter();
     const hero = useRef<HTMLDivElement>(null);
     const titleBar = useRef<HTMLDivElement>(null);
@@ -119,30 +129,18 @@ export default function CollectionHero({ collection }: CollectionHeroProps) {
                 h={`calc(${TITLE_BAR_HEIGHT} + env(safe-area-inset-top))`}
                 pt="env(safe-area-inset-top)"
                 pl="calc(0.25rem + env(safe-area-inset-left))"
-                pr="calc(1rem + env(safe-area-inset-right))"
+                pr="calc(0.25rem + env(safe-area-inset-right))"
                 bg={collapsed ? "bg.panel" : "transparent"}
                 borderBottomWidth="1px"
                 borderColor={collapsed ? "border.subtle" : "transparent"}
                 color={collapsed ? "fg" : "white"}
                 transition="background-color 0.2s, border-color 0.2s, color 0.2s">
-                <IconButton
+                <TitleBarButton
                     aria-label="Back"
-                    variant="ghost"
-                    color="inherit"
-                    rounded="full"
-                    _hover={{ bg: collapsed ? "bg.muted" : "blackAlpha.300" }}
-                    onClick={() => goBack(router, "/")}>
-                    <Icon
-                        path={mdiArrowLeft}
-                        size="24px"
-                        style={{
-                            filter: collapsed
-                                ? undefined
-                                : "drop-shadow(0 0 2px rgba(0, 0, 0, 0.6))"
-                        }}
-                        aria-hidden
-                    />
-                </IconButton>
+                    icon={mdiArrowLeft}
+                    collapsed={collapsed}
+                    onClick={() => goBack(router, "/")}
+                />
                 <Text
                     flex="1"
                     minW="0"
@@ -153,6 +151,7 @@ export default function CollectionHero({ collection }: CollectionHeroProps) {
                     aria-hidden={!collapsed}>
                     {collection?.name}
                 </Text>
+                {actions?.(collapsed)}
             </Flex>
         </>
     );

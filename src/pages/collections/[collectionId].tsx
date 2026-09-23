@@ -1,20 +1,43 @@
-import { collectionUrl, fetchCollection } from "@/lib/client/collections";
-import { signedInPageProps } from "@/lib/common/signed-in-page";
+import {
+    collectionUrl,
+    deleteCollection,
+    fetchCollection
+} from "@/lib/client/collections";
+import { leaveFor } from "@/lib/client/navigation";
+import {
+    SignedInPageProps,
+    signedInPageProps
+} from "@/lib/common/signed-in-page";
+import { getErrorMessage } from "@/lib/common/utilities";
 import AppShell from "@/lib/components/app-shell/AppShell";
+import DropOverlay from "@/lib/components/app-shell/DropOverlay";
 import CollectionDetails from "@/lib/components/collection-page/CollectionDetails";
 import CollectionHero from "@/lib/components/collection-page/CollectionHero";
+import CollectionMenu from "@/lib/components/collection-page/CollectionMenu";
 import FileGrid from "@/lib/components/collection-page/FileGrid";
 import FileSortSelect from "@/lib/components/collection-page/FileSortSelect";
 import FileTagFilter from "@/lib/components/collection-page/FileTagFilter";
+import UploadStatus from "@/lib/components/collection-page/UploadStatus";
+import CollectionEditor from "@/lib/components/collections/CollectionEditor";
+import FileLightbox from "@/lib/components/lightbox/FileLightbox";
+import ConfirmationSurface from "@/lib/components/surfaces/ConfirmationSurface";
 import { useCollectionFiles } from "@/lib/hooks/useCollectionFiles";
+import {
+    removeCollection,
+    replaceCollection
+} from "@/lib/hooks/useCollectionsBrowse";
+import { useFileDrop } from "@/lib/hooks/useFileDrop";
+import { useLightboxHistory } from "@/lib/hooks/useLightboxHistory";
 import { useNextPageSentinel } from "@/lib/hooks/useNextPageSentinel";
+import { isUploading, startUpload, useUpload } from "@/lib/hooks/useUpload";
+import { CollectionDetails as Collection } from "@/lib/types/collection-details";
 import { FileSort } from "@/lib/types/file-sort";
 import { Box, Button, EmptyState, Flex, Text, VStack } from "@chakra-ui/react";
-import { mdiImagePlusOutline, mdiTagOffOutline } from "@mdi/js";
+import { mdiImagePlusOutline, mdiTagOffOutline, mdiUpload } from "@mdi/js";
 import Icon from "@mdi/react";
 import { useRouter } from "next/router";
-import { useEffect, useState } from "react";
-import useSWR from "swr";
+import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
+import useSWR, { KeyedMutator } from "swr";
 
 export const getServerSideProps = signedInPageProps;
 
@@ -23,15 +46,31 @@ const FIRST_PAGE_SKELETONS = 12;
 /** Skeleton tiles after the grid while the next page loads */
 const NEXT_PAGE_SKELETONS = 6;
 
-export default function CollectionPage() {
+export default function CollectionPage({ user }: SignedInPageProps) {
     const { query } = useRouter();
     const collectionId = query.collectionId as string;
     // Another collection starts afresh, with the default sort
-    return <CollectionScreen key={collectionId} collectionId={collectionId} />;
+    return (
+        <CollectionScreen
+            key={collectionId}
+            collectionId={collectionId}
+            userId={user.id}
+        />
+    );
 }
 
-function CollectionScreen({ collectionId }: { collectionId: string }) {
-    const { data: collection, error: collectionError } = useSWR(
+function CollectionScreen({
+    collectionId,
+    userId
+}: {
+    collectionId: string;
+    userId: string;
+}) {
+    const {
+        data: collection,
+        error: collectionError,
+        mutate: refetchCollection
+    } = useSWR(
         collectionUrl(collectionId),
         () => fetchCollection(collectionId),
         { revalidateOnFocus: false }
@@ -39,8 +78,49 @@ function CollectionScreen({ collectionId }: { collectionId: string }) {
 
     const [sort, setSort] = useState<FileSort>("newest");
     const [tags, setTags] = useState<string[]>([]);
-    const { files, pages, loading, error, hasMore, loadMore, retry } =
+    const { files, pages, loading, error, hasMore, loadMore, reload, retry } =
         useCollectionFiles(collectionId, sort, tags);
+
+    const { upload, dismiss } = useUpload(collectionId);
+    const uploadFiles = useCallback(
+        (files: File[]) => void startUpload(userId, collectionId, files),
+        [userId, collectionId]
+    );
+    const picker = useRef<HTMLInputElement>(null);
+    const onPicked = (event: ChangeEvent<HTMLInputElement>) => {
+        uploadFiles(Array.from(event.target.files ?? []));
+        // Picking the same files again must fire another change
+        event.target.value = "";
+    };
+
+    const lightbox = useLightboxHistory();
+
+    // When an upload into this collection ends, the new files appear and the
+    // hero shows the new counts and Cover. One that finished before the page
+    // opened is already in what it loads. While the lightbox is open, the
+    // grid waits until it closes: reloading replaces the loaded files, which
+    // would shift the slides under it.
+    const finishedUpload = upload?.status === "done" ? upload.sequence : null;
+    const seenUpload = useRef(finishedUpload);
+    const lightboxOpen = !!lightbox.photoId;
+    useEffect(() => {
+        if (finishedUpload === null || finishedUpload === seenUpload.current) {
+            return;
+        }
+        void refetchCollection();
+        if (lightboxOpen) return;
+        seenUpload.current = finishedUpload;
+        reload();
+        // Only a newly finished upload reloads, not a change of sort
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [finishedUpload, lightboxOpen]);
+
+    const [editing, setEditing] = useState(false);
+    const [confirmingDelete, setConfirmingDelete] = useState(false);
+    const { dragging } = useFileDrop(
+        ({ files }) => uploadFiles(files),
+        !!collection && !editing && !confirmingDelete && !isUploading(upload)
+    );
 
     // Opening the collection or choosing another sort or tags fetches the first page
     useEffect(() => {
@@ -61,8 +141,30 @@ function CollectionScreen({ collectionId }: { collectionId: string }) {
               : 0;
 
     return (
-        <AppShell title={collection?.name ?? "Collection"} bleedTop>
-            <CollectionHero collection={collection ?? null} />
+        <AppShell
+            title={collection?.name ?? "Collection"}
+            bleedTop
+            floatingAction={
+                collection && !isUploading(upload)
+                    ? {
+                          label: "Upload files",
+                          icon: mdiUpload,
+                          onClick: () => picker.current?.click()
+                      }
+                    : undefined
+            }>
+            <CollectionHero
+                collection={collection ?? null}
+                actions={(collapsed) =>
+                    collection && (
+                        <CollectionMenu
+                            collapsed={collapsed}
+                            onEdit={() => setEditing(true)}
+                            onDelete={() => setConfirmingDelete(true)}
+                        />
+                    )
+                }
+            />
             {collectionError ? (
                 <Text px="4" py="6" color="fg.muted" textAlign="center">
                     {collectionError.message}
@@ -93,7 +195,11 @@ function CollectionScreen({ collectionId }: { collectionId: string }) {
                     ) : isEmpty ? (
                         <NoFilesYet />
                     ) : (
-                        <FileGrid files={files} skeletons={skeletons} />
+                        <FileGrid
+                            files={files}
+                            skeletons={skeletons}
+                            onOpen={lightbox.open}
+                        />
                     )}
                     {error && (
                         <VStack py="8" px="4" gap="3" textAlign="center">
@@ -104,9 +210,121 @@ function CollectionScreen({ collectionId }: { collectionId: string }) {
                         </VStack>
                     )}
                     <Box ref={sentinel} h="1px" />
+                    {/* Swiping on past the loaded files loads the next page */}
+                    <FileLightbox
+                        files={files}
+                        onNearEnd={hasMore && !error ? loadMore : undefined}
+                    />
                 </>
             )}
+            <input
+                ref={picker}
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                hidden
+                onChange={onPicked}
+            />
+            <UploadStatus upload={upload} onDismiss={dismiss} />
+            {collection && (
+                <>
+                    <EditCollection
+                        open={editing}
+                        onClose={() => setEditing(false)}
+                        collection={collection}
+                        refetch={refetchCollection}
+                        userId={userId}
+                    />
+                    <DeleteCollection
+                        open={confirmingDelete}
+                        onClose={() => setConfirmingDelete(false)}
+                        collection={collection}
+                        userId={userId}
+                    />
+                </>
+            )}
+            <DropOverlay
+                visible={dragging}
+                label={`Drop to upload into ${collection?.name ?? "the collection"}`}
+            />
         </AppShell>
+    );
+}
+
+interface CollectionActionProps {
+    open: boolean;
+    onClose: () => void;
+    collection: Collection;
+    userId: string;
+}
+
+/** The collection editor; saving shows the changes here and on the Collections tab */
+function EditCollection({
+    open,
+    onClose,
+    collection,
+    userId,
+    refetch
+}: CollectionActionProps & { refetch: KeyedMutator<Collection> }) {
+    const onSaved = async () => {
+        const updated = await refetch();
+        if (updated) replaceCollection(userId, updated);
+        onClose();
+    };
+    return (
+        <CollectionEditor
+            open={open}
+            onClose={onClose}
+            collection={collection}
+            onSaved={onSaved}
+        />
+    );
+}
+
+/** Asks before deleting the collection, then returns to the Collections tab without it */
+function DeleteCollection({
+    open,
+    onClose,
+    collection,
+    userId
+}: CollectionActionProps) {
+    const router = useRouter();
+    const [deleting, setDeleting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const fileCount = collection.imageCount + collection.videoCount;
+
+    const confirm = async () => {
+        setDeleting(true);
+        setError(null);
+        try {
+            await deleteCollection(collection.id);
+            removeCollection(userId, collection.id);
+            leaveFor(router, "/");
+        } catch (error) {
+            setError(getErrorMessage(error));
+            setDeleting(false);
+        }
+    };
+
+    return (
+        <ConfirmationSurface
+            open={open}
+            onClose={() => {
+                setError(null);
+                onClose();
+            }}
+            title="Delete collection?"
+            description={
+                error ??
+                (fileCount === 0
+                    ? `${collection.name} will be deleted.`
+                    : `${collection.name} and its ${fileCount === 1 ? "file" : `${fileCount} files`} will be deleted.`)
+            }
+            confirmLabel="Delete"
+            onConfirm={confirm}
+            destructive
+            confirming={deleting}
+        />
     );
 }
 

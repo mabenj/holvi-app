@@ -6,6 +6,7 @@ import { ThemeProvider } from "next-themes";
 import type { AppProps } from "next/app";
 import Head from "next/head";
 import Router from "next/router";
+import "photoswipe/style.css";
 import { useEffect } from "react";
 
 export default function App({ Component, pageProps }: AppProps) {
