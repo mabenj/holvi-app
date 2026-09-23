@@ -60,11 +60,29 @@ export class UserFileSystem {
     return path.join(this.rootDir, collectionId, "rendition", fileId);
   }
 
-  /** Deletes a file with its thumbnail and, for a video, its Rendition */
+  /** Where a video's encrypted Scrub preview is stored: next to its original */
+  getScrubPreviewPath(collectionId: string, fileId: string) {
+    return path.join(this.rootDir, collectionId, "scrub", fileId);
+  }
+
+  /** Reads and decrypts a video's Scrub preview */
+  async readScrubPreview(collectionId: string, fileId: string) {
+    const file = await tryReadFile(
+      this.getScrubPreviewPath(collectionId, fileId)
+    );
+    if (!file) {
+      throw new HolviError(`Could not read the Scrub preview of '${fileId}'`);
+    }
+    return Cryptography.decrypt(file);
+  }
+
+  /** Deletes a file with its thumbnail and, for a video, its Rendition and Scrub preview */
   async deleteFileAndThumbnail(collectionId: string, fileId: string) {
     try {
-      // A Rendition can be made again from the original, so it goes first
+      // A Rendition and a Scrub preview can be made again from the original,
+      // so they go first
       await rm(this.getRenditionPath(collectionId, fileId), { force: true });
+      await rm(this.getScrubPreviewPath(collectionId, fileId), { force: true });
       await unlink(path.join(this.rootDir, collectionId, "tn", fileId));
       await unlink(path.join(this.rootDir, collectionId, fileId));
     } catch (error) {

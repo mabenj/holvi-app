@@ -3,6 +3,7 @@ import { InvalidArgumentError } from "../common/errors";
 import { getFileSrc } from "../common/utilities";
 import { FILE_SORTS, FileSort } from "../types/file-sort";
 import { FileSummary } from "../types/file-summary";
+import { ScrubPreviewLayout } from "../types/scrub-preview";
 import { tagFilter } from "./browse-filters";
 import {
     decodeCursor,
@@ -86,6 +87,7 @@ interface FileRow {
     durationInSeconds: number | null;
     blurDataUrl: string | null;
     hasRendition: boolean;
+    scrubPreviewLayout: ScrubPreviewLayout | null;
     date: Date;
     sortKey: string;
 }
@@ -168,6 +170,7 @@ async function browseFilePage(
                 f."thumbnailWidth", f."thumbnailHeight", f."gpsLatitude",
                 f."gpsLongitude", f."gpsAltitude", f."gpsLabel",
                 f."durationInSeconds", f."blurDataUrl", f."hasRendition",
+                f."scrubPreviewLayout",
                 ${FILE_DATE} AS date, ${keyText} AS "sortKey"
             FROM ${scope.from}
             WHERE ${scope.conditions}
@@ -267,7 +270,13 @@ async function summarizeFiles(rows: FileRow[]): Promise<FileSummary[]> {
             ...summary,
             playbackSrc: row.hasRendition
                 ? getFileSrc({ ...source, rendition: true })
-                : summary.src
+                : summary.src,
+            scrubPreview: row.scrubPreviewLayout
+                ? {
+                      src: getFileSrc({ ...source, scrubPreview: true }),
+                      layout: row.scrubPreviewLayout
+                  }
+                : undefined
         };
     });
 }

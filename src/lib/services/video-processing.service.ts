@@ -45,8 +45,9 @@ const logger = new Log("VIDEO", LogColor.CYAN);
 
 /**
  * Video processing for one user: queues their videos, and reports how far the
- * instance's one worker has got with them. The worker gives every video whose
- * original is not web-safe a Rendition, and never modifies the original.
+ * instance's one worker has got with them. The worker gives every video a
+ * Scrub preview, and a Rendition if its original is not web-safe, and never
+ * modifies the original.
  */
 export class VideoProcessingService {
     /** Null for the real file system */
@@ -194,8 +195,9 @@ class VideoProcessingWorker {
 
 /**
  * Decrypts the original to a temporary file in the data directory, gives it a
- * Rendition if it is not web-safe, encrypts the Rendition and moves it next to
- * the original, records the result and deletes the temporary plaintext.
+ * Rendition if it is not web-safe and a Scrub preview, encrypts them and moves
+ * them next to the original, records the result and deletes the temporary
+ * plaintext.
  */
 async function processVideo(
     ref: VideoFileRef,
@@ -206,10 +208,21 @@ async function processVideo(
         PROCESSING_DIR_NAME,
         ref.fileId
     );
-    const renditionPath = new UserFileSystem(ref.userId).getRenditionPath(
+    const fileSystem = new UserFileSystem(ref.userId);
+    const renditionPath = fileSystem.getRenditionPath(
         ref.collectionId,
         ref.fileId
     );
+    const scrubPreviewPath = fileSystem.getScrubPreviewPath(
+        ref.collectionId,
+        ref.fileId
+    );
+    // Neither is worth keeping unless the result is recorded
+    const deleteOutputs = () =>
+        Promise.all([
+            rm(renditionPath, { force: true }),
+            rm(scrubPreviewPath, { force: true })
+        ]);
     let storedRendition = false;
     try {
         await rm(workDir, { recursive: true, force: true });
@@ -230,23 +243,28 @@ async function processVideo(
                 codecs,
                 appConfig.renditionMaxBitrateKbps
             );
-            // Encrypted before it leaves the processing directory, so no plaintext lands next to the original
-            await Cryptography.encryptFile(outputPath);
-            await mkdir(path.dirname(renditionPath), { recursive: true });
-            await rename(outputPath, renditionPath);
+            await storeEncrypted(outputPath, renditionPath);
             storedRendition = true;
         } else {
             // A Rendition left from an earlier run would no longer match
             await rm(renditionPath, { force: true });
         }
+        const scrubPreviewOutput = path.join(workDir, "scrub-preview.jpg");
+        const scrubPreviewLayout = await VideoHelper.produceScrubPreview(
+            originalPath,
+            workDir,
+            scrubPreviewOutput
+        );
+        await storeEncrypted(scrubPreviewOutput, scrubPreviewPath);
         const recorded = await recordResult(ref.fileId, {
             processingStatus: "done",
             processingError: null,
-            hasRendition: storedRendition
+            hasRendition: storedRendition,
+            scrubPreviewLayout
         });
-        if (!recorded && storedRendition) {
+        if (!recorded) {
             // Deleted while it was being processed
-            await rm(renditionPath, { force: true });
+            await deleteOutputs();
         }
         const outcome =
             plan === "remux"
@@ -254,16 +272,17 @@ async function processVideo(
                 : plan === "transcode"
                 ? "transcoded to a Rendition"
                 : "web-safe, no Rendition";
-        logger.info(`Processed video '${ref.fileId}' (${outcome})`);
+        logger.info(
+            `Processed video '${ref.fileId}' (${outcome}, Scrub preview of ${scrubPreviewLayout.frames} frames)`
+        );
     } catch (error) {
         logger.error(`Could not process video '${ref.fileId}'`, error);
-        if (storedRendition) {
-            await rm(renditionPath, { force: true }).catch(() => {});
-        }
+        await deleteOutputs().catch(() => {});
         await recordResult(ref.fileId, {
             processingStatus: "failed",
             processingError: getErrorMessage(error),
-            hasRendition: false
+            hasRendition: false,
+            scrubPreviewLayout: null
         }).catch((updateError) =>
             logger.error(
                 `Could not mark video '${ref.fileId}' failed`,
@@ -277,12 +296,26 @@ async function processVideo(
     }
 }
 
+/**
+ * Encrypts an output of video processing and moves it to where it is stored.
+ * Encrypted before it leaves the processing directory, so no plaintext lands
+ * next to the original.
+ */
+async function storeEncrypted(outputPath: string, storedPath: string) {
+    await Cryptography.encryptFile(outputPath);
+    await mkdir(path.dirname(storedPath), { recursive: true });
+    await rename(outputPath, storedPath);
+}
+
 /** Records a processed video's result; false if it no longer exists or is no longer being processed */
 async function recordResult(
     fileId: string,
     fields: Pick<
         CollectionFile,
-        "processingStatus" | "processingError" | "hasRendition"
+        | "processingStatus"
+        | "processingError"
+        | "hasRendition"
+        | "scrubPreviewLayout"
     >
 ) {
     const db = await Database.getInstance();
