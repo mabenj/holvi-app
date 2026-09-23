@@ -14,7 +14,9 @@ import {
     mapLink,
     toSlideData
 } from "./lightbox-slides";
-import { addVideoSlides } from "./video-slides";
+import { TAPPABLE_WHILE_VISIBLE } from "./lightbox-controls";
+import { addVideoSlides, VideoSlideEvents } from "./video-slides";
+import VideoControls from "./VideoControls";
 
 interface FileLightboxProps {
     /** The loaded files, in the order the lightbox swipes through them */
@@ -25,8 +27,15 @@ interface FileLightboxProps {
     actions?: (file: FileSummary) => ReactNode;
 }
 
+/** The active slide's video, which the video controls drive */
+interface ActiveVideo {
+    fileId: string;
+    video: HTMLVideoElement;
+}
+
 /** Where the lightbox renders its caption and actions, once it is open */
 interface LightboxUi {
+    pswp: PhotoSwipe;
     caption: HTMLElement;
     actions: HTMLElement;
     index: number;
@@ -45,6 +54,7 @@ export default function FileLightbox({
 }: FileLightboxProps) {
     const { photoId, show, leave } = useLightboxHistory();
     const [ui, setUi] = useState<LightboxUi | null>(null);
+    const [activeVideo, setActiveVideo] = useState<ActiveVideo | null>(null);
     const pswpRef = useRef<PhotoSwipe | null>(null);
 
     // PhotoSwipe reads the latest of these while it is open
@@ -57,10 +67,22 @@ export default function FileLightbox({
         if (photoId && !pswp) {
             const index = files.findIndex((file) => file.id === photoId);
             if (index >= 0) {
-                pswpRef.current = openLightbox(index, latest, (ui) => {
-                    setUi(ui);
-                    if (!ui) pswpRef.current = null;
-                });
+                pswpRef.current = openLightbox(
+                    index,
+                    latest,
+                    {
+                        onActivate: (video, fileId) =>
+                            setActiveVideo({ fileId, video }),
+                        onDeactivate: (video) =>
+                            setActiveVideo((active) =>
+                                active?.video === video ? null : active
+                            )
+                    },
+                    (ui) => {
+                        setUi(ui);
+                        if (!ui) pswpRef.current = null;
+                    }
+                );
             } else if (files.length > 0) {
                 // A file that is not loaded, e.g. after a reload, or is gone
                 leave();
@@ -91,9 +113,23 @@ export default function FileLightbox({
     if (!ui || !file) {
         return null;
     }
+    const video = activeVideo?.fileId === file.id ? activeVideo.video : null;
     return (
         <>
-            {createPortal(<Caption file={file} />, ui.caption)}
+            {createPortal(
+                <Caption file={file}>
+                    {video && (
+                        <VideoControls
+                            // Each video starts with fresh controls
+                            key={file.id}
+                            pswp={ui.pswp}
+                            video={video}
+                            knownDuration={file.durationInSeconds}
+                        />
+                    )}
+                </Caption>,
+                ui.caption
+            )}
             {actions && createPortal(actions(file), ui.actions)}
         </>
     );
@@ -110,6 +146,7 @@ function openLightbox(
         show: (fileId: string) => void;
         leave: () => void;
     }>,
+    videoEvents: VideoSlideEvents,
     /** The caption and actions to render into, or null once it is gone */
     onUi: (ui: LightboxUi | null) => void
 ) {
@@ -142,7 +179,7 @@ function openLightbox(
             tileThumbnail((data as FileSlideData).fileId) ??
             (thumbnail as HTMLElement)
     );
-    addVideoSlides(pswp);
+    addVideoSlides(pswp, videoEvents);
 
     let caption: HTMLElement | null = null;
     let actions: HTMLElement | null = null;
@@ -171,7 +208,7 @@ function openLightbox(
         const file = files()[pswp.currIndex];
         if (!file) return;
         if (caption && actions) {
-            onUi({ caption, actions, index: pswp.currIndex });
+            onUi({ pswp, caption, actions, index: pswp.currIndex });
         }
         latest.current.show(file.id);
         if (isNearEnd(pswp.currIndex, files().length)) {
@@ -211,8 +248,17 @@ function revealTile(fileId: string) {
     tileOf(fileId)?.scrollIntoView({ block: "nearest", behavior: "instant" });
 }
 
-/** When the file was taken and, when known, where, with a link to a map */
-function Caption({ file }: { file: FileSummary }) {
+/**
+ * When the file was taken and, when known, where, with a link to a map.
+ * A video's controls go beneath it.
+ */
+function Caption({
+    file,
+    children
+}: {
+    file: FileSummary;
+    children?: ReactNode;
+}) {
     return (
         <Box
             position="absolute"
@@ -237,13 +283,18 @@ function Caption({ file }: { file: FileSummary }) {
                     rel="noreferrer"
                     color="white"
                     fontSize="sm"
-                    pointerEvents="auto">
+                    css={TAPPABLE_WHILE_VISIBLE}>
                     <Flex as="span" alignItems="center" gap="1">
-                        <Icon path={mdiMapMarkerOutline} size="16px" aria-hidden />
+                        <Icon
+                            path={mdiMapMarkerOutline}
+                            size="16px"
+                            aria-hidden
+                        />
                         {file.gps.label || "Show on map"}
                     </Flex>
                 </Link>
             )}
+            {children}
         </Box>
     );
 }
