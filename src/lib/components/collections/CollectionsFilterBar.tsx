@@ -231,12 +231,9 @@ function FilterPanel({
                     <Button
                         size="sm"
                         variant="ghost"
+                        // The panel's filters only; the search stays
                         onClick={() =>
-                            onChange({
-                                tags: [],
-                                fileType: "any",
-                                forgotten: false
-                            })
+                            onChange({ ...NO_COLLECTIONS_FILTER, q: filter.q })
                         }>
                         Reset
                     </Button>

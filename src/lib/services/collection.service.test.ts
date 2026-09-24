@@ -443,13 +443,20 @@ describe("Sorting collections (integration)", () => {
         const user = await createUser("alice");
         const service = new CollectionService(user.id);
         await createCollection(user.id, "beach");
-        await createCollection(user.id, "Alps");
         await createCollection(user.id, "Zoo");
         await createCollection(user.id, "city");
+        // Names equal ignoring case, whose pages end between them
+        const tied: Record<string, Collection> = {};
+        for (const name of ["Alps", "alps", "ALPS"]) {
+            tied[name] = await createCollection(user.id, name);
+        }
+        const tiedByIdAscending = Object.keys(tied).sort((a, b) =>
+            compareUuids(tied[a].id, tied[b].id)
+        );
 
         expect(
-            await browseAllNames(service, { sort: "name", limit: 3 })
-        ).toEqual(["Alps", "beach", "city", "Zoo"]);
+            await browseAllNames(service, { sort: "name", limit: 2 })
+        ).toEqual([...tiedByIdAscending, "beach", "city", "Zoo"]);
     });
 
     it("pages concatenated through cursors contain every collection exactly once, for every sort", async () => {
