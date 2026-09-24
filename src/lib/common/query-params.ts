@@ -19,3 +19,15 @@ export function numberQueryParam(value: string | string[] | undefined) {
     const single = singleQueryParam(value);
     return single === undefined ? undefined : Number(single);
 }
+
+/** A boolean query parameter, `true` or `false`; undefined when absent */
+export function booleanQueryParam(value: string | string[] | undefined) {
+    const single = singleQueryParam(value);
+    if (single === undefined) {
+        return undefined;
+    }
+    if (single !== "true" && single !== "false") {
+        throw new InvalidArgumentError("Expected true or false");
+    }
+    return single === "true";
+}

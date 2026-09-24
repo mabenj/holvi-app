@@ -1,5 +1,6 @@
 import type { CollectionDetails } from "../types/collection-details";
 import type { CollectionFileType } from "../types/collection-file-type";
+import type { CollectionSort } from "../types/collection-sort";
 import type { CollectionSummary } from "../types/collection-summary";
 import type { FileSort } from "../types/file-sort";
 import type { FileSummary } from "../types/file-summary";
@@ -7,34 +8,48 @@ import type { FileSummary } from "../types/file-summary";
 export interface CollectionsPage {
     collections: CollectionSummary[];
     nextCursor: string | null;
-    seed: string;
+    /** The seed of the random order; only for the random sort */
+    seed?: string;
 }
 
-/** What narrows the Collections tab: tags (all of them), file type and a name search */
+/**
+ * What narrows the Collections tab: tags (all of them), file type, Forgotten
+ * collections only, and a name search
+ */
 export interface CollectionsFilter {
     tags: string[];
     fileType: CollectionFileType;
+    forgotten: boolean;
     q: string;
 }
 
 export const NO_COLLECTIONS_FILTER: CollectionsFilter = {
     tags: [],
     fileType: "any",
+    forgotten: false,
     q: ""
 };
 
 /** Whether the filter leaves out any collections */
 export function isFiltering(filter: CollectionsFilter) {
     return (
-        filter.tags.length > 0 || filter.fileType !== "any" || !!filter.q.trim()
+        filter.tags.length > 0 ||
+        filter.fileType !== "any" ||
+        filter.forgotten ||
+        !!filter.q.trim()
     );
 }
 
-/** The same key for filters that match the same collections */
-export function collectionsFilterKey(filter: CollectionsFilter) {
+/** The same key for sorts and filters that show the same collections in the same order */
+export function collectionsQueryKey(
+    sort: CollectionSort,
+    filter: CollectionsFilter
+) {
     return JSON.stringify([
+        sort,
         filter.tags.map((tag) => tag.toLowerCase()).sort(),
         filter.fileType,
+        filter.forgotten,
         filter.q.trim().toLowerCase()
     ]);
 }
@@ -60,15 +75,21 @@ async function getJson(
     return data;
 }
 
-/** One page of the user's collections that match the filter, in random order */
+/** One page of the user's collections that match the filter, in the sort's order */
 export async function fetchCollectionsPage(
-    options: { filter: CollectionsFilter; seed?: string; cursor?: string },
+    options: {
+        sort: CollectionSort;
+        filter: CollectionsFilter;
+        seed?: string;
+        cursor?: string;
+    },
     signal?: AbortSignal
 ): Promise<CollectionsPage> {
-    const { tags, fileType, q } = options.filter;
-    const params = new URLSearchParams({ sort: "random" });
+    const { tags, fileType, forgotten, q } = options.filter;
+    const params = new URLSearchParams({ sort: options.sort });
     tags.forEach((tag) => params.append("tags", tag));
     if (fileType !== "any") params.set("fileType", fileType);
+    if (forgotten) params.set("forgotten", "true");
     if (q.trim()) params.set("q", q.trim());
     if (options.seed) params.set("seed", options.seed);
     if (options.cursor) params.set("cursor", options.cursor);
@@ -86,6 +107,16 @@ export async function fetchCollectionsPage(
 
 export function collectionUrl(collectionId: string) {
     return `/api/collections/${encodeURIComponent(collectionId)}`;
+}
+
+/** Records a visit to the collection's page, which counts as an Open unless it extends the previous one */
+export async function recordOpen(collectionId: string) {
+    await sendJson(
+        `${collectionUrl(collectionId)}/opens`,
+        "POST",
+        undefined,
+        "Could not record the visit"
+    );
 }
 
 /** One of the user's collections, with its description */

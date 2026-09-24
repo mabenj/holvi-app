@@ -1,9 +1,14 @@
-import { CollectionsFilter, isFiltering } from "@/lib/client/collections";
+import {
+    CollectionsFilter,
+    isFiltering,
+    NO_COLLECTIONS_FILTER
+} from "@/lib/client/collections";
 import { fetchTagCounts, tagCountsUrl } from "@/lib/client/tags";
 import {
     COLLECTION_FILE_TYPES,
     CollectionFileType
 } from "@/lib/types/collection-file-type";
+import type { CollectionSort } from "@/lib/types/collection-sort";
 import {
     Button,
     CloseButton,
@@ -13,6 +18,7 @@ import {
     Input,
     InputGroup,
     Stack,
+    Switch,
     Text
 } from "@chakra-ui/react";
 import { mdiMagnify } from "@mdi/js";
@@ -26,6 +32,7 @@ import {
 } from "../filters/FilterControls";
 import { TagToggles, toggleTag } from "../filters/TagToggle";
 import PanelSurface from "../surfaces/PanelSurface";
+import CollectionSortSelect from "./CollectionSortSelect";
 
 export const FILE_TYPE_LABELS: Record<CollectionFileType, string> = {
     any: "Any",
@@ -42,21 +49,40 @@ interface CollectionsFilterBarProps {
     onChange: (changes: Partial<CollectionsFilter>) => void;
 }
 
+/** How many of the filter panel's filters are on */
+function panelFilterCount(filter: CollectionsFilter) {
+    return (
+        filter.tags.length +
+        (filter.fileType !== "any" ? 1 : 0) +
+        (filter.forgotten ? 1 : 0)
+    );
+}
+
+/** Label of the Forgotten collections filter */
+const FORGOTTEN_LABEL = "Forgotten";
+
 /**
- * The Collections tab's name search, its filter panel of tags and file type,
- * and the filters in effect, each removable, with one tap to clear them all
+ * The Collections tab's name search, its sort, its filter panel of Forgotten
+ * collections, file type and tags, and the filters in effect, each removable,
+ * with one tap to clear them all
  */
 export default function CollectionsFilterBar({
     filter,
-    onChange
-}: CollectionsFilterBarProps) {
+    onChange,
+    sort,
+    onSortChange
+}: CollectionsFilterBarProps & {
+    sort: CollectionSort;
+    onSortChange: (sort: CollectionSort) => void;
+}) {
     const [panelOpen, setPanelOpen] = useState(false);
-    const panelFilters = filter.tags.length + (filter.fileType !== "any" ? 1 : 0);
+    const panelFilters = panelFilterCount(filter);
 
     return (
         <Stack gap="2" px="4" pb="3">
             <HStack gap="2">
                 <SearchField value={filter.q} onChange={(q) => onChange({ q })} />
+                <CollectionSortSelect value={sort} onChange={onSortChange} />
                 <FilterButton
                     activeCount={panelFilters}
                     onClick={() => setPanelOpen(true)}
@@ -145,12 +171,19 @@ function ActiveFilters({ filter, onChange }: CollectionsFilterBarProps) {
     const search = filter.q.trim();
     return (
         <ActiveFilterChips
-            onClearAll={() => onChange({ tags: [], fileType: "any", q: "" })}>
+            onClearAll={() => onChange(NO_COLLECTIONS_FILTER)}>
             {search && (
                 <FilterChip
                     label={`“${search}”`}
                     removeLabel="Clear search"
                     onRemove={() => onChange({ q: "" })}
+                />
+            )}
+            {filter.forgotten && (
+                <FilterChip
+                    label={FORGOTTEN_LABEL}
+                    removeLabel={`Remove filter ${FORGOTTEN_LABEL}`}
+                    onRemove={() => onChange({ forgotten: false })}
                 />
             )}
             {filter.fileType !== "any" && (
@@ -174,7 +207,7 @@ function ActiveFilters({ filter, onChange }: CollectionsFilterBarProps) {
     );
 }
 
-/** Tags, most used first with their counts, and the file type; changes apply at once */
+/** Forgotten collections, the file type, and tags, most used first with their counts; changes apply at once */
 function FilterPanel({
     open,
     onClose,
@@ -185,25 +218,56 @@ function FilterPanel({
         open ? tagCountsUrl("collections") : null,
         fetchTagCounts
     );
-    const panelFilters = filter.tags.length > 0 || filter.fileType !== "any";
+    const panelFilters = panelFilterCount(filter) > 0;
 
     return (
         <PanelSurface
             open={open}
             onClose={onClose}
             title="Filters"
-            description="Narrow the collections by file type and tags"
+            description="Narrow the collections to forgotten ones, by file type and by tags"
             headerAction={
                 panelFilters ? (
                     <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => onChange({ tags: [], fileType: "any" })}>
+                        // The panel's filters only; the search stays
+                        onClick={() =>
+                            onChange({ ...NO_COLLECTIONS_FILTER, q: filter.q })
+                        }>
                         Reset
                     </Button>
                 ) : undefined
             }>
             <Stack gap="6">
+                <Switch.Root
+                    display="flex"
+                    justifyContent="space-between"
+                    alignItems="center"
+                    gap="4"
+                    checked={filter.forgotten}
+                    onCheckedChange={({ checked }) =>
+                        onChange({ forgotten: checked })
+                    }>
+                    <Switch.Label flex="1">
+                        <Text as="span" display="block" fontWeight="medium">
+                            {FORGOTTEN_LABEL}
+                        </Text>
+                        <Text
+                            as="span"
+                            display="block"
+                            textStyle="xs"
+                            color="fg.subtle"
+                            fontWeight="normal">
+                            Not opened for over a year, or never opened and
+                            created over a year ago
+                        </Text>
+                    </Switch.Label>
+                    <Switch.HiddenInput />
+                    <Switch.Control>
+                        <Switch.Thumb />
+                    </Switch.Control>
+                </Switch.Root>
                 <Stack gap="2" as="section">
                     <Heading as="h3" textStyle="sm" color="fg.muted">
                         File type
