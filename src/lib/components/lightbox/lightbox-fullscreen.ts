@@ -1,8 +1,8 @@
 import type PhotoSwipe from "photoswipe";
-import { useCallback, useSyncExternalStore } from "react";
 import {
-    FullscreenOrigin,
+    type FullscreenOrigin,
     fullscreenMode,
+    type OrientationLock,
     orientationLock,
     rotationAction
 } from "./fullscreen";
@@ -16,7 +16,7 @@ interface WebKitVideoElement extends HTMLVideoElement {
 
 /** `screen.orientation.lock`, which TypeScript's DOM types leave out */
 interface LockableOrientation extends ScreenOrientation {
-    lock?: (orientation: "landscape" | "portrait") => Promise<void>;
+    lock?: (orientation: OrientationLock) => Promise<void>;
 }
 
 function isLandscape() {
@@ -42,8 +42,10 @@ function isLandscape() {
  * the browser allows it, until it ends.
  */
 export class LightboxFullscreen {
-    /** What started the fullscreen last asked for */
+    /** What started the current fullscreen, or the one being asked for */
     private origin: FullscreenOrigin | null = null;
+    /** Whether the lightbox has asked for fullscreen and not heard back yet */
+    private requesting = false;
     /** Whether the screen's orientation is locked, or asked to be */
     private locked = false;
 
@@ -64,9 +66,8 @@ export class LightboxFullscreen {
 
     /** Whether the lightbox, or this video natively, is fullscreen now */
     isActive(video: HTMLVideoElement | null) {
-        const root = this.pswp.element;
         return (
-            (!!root && document.fullscreenElement === root) ||
+            this.isLightboxFullscreen() ||
             !!(video as WebKitVideoElement | null)?.webkitDisplayingFullscreen
         );
     }
@@ -86,35 +87,50 @@ export class LightboxFullscreen {
      * video then stays as it is.
      */
     enter(video: HTMLVideoElement, origin: FullscreenOrigin) {
-        if (document.fullscreenElement || this.isActive(video)) return;
+        if (
+            this.requesting ||
+            document.fullscreenElement ||
+            this.isActive(video)
+        ) {
+            return;
+        }
         const root = this.pswp.element;
         const mode = this.mode(video);
         if (mode === "element" && root) {
             this.origin = origin;
-            const lock = orientationLock(origin, {
-                width: video.videoWidth,
-                height: video.videoHeight
-            });
+            this.requesting = true;
+            const lock = orientationLock(origin, this.videoSize(video));
             root.requestFullscreen({ navigationUI: "hide" }).then(
                 () => {
-                    if (lock) this.lockOrientation(lock);
+                    this.requesting = false;
+                    if (lock && this.isLightboxFullscreen()) {
+                        this.lockOrientation(lock);
+                    }
                 },
-                () => undefined
+                () => {
+                    this.requesting = false;
+                    this.fullscreenChanged();
+                }
             );
         } else if (mode === "video") {
             this.origin = origin;
+            video.addEventListener(
+                "webkitendfullscreen",
+                () => this.fullscreenChanged(),
+                { once: true }
+            );
             try {
                 (video as WebKitVideoElement).webkitEnterFullscreen?.();
             } catch {
                 // Refused, e.g. without a tap or before the video has loaded
+                this.origin = null;
             }
         }
     }
 
     /** Leaves fullscreen, whatever started it */
     exit(video: HTMLVideoElement | null) {
-        const root = this.pswp.element;
-        if (root && document.fullscreenElement === root) {
+        if (this.isLightboxFullscreen()) {
             document.exitFullscreen().catch(() => undefined);
         }
         const webkitVideo = video as WebKitVideoElement | null;
@@ -123,14 +139,17 @@ export class LightboxFullscreen {
         }
     }
 
-    /** Turning the phone changed the screen's orientation */
-    rotated(activeVideo: HTMLVideoElement | null) {
+    /** Handles turning the phone, with this video on the active slide */
+    handleRotation(activeVideo: HTMLVideoElement | null) {
         const action = rotationAction({
             landscape: isLandscape(),
             onVideo: activeVideo !== null,
-            // What started a fullscreen that is on now: a request that was
-            // refused, or one that has ended, counts for nothing
-            origin: this.isActive(activeVideo) ? this.origin : null
+            // A native video fullscreen that was refused without a word
+            // leaves an origin behind, which counts for nothing
+            origin:
+                this.requesting || this.isActive(activeVideo)
+                    ? this.origin
+                    : null
         });
         if (action === "enter" && activeVideo) {
             this.enter(activeVideo, "rotation");
@@ -139,10 +158,19 @@ export class LightboxFullscreen {
         }
     }
 
-    /** Releases the orientation lock once fullscreen has ended */
-    releaseLockUnlessActive() {
-        const root = this.pswp.element;
-        if (root && document.fullscreenElement === root) return;
+    /**
+     * The document's fullscreen may have changed, whoever changed it: once
+     * the lightbox's has ended, forgets what started it and releases the
+     * screen's orientation
+     */
+    fullscreenChanged() {
+        if (this.requesting || this.isLightboxFullscreen()) return;
+        this.origin = null;
+        this.releaseLock();
+    }
+
+    /** Releases the screen's orientation, if the lightbox locked it */
+    releaseLock() {
         if (!this.locked) return;
         this.locked = false;
         try {
@@ -152,7 +180,24 @@ export class LightboxFullscreen {
         }
     }
 
-    private lockOrientation(lock: "landscape" | "portrait") {
+    private isLightboxFullscreen() {
+        const root = this.pswp.element;
+        return !!root && document.fullscreenElement === root;
+    }
+
+    /**
+     * The video's size, or before its metadata has loaded, the file's, which
+     * the active slide carries
+     */
+    private videoSize(video: HTMLVideoElement) {
+        if (video.videoWidth > 0 && video.videoHeight > 0) {
+            return { width: video.videoWidth, height: video.videoHeight };
+        }
+        const slide = this.pswp.currSlide?.data;
+        return { width: slide?.width ?? 0, height: slide?.height ?? 0 };
+    }
+
+    private lockOrientation(lock: OrientationLock) {
         const orientation = window.screen.orientation as
             | LockableOrientation
             | undefined;
@@ -179,8 +224,8 @@ export function addLightboxFullscreen(
 ) {
     const fullscreen = new LightboxFullscreen(pswp);
 
-    const onRotate = () => fullscreen.rotated(activeVideo());
-    const onFullscreenChange = () => fullscreen.releaseLockUnlessActive();
+    const onRotate = () => fullscreen.handleRotation(activeVideo());
+    const onFullscreenChange = () => fullscreen.fullscreenChanged();
     const orientation = window.screen.orientation;
     if (orientation) {
         orientation.addEventListener("change", onRotate);
@@ -192,59 +237,21 @@ export function addLightboxFullscreen(
         orientation?.removeEventListener("change", onRotate);
         window.removeEventListener("orientationchange", onRotate);
         document.removeEventListener("fullscreenchange", onFullscreenChange);
-        fullscreen.releaseLockUnlessActive();
+        // Its element leaves the page, which ends any fullscreen it had
+        fullscreen.releaseLock();
     });
     pswp.on("close", () => fullscreen.exit(activeVideo()));
     // Browsers keep Esc to themselves in fullscreen, to leave it. One that
     // lets it through leaves fullscreen too, rather than closing the lightbox.
     pswp.on("keydown", (event) => {
         const video = activeVideo();
-        if (event.originalEvent.key === "Escape" && fullscreen.isActive(video)) {
+        if (
+            event.originalEvent.key === "Escape" &&
+            fullscreen.isActive(video)
+        ) {
             event.preventDefault();
             fullscreen.exit(video);
         }
     });
     return fullscreen;
-}
-
-export interface FullscreenButton {
-    /** Whether the lightbox can go fullscreen with this video, in some way */
-    supported: boolean;
-    /** Whether it is fullscreen now */
-    active: boolean;
-    toggle: () => void;
-}
-
-/**
- * The fullscreen button's state for a video. It follows the real
- * fullscreen, so exits the browser makes (Esc, its own controls, the native
- * player's Done) show too.
- */
-export function useFullscreenButton(
-    fullscreen: LightboxFullscreen,
-    video: HTMLVideoElement
-): FullscreenButton {
-    const subscribe = useCallback(
-        (onChange: () => void) => {
-            document.addEventListener("fullscreenchange", onChange);
-            video.addEventListener("webkitbeginfullscreen", onChange);
-            video.addEventListener("webkitendfullscreen", onChange);
-            return () => {
-                document.removeEventListener("fullscreenchange", onChange);
-                video.removeEventListener("webkitbeginfullscreen", onChange);
-                video.removeEventListener("webkitendfullscreen", onChange);
-            };
-        },
-        [video]
-    );
-    const active = useSyncExternalStore(
-        subscribe,
-        () => fullscreen.isActive(video),
-        () => false
-    );
-    return {
-        supported: fullscreen.mode(video) !== null,
-        active,
-        toggle: () => fullscreen.toggle(video)
-    };
 }

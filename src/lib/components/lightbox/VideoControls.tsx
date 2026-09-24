@@ -23,15 +23,13 @@ import {
     TAPPABLE_WHILE_VISIBLE,
     useControlsVisible
 } from "./lightbox-controls";
-import {
-    LightboxFullscreen,
-    useFullscreenButton
-} from "./lightbox-fullscreen";
+import type { LightboxFullscreen } from "./lightbox-fullscreen";
 import PlayerSlider from "./PlayerSlider";
 import ScrubPreviewFrame, {
     usePreloadedScrubPreview
 } from "./ScrubPreviewFrame";
 import SkipCue from "./SkipCue";
+import { useFullscreenButton } from "./useFullscreenButton";
 import { usePictureInPicture } from "./usePictureInPicture";
 import { useDoubleTapSkip, useKeyboardControls } from "./usePlayerShortcuts";
 import {

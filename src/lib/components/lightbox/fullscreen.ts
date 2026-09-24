@@ -8,6 +8,12 @@ export type FullscreenMode = "element" | "video";
 /** What started a fullscreen: turning the phone, or the fullscreen button */
 export type FullscreenOrigin = "rotation" | "button";
 
+/** Which way the screen is locked during a fullscreen */
+export type OrientationLock = "landscape" | "portrait";
+
+/** What turning the phone does to the lightbox's fullscreen */
+export type RotationAction = "enter" | "exit";
+
 /**
  * How the lightbox can go fullscreen, if at all: the whole lightbox where
  * the browser allows it, so the player's controls and swiping come along,
@@ -33,7 +39,7 @@ export function fullscreenMode(support: {
 export function orientationLock(
     origin: FullscreenOrigin,
     video: { width: number; height: number }
-): "landscape" | "portrait" | null {
+): OrientationLock | null {
     if (origin !== "button") return null;
     if (video.width > video.height) return "landscape";
     if (video.height > video.width) return "portrait";
@@ -55,9 +61,9 @@ export function rotationAction({
     landscape: boolean;
     /** Whether the active slide is a video */
     onVideo: boolean;
-    /** What started the current fullscreen, or null if there is none */
+    /** What started the current fullscreen, or one being asked for, or null if there is none */
     origin: FullscreenOrigin | null;
-}): "enter" | "exit" | null {
+}): RotationAction | null {
     if (landscape) {
         return onVideo && origin === null ? "enter" : null;
     }
