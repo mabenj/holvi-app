@@ -6,6 +6,10 @@ import {
     replaceCollection
 } from "@/lib/hooks/useCollectionsBrowse";
 import type { Selection } from "@/lib/hooks/useSelection";
+import {
+    forgetTimeline,
+    removeFromTimeline
+} from "@/lib/hooks/useTimelineFiles";
 import type { CollectionDetails } from "@/lib/types/collection-details";
 import type { CollectionSummary } from "@/lib/types/collection-summary";
 import { useState } from "react";
@@ -39,6 +43,7 @@ export default function CollectionSelectionBar({
         const ids = selected.map((collection) => collection.id);
         await deleteSelection(ids);
         ids.forEach((id) => removeCollection(userId, id));
+        removeFromTimeline(userId, (file) => ids.includes(file.collectionId));
         revalidateTagCounts();
         selection.exit();
     };
@@ -85,6 +90,8 @@ export default function CollectionSelectionBar({
                             await fetchCollection(collectionId)
                         );
                         revalidateTagCounts();
+                        // Collection tags match Timeline files under a tag filter
+                        forgetTimeline(userId);
                         setEditing(null);
                         selection.exit();
                     }}
@@ -102,6 +109,7 @@ export default function CollectionSelectionBar({
                             tags: tags[collection.id] ?? collection.tags
                         })
                     );
+                    forgetTimeline(userId);
                     setTagging(false);
                     selection.exit();
                 }}

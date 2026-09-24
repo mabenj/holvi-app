@@ -44,6 +44,12 @@ interface TimelineGridProps {
      * can zoom back into it.
      */
     activeFileId?: string | null;
+    /**
+     * Called once the rows are laid out and before the page paints, e.g. to
+     * restore the scroll position; the rows then in view render before it
+     * paints too
+     */
+    onLaidOut?: () => void;
 }
 
 /**
@@ -56,9 +62,11 @@ export default function TimelineGrid({
     loadingMore = false,
     selection,
     onOpen,
-    activeFileId = null
+    activeFileId = null,
+    onLaidOut
 }: TimelineGridProps) {
     const layout = useResolvedGridLayout();
+    const laidOut = layout !== null;
     const columns = layout?.columns ?? 1;
     const rowHeight = (layout?.tileHeightPx ?? 0) + GAP;
     const rows = useMemo(() => timelineRows(files, columns), [files, columns]);
@@ -130,6 +138,11 @@ export default function TimelineGrid({
         },
         [monthRows, rows]
     );
+    // Before the virtualizer's own layout effect, so it renders the rows
+    // wherever this scrolls to
+    useLayoutEffect(() => {
+        if (laidOut) onLaidOut?.();
+    }, [laidOut, onLaidOut]);
     const { offsets, totalHeight, start, end } = useWindowVirtualRows(
         listRef,
         heights,

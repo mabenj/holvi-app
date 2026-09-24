@@ -54,6 +54,11 @@ export function collectionsQueryKey(
     ]);
 }
 
+/** The same key for tags that show the same Timeline files: tags are case-insensitive and all must match */
+export function timelineQueryKey(tags: string[]) {
+    return JSON.stringify(tags.map((tag) => tag.toLowerCase()).sort());
+}
+
 export interface FilesPage {
     files: FileSummary[];
     nextCursor: string | null;

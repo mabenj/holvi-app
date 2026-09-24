@@ -22,7 +22,8 @@ import { useTimelineFiles } from "@/lib/hooks/useTimelineFiles";
 import { Box, Button, EmptyState, Text, VStack } from "@chakra-ui/react";
 import { mdiTagOffOutline, mdiTimelineClockOutline } from "@mdi/js";
 import Icon from "@mdi/react";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { useCallback, useEffect, useState } from "react";
 import { mutate } from "swr";
 
 export const getServerSideProps = signedInPageProps;
@@ -35,25 +36,33 @@ const FIRST_PAGE_SKELETONS = 12;
  * floating action button. It can be filtered by tag, on a file or its
  * collection, and its files selected for bulk actions as on a collection page.
  * Tapping a file opens the lightbox, which swipes through the whole
- * (filtered) Timeline.
+ * (filtered) Timeline. Coming back from a collection or another tab shows the
+ * same tags, files and place in the grid.
  */
 export default function TimelineTab({ user }: SignedInPageProps) {
-    const [tags, changeTags] = useState<string[]>([]);
     const {
+        tags,
         files,
         pages,
         loading,
         error,
         hasMore,
+        startVisit,
+        changeTags,
         loadMore,
         reload,
         changeFiles,
+        remove,
+        saveScrollPosition,
+        takeScrollPosition,
         retry
-    } = useTimelineFiles(tags);
+    } = useTimelineFiles(user.id);
+    const router = useRouter();
     const selection = useSelection();
     const lightbox = useLightboxHistory();
-    // Other tags load the files afresh, so a selection ends
+    // Other tags show their own files from the top, so a selection ends
     const setTags = (tags: string[]) => {
+        window.scrollTo({ top: 0 });
         selection.exit();
         changeTags(tags);
     };
@@ -61,6 +70,9 @@ export default function TimelineTab({ user }: SignedInPageProps) {
         { reload, changeFiles },
         tags.length > 0
     );
+    // Deleted files leave every tag filter's loaded pages
+    const removeFiles = (fileIds: string[]) =>
+        remove((file) => fileIds.includes(file.id));
 
     // Deleting or renaming files can change their collections' counts and
     // Covers, on the Collections tab and the collection pages
@@ -80,14 +92,36 @@ export default function TimelineTab({ user }: SignedInPageProps) {
             .filter((file) => fileIds.includes(file.id))
             .map((file) => file.collectionId);
 
-    // Opening the Timeline, choosing other tags or trying again after an
-    // error fetches the first page
+    // The first visit in this app session fetches the first page; coming
+    // back from another screen keeps the pages already loaded
     useEffect(() => {
-        if (pages.length === 0) loadMore();
-    }, [pages.length, loadMore]);
+        startVisit();
+    }, [startVisit]);
+
+    // Leaving the Timeline remembers the place in the grid...
+    useEffect(() => {
+        const leave = (_url: string, { shallow }: { shallow: boolean }) => {
+            // Shallow changes stay on the Timeline, e.g. the lightbox's query
+            if (shallow) return;
+            saveScrollPosition(window.scrollY);
+        };
+        router.events.on("routeChangeStart", leave);
+        return () => router.events.off("routeChangeStart", leave);
+    }, [router.events, saveScrollPosition]);
+
+    // ...and coming back scrolls there once every cached page is in the grid.
+    // Until then, the next page must not load: the grid's end is still in view.
+    const [restored, setRestored] = useState(false);
+    const restoreScrollPosition = useCallback(() => {
+        const position = takeScrollPosition();
+        if (position !== null) window.scrollTo({ top: position });
+        setRestored(true);
+    }, [takeScrollPosition]);
 
     const sentinel = useNextPageSentinel(
-        pages.length > 0 && hasMore && !error ? loadMore : undefined,
+        restored && pages.length > 0 && hasMore && !error
+            ? loadMore
+            : undefined,
         pages.length
     );
 
@@ -108,7 +142,7 @@ export default function TimelineTab({ user }: SignedInPageProps) {
                         )}
                         onDeleted={(ids) => {
                             refreshCollections(collectionsOf(ids));
-                            selectionChanges.onDeleted(ids);
+                            removeFiles(ids);
                         }}
                         onEdited={(id, fields) => {
                             refreshCollections(collectionsOf([id]));
@@ -132,6 +166,7 @@ export default function TimelineTab({ user }: SignedInPageProps) {
                     selection={selection}
                     onOpen={lightbox.open}
                     activeFileId={lightbox.photoId}
+                    onLaidOut={restoreScrollPosition}
                 />
             )}
             {error && (

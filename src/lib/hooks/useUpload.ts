@@ -3,6 +3,7 @@ import { fetchCollection, uploadFiles } from "../client/collections";
 import { getErrorMessage } from "../common/utilities";
 import { refreshActivity } from "./useActivity";
 import { featureCollection } from "./useCollectionsBrowse";
+import { forgetTimeline } from "./useTimelineFiles";
 
 /** One upload of files into a collection */
 export type Upload =
@@ -87,6 +88,8 @@ export async function startUpload(
         if (added > 0) {
             // New videos are pending, which the Settings tab badge shows
             void refreshActivity();
+            // The new files belong on the Timeline
+            forgetTimeline(userId);
             fetchCollection(collectionId)
                 .then((collection) => featureCollection(userId, collection))
                 .catch(() => undefined);
