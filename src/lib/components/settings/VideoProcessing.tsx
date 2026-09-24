@@ -1,13 +1,20 @@
-import { processVideos } from "@/lib/client/video-processing";
-import { getErrorMessage } from "@/lib/common/utilities";
+import {
+    FAILED_VIDEOS_URL,
+    getFailedVideos,
+    processVideos
+} from "@/lib/client/video-processing";
+import { getErrorMessage, plural } from "@/lib/common/utilities";
+import { refreshActivity } from "@/lib/hooks/useActivity";
+import { useVideoProcessing } from "@/lib/hooks/useVideoProcessing";
 import {
     isVideoProcessingActive,
-    useVideoProcessing
-} from "@/lib/hooks/useVideoProcessing";
-import { VideoProcessingStatus } from "@/lib/types/video-processing-status";
+    FailedVideo,
+    VideoProcessingStatus
+} from "@/lib/types/video-processing-status";
 import {
     Box,
     Button,
+    Collapsible,
     Flex,
     Progress,
     SimpleGrid,
@@ -15,9 +22,10 @@ import {
     Stack,
     Text
 } from "@chakra-ui/react";
-import { mdiMovieCogOutline } from "@mdi/js";
+import { mdiChevronDown, mdiMovieCogOutline } from "@mdi/js";
 import Icon from "@mdi/react";
 import { useState } from "react";
+import useSWR from "swr";
 
 type StatusCount = keyof Omit<VideoProcessingStatus, "currentFile">;
 
@@ -43,6 +51,7 @@ export default function VideoProcessing() {
         setActionError(undefined);
         try {
             await update(await processVideos());
+            await refreshActivity();
         } catch (error) {
             setActionError(getErrorMessage(error));
         } finally {
@@ -116,6 +125,7 @@ export default function VideoProcessing() {
                             </Text>
                         </Flex>
                     )}
+                    {status.failed > 0 && <FailedVideos count={status.failed} />}
                 </Stack>
             )}
             <Button size="lg" loading={starting} onClick={onProcess}>
@@ -128,5 +138,68 @@ export default function VideoProcessing() {
                 </Text>
             )}
         </Stack>
+    );
+}
+
+/** The failed videos and their errors, loaded when opened. They still play from their originals. */
+function FailedVideos({ count }: { count: number }) {
+    const [open, setOpen] = useState(false);
+    // Keyed by the count, so a video failing or being retried reloads the list
+    const { data: videos, error } = useSWR<FailedVideo[], Error>(
+        open ? [FAILED_VIDEOS_URL, count] : null,
+        getFailedVideos
+    );
+
+    return (
+        <Collapsible.Root open={open} onOpenChange={(e) => setOpen(e.open)}>
+            <Collapsible.Trigger asChild>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    px="0"
+                    color="fg.error"
+                    css={{
+                        "& [data-chevron]": { transition: "transform 0.2s" },
+                        "&[data-state=open] [data-chevron]": {
+                            transform: "rotate(180deg)"
+                        }
+                    }}>
+                    {plural(count, "failed video", "failed videos")}
+                    <Box as="span" data-chevron display="inline-flex">
+                        <Icon path={mdiChevronDown} size="18px" aria-hidden />
+                    </Box>
+                </Button>
+            </Collapsible.Trigger>
+            <Collapsible.Content>
+                <Stack gap="2" pt="1">
+                    <Text textStyle="sm" color="fg.muted">
+                        These still play from their originals. Process videos
+                        tries them again.
+                    </Text>
+                    {error && (
+                        <Text textStyle="sm" color="fg.error">
+                            {error.message}
+                        </Text>
+                    )}
+                    {!videos && !error && <Spinner size="sm" />}
+                    {videos && (
+                        <Stack as="ul" gap="2" listStyleType="none">
+                            {videos.map((video) => (
+                                <Box as="li" key={video.id} textStyle="sm">
+                                    <Text
+                                        fontWeight="medium"
+                                        wordBreak="break-all">
+                                        {video.name}
+                                    </Text>
+                                    <Text color="fg.muted" wordBreak="break-word">
+                                        {video.error ?? "Unknown error"}
+                                    </Text>
+                                </Box>
+                            ))}
+                        </Stack>
+                    )}
+                </Stack>
+            </Collapsible.Content>
+        </Collapsible.Root>
     );
 }

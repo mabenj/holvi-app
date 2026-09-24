@@ -3,13 +3,12 @@ import {
     getVideoProcessingStatus,
     VIDEO_PROCESSING_URL
 } from "../client/video-processing";
-import { VideoProcessingStatus } from "../types/video-processing-status";
+import {
+    isVideoProcessingActive,
+    VideoProcessingStatus
+} from "../types/video-processing-status";
 
 const POLL_INTERVAL_MS = 2_000;
-
-export function isVideoProcessingActive(status: VideoProcessingStatus) {
-    return status.pending > 0 || status.processing > 0;
-}
 
 /** The user's video processing status. Polls while videos are pending or processing. */
 export function useVideoProcessing() {

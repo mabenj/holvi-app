@@ -87,6 +87,12 @@ A Skipped file or a Damaged file. A backup job with any problem files ends as co
 **Current backup**:
 The most recent completed backup for a user. It is the only one kept; it replaces the previous one when it completes.
 
+### Activity
+
+**Activity**:
+The background work Holvi is doing for a user right now: their queued or running **Backup job**, and their videos waiting for or undergoing video processing. Failed videos are not Activity.
+_Avoid_: jobs, tasks
+
 ## Relationships
 
 - A **User** owns zero or more **Collections**
