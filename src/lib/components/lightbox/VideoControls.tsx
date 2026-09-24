@@ -2,6 +2,8 @@ import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import type { ScrubPreview } from "@/lib/types/scrub-preview";
 import { Box, Flex, IconButton, Text } from "@chakra-ui/react";
 import {
+    mdiFullscreen,
+    mdiFullscreenExit,
     mdiPause,
     mdiPictureInPictureBottomRight,
     mdiPictureInPictureBottomRightOutline,
@@ -21,11 +23,13 @@ import {
     TAPPABLE_WHILE_VISIBLE,
     useControlsVisible
 } from "./lightbox-controls";
+import type { LightboxFullscreen } from "./lightbox-fullscreen";
 import PlayerSlider from "./PlayerSlider";
 import ScrubPreviewFrame, {
     usePreloadedScrubPreview
 } from "./ScrubPreviewFrame";
 import SkipCue from "./SkipCue";
+import { useFullscreenButton } from "./useFullscreenButton";
 import { usePictureInPicture } from "./usePictureInPicture";
 import { useDoubleTapSkip, useKeyboardControls } from "./usePlayerShortcuts";
 import {
@@ -44,6 +48,8 @@ const FINE_POINTER_QUERY = "(hover: hover) and (pointer: fine)";
 
 interface VideoControlsProps {
     pswp: PhotoSwipe;
+    /** The lightbox's fullscreen, which the fullscreen button drives */
+    fullscreen: LightboxFullscreen;
     /** The active slide's video */
     video: HTMLVideoElement;
     /** Seconds, from the file's metadata, until the video knows its own */
@@ -60,15 +66,17 @@ interface VideoControlsProps {
  * progress bar to scrub with (showing the frame being scrubbed to from the
  * video's Scrub preview, if it has one, and previewing the frame and time
  * under a hovering mouse without seeking), loop, picture-in-picture where the
- * browser supports it, and volume or mute. They show and hide with the rest
- * of the lightbox's controls, and hide by themselves once playback has run
- * for a few seconds.
+ * browser supports it, volume or mute, and fullscreen for the whole lightbox
+ * (or the native video fullscreen on iPhones) where the browser has either.
+ * They show and hide with the rest of the lightbox's controls, and hide by
+ * themselves once playback has run for a few seconds.
  *
  * Double-tapping the video's left or right third skips, with a cue, and the
  * keyboard controls the video while it is the active slide.
  */
 export default function VideoControls({
     pswp,
+    fullscreen,
     video,
     knownDuration,
     scrubPreview
@@ -91,6 +99,7 @@ export default function VideoControls({
     const [lastInteraction, setLastInteraction] = useState(0);
     const [loop, setLoop] = useState(video.loop);
     const pictureInPicture = usePictureInPicture(video);
+    const fullscreenButton = useFullscreenButton(fullscreen, video);
     // Each skip gets a new cue, so its ripple starts over
     const [skip, setSkip] = useState<{
         direction: SkipDirection;
@@ -203,7 +212,7 @@ export default function VideoControls({
                         }}
                     />
                 </Flex>
-                <Flex alignItems="center" gap="1" ml="-2">
+                <Flex alignItems="center" gap="1" mx="-2">
                     <ControlButton
                         label={playing ? "Pause" : "Play"}
                         icon={playing ? mdiPause : mdiPlay}
@@ -260,6 +269,21 @@ export default function VideoControls({
                                 onChange={(volume) => setVolume(video, volume)}
                             />
                         </Flex>
+                    )}
+                    {fullscreenButton.supported && (
+                        <ControlButton
+                            label={
+                                fullscreenButton.active
+                                    ? "Exit fullscreen"
+                                    : "Fullscreen"
+                            }
+                            icon={
+                                fullscreenButton.active
+                                    ? mdiFullscreenExit
+                                    : mdiFullscreen
+                            }
+                            onClick={fullscreenButton.toggle}
+                        />
                     )}
                 </Flex>
             </Box>

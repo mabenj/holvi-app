@@ -15,6 +15,7 @@ import {
     toSlideData
 } from "./lightbox-slides";
 import { TAPPABLE_WHILE_VISIBLE } from "./lightbox-controls";
+import type { LightboxFullscreen } from "./lightbox-fullscreen";
 import { addVideoSlides, VideoSlideEvents } from "./video-slides";
 import VideoControls from "./VideoControls";
 
@@ -36,6 +37,7 @@ interface ActiveVideo {
 /** Where the lightbox renders its caption and actions, once it is open */
 interface LightboxUi {
     pswp: PhotoSwipe;
+    fullscreen: LightboxFullscreen;
     caption: HTMLElement;
     actions: HTMLElement;
     index: number;
@@ -133,6 +135,7 @@ export default function FileLightbox({
                             // Each video starts with fresh controls
                             key={file.id}
                             pswp={ui.pswp}
+                            fullscreen={ui.fullscreen}
                             video={video}
                             knownDuration={file.durationInSeconds}
                             scrubPreview={file.scrubPreview}
@@ -190,7 +193,7 @@ function openLightbox(
             tileThumbnail((data as FileSlideData).fileId) ??
             (thumbnail as HTMLElement)
     );
-    addVideoSlides(pswp, videoEvents);
+    const fullscreen = addVideoSlides(pswp, videoEvents);
 
     let caption: HTMLElement | null = null;
     let actions: HTMLElement | null = null;
@@ -219,7 +222,13 @@ function openLightbox(
         const file = files()[pswp.currIndex];
         if (!file) return;
         if (caption && actions) {
-            onUi({ pswp, caption, actions, index: pswp.currIndex });
+            onUi({
+                pswp,
+                fullscreen,
+                caption,
+                actions,
+                index: pswp.currIndex
+            });
         }
         latest.current.show(file.id);
         if (isNearEnd(pswp.currIndex, files().length)) {
