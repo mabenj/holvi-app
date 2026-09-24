@@ -1,5 +1,3 @@
-import { caseInsensitiveSorter, getFileSrc } from "@/lib/common/utilities";
-import { CollectionDto } from "@/lib/types/collection-dto";
 import {
     CreationOptional,
     DataTypes,
@@ -81,36 +79,4 @@ export class Collection extends Model<
         );
     }
 
-    toDto(): CollectionDto {
-        const thumbnails =
-            this.CollectionFiles?.sort(caseInsensitiveSorter("name")).slice(
-                0,
-                Collection.thumbnailsLimit
-            ) || [];
-
-        return {
-            id: this.id,
-            name: this.name,
-            description: this.description || "",
-            tags: this.Tags?.map((tag) => tag.name) || [],
-            thumbnails: thumbnails.map((file) =>
-                getFileSrc({
-                    collectionId: this.id,
-                    fileId: file.id,
-                    mimeType: file.mimeType,
-                    thumbnail: true
-                })
-            ),
-            timestamp: this.createdAt.getTime(),
-            videoCount:
-                this.CollectionFiles?.filter((file) =>
-                    file.mimeType.includes("video")
-                ).length || 0,
-            imageCount:
-                this.CollectionFiles?.filter((file) =>
-                    file.mimeType.includes("image")
-                ).length || 0,
-            blurDataUrl: thumbnails[0]?.blurDataUrl || null
-        };
-    }
 }

@@ -6,7 +6,6 @@ import { Clock, realClock } from "../common/clock";
 import { HolviError, NotFoundError } from "../common/errors";
 import { UserFileSystem } from "../common/user-file-system";
 import { EMPTY_UUIDV4 } from "../common/utilities";
-import { CollectionDto } from "../types/collection-dto";
 import { CollectionFileDto } from "../types/collection-file-dto";
 import { CollectionFileFormData } from "../validators/collection-file.validator";
 import { CollectionFormData } from "../validators/collection.validator";
@@ -27,6 +26,7 @@ import {
   browseTimeline,
 } from "./file-browsing";
 import { UUID_PATTERN } from "./keyset-paging";
+import { throwIfNotUserCollection } from "./user-collections";
 import { VideoProcessingService } from "./video-processing.service";
 
 export type {
@@ -41,10 +41,8 @@ export type {
   FileSort,
 } from "./file-browsing";
 
-interface CreateResult {
-  collection?: CollectionDto;
-  nameError?: string;
-}
+/** A saved collection's id, or why its name was rejected */
+type SaveResult = { id: string; nameError?: never } | { id?: never; nameError: string };
 
 interface GetBufferResult {
   file: Buffer;
@@ -142,10 +140,8 @@ export class CollectionService {
     return browseTimeline(this.userId, query);
   }
 
-  async updateFile(
-    collectionId: string,
-    data: CollectionFileFormData
-  ): Promise<CollectionFileDto> {
+  /** Renames and retags one of the files of one of the user's collections */
+  async updateFile(collectionId: string, data: CollectionFileFormData) {
     const db = await Database.getInstance();
     await this.throwIfNotUserCollection(collectionId);
     // Only a file of that collection, which the check above made sure is the user's
@@ -195,20 +191,8 @@ export class CollectionService {
       );
 
       await transaction.commit();
-
-      // fetch tags from junction table
-      const fileTags = await db.models.CollectionFileTag.findAll({
-        where: {
-          CollectionFileId: fileInDb.id,
-        },
-      });
-
-      return {
-        ...fileInDb.toDto(),
-        tags: fileTags.map((tag) => tag.TagName),
-      };
     } catch (error) {
-      transaction.rollback();
+      await transaction.rollback().catch(() => undefined);
       throw new HolviError(`Error updating file '${data.id}'`, error);
     }
   }
@@ -453,10 +437,11 @@ export class CollectionService {
     }
   }
 
+  /** Changes one of the user's collections' name, description and tags, unless another of their collections has the name */
   async updateCollection(
     collectionId: string,
     collectionData: CollectionFormData
-  ): Promise<CreateResult> {
+  ): Promise<SaveResult> {
     const db = await Database.getInstance();
     await this.throwIfNotUserCollection(collectionId);
 
@@ -468,7 +453,7 @@ export class CollectionService {
     const transaction = await db.transaction();
     try {
       const collectionInDb = await db.models.Collection.findByPk(collectionId, {
-        include: db.models.CollectionFile,
+        transaction,
       });
       if (!collectionInDb) {
         throw new NotFoundError(`Collection not found '${collectionId}'`);
@@ -511,22 +496,9 @@ export class CollectionService {
       );
 
       await transaction.commit();
-
-      // fetch tags from junction table
-      const collectionTags = await db.models.CollectionTag.findAll({
-        where: {
-          CollectionId: collectionInDb.id,
-        },
-      });
-
-      return {
-        collection: {
-          ...collectionInDb.toDto(),
-          tags: collectionTags.map((tag) => tag.TagName),
-        },
-      };
+      return { id: collectionId };
     } catch (error) {
-      transaction.rollback();
+      await transaction.rollback().catch(() => undefined);
       throw new HolviError(
         `Error updating collection '${collectionData.name}'`,
         error
@@ -550,7 +522,7 @@ export class CollectionService {
       await fileSystem.deleteCollectionDir(collectionId);
       await transaction.commit();
     } catch (error) {
-      transaction.rollback();
+      await transaction.rollback().catch(() => undefined);
       throw new HolviError(
         `Error deleting collection '${collectionId}'`,
         error
@@ -558,11 +530,12 @@ export class CollectionService {
     }
   }
 
+  /** Creates a collection for the user, unless another of their collections has the name */
   async createCollection(
     name: string,
     tags: string[],
     description?: string
-  ): Promise<CreateResult> {
+  ): Promise<SaveResult> {
     if (await this.nameTaken(name)) {
       return { nameError: "Collection name already exists" };
     }
@@ -585,7 +558,7 @@ export class CollectionService {
           transaction,
         }
       );
-      const collectionTags = await db.models.CollectionTag.bulkCreate(
+      await db.models.CollectionTag.bulkCreate(
         tags.map((tag) => ({
           TagName: tag,
           CollectionId: collection.id,
@@ -594,19 +567,17 @@ export class CollectionService {
       );
 
       await transaction.commit();
-      return {
-        collection: {
-          ...collection.toDto(),
-          tags: collectionTags.map((tag) => tag.TagName),
-        },
-      };
+      return { id: collection.id };
     } catch (error) {
-      transaction.rollback();
+      await transaction.rollback().catch(() => undefined);
       throw new HolviError("Error creating collection", error);
     }
   }
 
   private async getCollectionFileInfo(collectionId: string, fileId: string) {
+    if (!UUID_PATTERN.test(collectionId) || !UUID_PATTERN.test(fileId)) {
+      return null;
+    }
     const db = await Database.getInstance();
     const collectionFile = await db.models.CollectionFile.findOne({
       where: {
@@ -641,18 +612,8 @@ export class CollectionService {
     };
   }
 
-  private async throwIfNotUserCollection(collectionId: string) {
-    if (!UUID_PATTERN.test(collectionId)) {
-      throw new NotFoundError(`Collection not found '${collectionId}'`);
-    }
-    const db = await Database.getInstance();
-    const collection = await db.models.Collection.findByPk(collectionId, {
-      attributes: ["UserId"],
-      raw: true,
-    });
-    if (!collection || collection.UserId !== this.userId) {
-      throw new NotFoundError(`Collection not found '${collectionId}'`);
-    }
+  private throwIfNotUserCollection(collectionId: string) {
+    return throwIfNotUserCollection(this.userId, collectionId);
   }
 
   private async nameTaken(name: string, collectionId?: string) {
