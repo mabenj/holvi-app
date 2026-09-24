@@ -324,7 +324,7 @@ async function processVideo(
             dependencies.openDecryptedFile(ref),
             createWriteStream(originalPath)
         );
-        const codecs = await VideoHelper.probeCodecs(originalPath);
+        const { codecs, captureDate } = await VideoHelper.probe(originalPath);
         const plan = planRendition(codecs);
         if (plan) {
             const outputPath = path.join(workDir, "rendition.mp4");
@@ -352,7 +352,9 @@ async function processVideo(
             processingStatus: "done",
             processingError: null,
             hasRendition: storedRendition,
-            scrubPreviewLayout
+            scrubPreviewLayout,
+            // The file's own record of when it was shot beats the upload's last-modified time
+            ...(captureDate ? { takenAt: captureDate } : {})
         });
         if (!recorded) {
             // Deleted while it was being processed
@@ -422,7 +424,8 @@ async function recordResult(
         | "processingError"
         | "hasRendition"
         | "scrubPreviewLayout"
-    >
+    > &
+        Partial<Pick<CollectionFile, "takenAt">>
 ) {
     const db = await Database.getInstance();
     const [updated] = await db.models.CollectionFile.update(fields, {

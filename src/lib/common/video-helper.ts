@@ -21,6 +21,62 @@ export interface VideoCodecs {
     isMp4: boolean;
 }
 
+/** What video processing reads from a video before processing it */
+export interface VideoProbe {
+    codecs: VideoCodecs;
+    /** When the video was shot, as its file records it; null if it records none */
+    captureDate: Date | null;
+}
+
+/**
+ * When a video was shot: the container's creation_time tag, or else the video
+ * stream's. Null when neither holds a usable date.
+ */
+function readCaptureDate(metadata: Ffmpeg.FfprobeData): Date | null {
+    const videoStream = metadata.streams.find(
+        (stream) =>
+            stream.codec_type === "video" && !stream.disposition?.attached_pic
+    );
+    return (
+        parseCaptureDate(metadata.format.tags?.creation_time) ??
+        parseCaptureDate(videoStream?.tags?.creation_time)
+    );
+}
+
+/** A tag's date, unless it is missing, unparseable or a placeholder */
+function parseCaptureDate(tag: unknown): Date | null {
+    if (typeof tag !== "string" || !ISO_DATE_TIME.test(tag.trim())) {
+        return null;
+    }
+    const date = new Date(tag.trim());
+    if (isNaN(date.getTime()) || isPlaceholderDate(date)) {
+        return null;
+    }
+    return date;
+}
+
+/** ffprobe reports creation_time as ISO 8601, such as 2019-07-14T08:30:15.000000Z */
+const ISO_DATE_TIME =
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/;
+
+/** Fourteen hours either side of an epoch's midnight in UTC covers its local midnight in every time zone */
+const PLACEHOLDER_MARGIN_MS = 14 * 60 * 60 * 1000;
+
+/**
+ * Whether a capture date is a device's placeholder rather than when the video
+ * was shot: anything up to the Unix epoch (which also covers the QuickTime
+ * epoch of 1904), or the DOS epoch of 1980, which devices with a reset clock
+ * record. Each epoch counts at local midnight in any time zone.
+ */
+function isPlaceholderDate(date: Date) {
+    const time = date.getTime();
+    const dosEpoch = Date.UTC(1980, 0, 1);
+    return (
+        time <= Date.UTC(1970, 0, 1) + PLACEHOLDER_MARGIN_MS ||
+        Math.abs(time - dosEpoch) <= PLACEHOLDER_MARGIN_MS
+    );
+}
+
 /** H.264 in 8-bit 4:2:0; yuvj420p is the full-range variant some cameras record */
 const WEB_SAFE_PIXEL_FORMATS = ["yuv420p", "yuvj420p"];
 
@@ -183,12 +239,13 @@ export class VideoHelper {
 
         return {
             durationInSeconds: metadata.format.duration,
-            format: metadata.format.format_name
+            format: metadata.format.format_name,
+            captureDate: readCaptureDate(metadata)
         };
     }
 
-    /** Reads the codecs and container video processing decides a Rendition by */
-    static async probeCodecs(sourcePath: string): Promise<VideoCodecs> {
+    /** Reads the codecs and container video processing decides a Rendition by, and the capture date */
+    static async probe(sourcePath: string): Promise<VideoProbe> {
         const ffmpeg = await this.importFfmpeg();
         const metadata = await new Promise<Ffmpeg.FfprobeData>(
             (resolve, reject) =>
@@ -209,16 +266,19 @@ export class VideoHelper {
             .trim()
             .toLowerCase();
         return {
-            videoCodec: videoStream.codec_name,
-            pixelFormat: videoStream.pix_fmt ?? null,
-            audioCodecs: metadata.streams
-                .filter((stream) => stream.codec_type === "audio")
-                .map((stream) => stream.codec_name ?? "unknown"),
-            // MP4 and MOV share one demuxer; QuickTime files carry the qt brand
-            isMp4:
-                !!metadata.format.format_name?.includes("mp4") &&
-                majorBrand !== "qt" &&
-                !majorBrand.startsWith("3g")
+            codecs: {
+                videoCodec: videoStream.codec_name,
+                pixelFormat: videoStream.pix_fmt ?? null,
+                audioCodecs: metadata.streams
+                    .filter((stream) => stream.codec_type === "audio")
+                    .map((stream) => stream.codec_name ?? "unknown"),
+                // MP4 and MOV share one demuxer; QuickTime files carry the qt brand
+                isMp4:
+                    !!metadata.format.format_name?.includes("mp4") &&
+                    majorBrand !== "qt" &&
+                    !majorBrand.startsWith("3g")
+            },
+            captureDate: readCaptureDate(metadata)
         };
     }
 
