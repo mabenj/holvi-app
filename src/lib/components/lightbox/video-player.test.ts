@@ -4,6 +4,7 @@ import {
     fractionAtPointer,
     isTap,
     keyboardAction,
+    progressPreview,
     scrubPreviewTile,
     seekTarget,
     skipZone
@@ -153,5 +154,66 @@ describe("scrubPreviewTile", () => {
         expect(scrubPreviewTile(layout, -1)).toEqual({ left: 0, top: 0 });
         expect(scrubPreviewTile(layout, 100)).toEqual({ left: 0, top: 180 });
         expect(scrubPreviewTile(layout, NaN)).toEqual({ left: 0, top: 0 });
+    });
+});
+
+describe("progressPreview", () => {
+    const preview = (state: {
+        hasScrubPreview?: boolean;
+        dragTime?: number | null;
+        hoverFraction?: number | null;
+        duration?: number;
+    }) =>
+        progressPreview({
+            duration: 120,
+            hasScrubPreview: true,
+            dragTime: null,
+            hoverFraction: null,
+            ...state
+        });
+
+    it("shows nothing while the bar is neither hovered nor dragged", () => {
+        expect(preview({})).toBeNull();
+        expect(preview({ hasScrubPreview: false })).toBeNull();
+    });
+
+    it("previews the frame and time under a hovering mouse", () => {
+        expect(preview({ hoverFraction: 0.25 })).toEqual({
+            time: 30,
+            fraction: 0.25
+        });
+    });
+
+    it("previews only the time under a hovering mouse for a video without a Scrub preview", () => {
+        expect(
+            preview({ hasScrubPreview: false, hoverFraction: 0.5 })
+        ).toEqual({ time: 60, fraction: 0.5 });
+    });
+
+    it("previews the position being dragged to, wherever the mouse is", () => {
+        expect(preview({ dragTime: 90, hoverFraction: 0.25 })).toEqual({
+            time: 90,
+            fraction: 0.75
+        });
+        expect(
+            preview({
+                hasScrubPreview: false,
+                dragTime: 90,
+                hoverFraction: 0.25
+            })
+        ).toEqual({ time: 90, fraction: 0.75 });
+    });
+
+    it("previews a touch drag's frame, and nothing for a video without a Scrub preview", () => {
+        expect(preview({ dragTime: 30 })).toEqual({
+            time: 30,
+            fraction: 0.25
+        });
+        expect(preview({ hasScrubPreview: false, dragTime: 30 })).toBeNull();
+    });
+
+    it("shows nothing while the duration is unknown", () => {
+        expect(preview({ duration: NaN, hoverFraction: 0.5 })).toBeNull();
+        expect(preview({ duration: 0, hoverFraction: 0.5 })).toBeNull();
     });
 });
