@@ -1,7 +1,7 @@
 import type PhotoSwipe from "photoswipe";
 import { setControlsVisible } from "./lightbox-controls";
 import type { FileSlideData } from "./lightbox-slides";
-import { addRotateToFullscreen } from "./rotate-to-fullscreen";
+import { addLightboxFullscreen } from "./lightbox-fullscreen";
 import { leavePictureInPicture } from "./usePictureInPicture";
 import { isTap } from "./video-player";
 import { PositionTracker, resumeAndTrackPosition } from "./video-positions";
@@ -31,6 +31,9 @@ function videoOf(content: { element?: HTMLElement }) {
  * The video has no native controls, so PhotoSwipe's gestures work on it as
  * on images: a horizontal drag changes slide, a vertical drag closes, and a
  * tap toggles the controls.
+ *
+ * Returns the lightbox's fullscreen, which turning the phone to landscape
+ * on a video starts and the player's fullscreen button drives.
  */
 export function addVideoSlides(pswp: PhotoSwipe, events: VideoSlideEvents) {
     // Keep the active video's remembered position up to date while it plays
@@ -117,7 +120,7 @@ export function addVideoSlides(pswp: PhotoSwipe, events: VideoSlideEvents) {
         video.load();
     });
 
-    addRotateToFullscreen(pswp, () =>
+    const fullscreen = addLightboxFullscreen(pswp, () =>
         pswp.currSlide ? videoOf(pswp.currSlide.content) : null
     );
 
@@ -149,4 +152,6 @@ export function addVideoSlides(pswp: PhotoSwipe, events: VideoSlideEvents) {
             setControlsVisible(pswp, true);
         }
     });
+
+    return fullscreen;
 }
