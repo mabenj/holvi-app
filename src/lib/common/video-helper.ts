@@ -33,13 +33,17 @@ export interface VideoProbe {
  * stream's. Null when neither holds a usable date.
  */
 function readCaptureDate(metadata: Ffmpeg.FfprobeData): Date | null {
-    const videoStream = metadata.streams.find(
-        (stream) =>
-            stream.codec_type === "video" && !stream.disposition?.attached_pic
-    );
     return (
         parseCaptureDate(metadata.format.tags?.creation_time) ??
-        parseCaptureDate(videoStream?.tags?.creation_time)
+        parseCaptureDate(findVideoStream(metadata)?.tags?.creation_time)
+    );
+}
+
+/** The video's picture: its first video stream, not counting cover art, which is stored as a video stream too */
+function findVideoStream(metadata: Ffmpeg.FfprobeData) {
+    return metadata.streams.find(
+        (stream) =>
+            stream.codec_type === "video" && !stream.disposition?.attached_pic
     );
 }
 
@@ -253,12 +257,7 @@ export class VideoHelper {
                     error ? reject(error) : resolve(metadata)
                 )
         );
-        // Cover art is stored as a video stream too
-        const videoStream = metadata.streams.find(
-            (stream) =>
-                stream.codec_type === "video" &&
-                !stream.disposition?.attached_pic
-        );
+        const videoStream = findVideoStream(metadata);
         if (!videoStream?.codec_name) {
             throw new HolviError("The file has no video stream");
         }

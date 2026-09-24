@@ -189,23 +189,7 @@ export async function addVideo(
 
 /** The types of an MP4 or MOV file's top-level boxes, in file order */
 export function topLevelBoxes(content: Buffer) {
-    const types: string[] = [];
-    let offset = 0;
-    while (offset + 8 <= content.length) {
-        let size = content.readUInt32BE(offset);
-        const type = content.toString("latin1", offset + 4, offset + 8);
-        if (size === 1) {
-            size = Number(content.readBigUInt64BE(offset + 8));
-        } else if (size === 0) {
-            size = content.length - offset;
-        }
-        if (size < 8) {
-            break;
-        }
-        types.push(type);
-        offset += size;
-    }
-    return types;
+    return childBoxes(content).map((box) => box.type);
 }
 
 export interface ProbedVideo {
