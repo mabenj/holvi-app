@@ -1245,6 +1245,247 @@ describe("Creating collections and uploading files (integration)", () => {
     });
 });
 
+describe("Covers (integration)", () => {
+    beforeEach(async () => {
+        await resetDatabase();
+    });
+
+    it("setting a Cover shows it on the summary and the collection page, and clearing it restores the automatic Cover", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const first = await addFile(
+            user.id,
+            trip.id,
+            "a.jpg",
+            Buffer.from("a"),
+            {
+                blurDataUrl: "data:image/png;base64,aaa"
+            }
+        );
+        const chosen = await addFile(
+            user.id,
+            trip.id,
+            "c.mp4",
+            Buffer.from("c"),
+            {
+                mimeType: "video/mp4",
+                blurDataUrl: "data:image/png;base64,ccc"
+            }
+        );
+        const service = new CollectionService(user.id);
+        const thumbnail = (fileId: string) =>
+            `/api/collections/${trip.id}/files?thumbnail=${fileId}`;
+
+        await service.setCover(trip.id, chosen.id);
+
+        const chosenCover = {
+            thumbnailSrc: thumbnail(chosen.id),
+            blurDataUrl: "data:image/png;base64,ccc"
+        };
+        expect((await browseOnly(service)).cover).toEqual(chosenCover);
+        expect((await service.getCollection(trip.id)).cover).toEqual(
+            chosenCover
+        );
+
+        await service.setCover(trip.id, null);
+
+        const automaticCover = {
+            thumbnailSrc: thumbnail(first.id),
+            blurDataUrl: "data:image/png;base64,aaa"
+        };
+        expect((await browseOnly(service)).cover).toEqual(automaticCover);
+        expect((await service.getCollection(trip.id)).cover).toEqual(
+            automaticCover
+        );
+    });
+
+    it("starts the thumbnails with the chosen Cover, then the other files by name", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const ids: Record<string, string> = {};
+        for (let i = 0; i < 12; i++) {
+            const name = `photo-${String(i).padStart(2, "0")}.jpg`;
+            ids[name] = (
+                await addFile(user.id, trip.id, name, Buffer.from(name))
+            ).id;
+        }
+        const service = new CollectionService(user.id);
+
+        // Past the first ten by name
+        await service.setCover(trip.id, ids["photo-11.jpg"]);
+
+        const { thumbnails } = await browseOnly(service);
+        expect(thumbnails).toEqual(
+            [
+                "photo-11.jpg",
+                "photo-00.jpg",
+                "photo-01.jpg",
+                "photo-02.jpg",
+                "photo-03.jpg",
+                "photo-04.jpg",
+                "photo-05.jpg",
+                "photo-06.jpg",
+                "photo-07.jpg",
+                "photo-08.jpg"
+            ].map(
+                (name) =>
+                    `/api/collections/${trip.id}/files?thumbnail=${ids[name]}`
+            )
+        );
+    });
+
+    it("falls back to the automatic Cover once the Cover file is deleted", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const first = await addFile(
+            user.id,
+            trip.id,
+            "a.jpg",
+            Buffer.from("a")
+        );
+        const second = await addFile(
+            user.id,
+            trip.id,
+            "b.jpg",
+            Buffer.from("b")
+        );
+        const chosen = await addFile(
+            user.id,
+            trip.id,
+            "c.jpg",
+            Buffer.from("c")
+        );
+        const other = await createCollection(user.id, "Home");
+        const otherChosen = await addFile(
+            user.id,
+            other.id,
+            "z.jpg",
+            Buffer.from("z")
+        );
+        const otherLeft = await addFile(
+            user.id,
+            other.id,
+            "y.jpg",
+            Buffer.from("y")
+        );
+        await addThumbnail(user.id, trip.id, chosen.id, Buffer.from("c"));
+        await addThumbnail(user.id, other.id, otherChosen.id, Buffer.from("z"));
+        const service = new CollectionService(user.id);
+        await service.setCover(trip.id, chosen.id);
+        await service.setCover(other.id, otherChosen.id);
+
+        await service.deleteFile(trip.id, chosen.id);
+        await service.multiDelete([otherChosen.id]);
+
+        const trips = await service.getCollection(trip.id);
+        expect(trips.cover?.thumbnailSrc).toBe(
+            `/api/collections/${trip.id}/files?thumbnail=${first.id}`
+        );
+        expect(trips.thumbnails).toEqual(
+            [first.id, second.id].map(
+                (id) => `/api/collections/${trip.id}/files?thumbnail=${id}`
+            )
+        );
+        // Deleting it as part of a selection falls back too
+        expect(
+            (await service.getCollection(other.id)).cover?.thumbnailSrc
+        ).toBe(`/api/collections/${other.id}/files?thumbnail=${otherLeft.id}`);
+    });
+
+    it("leaves collections without a chosen Cover with the automatic one", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        await addFile(user.id, trip.id, "b.jpg", Buffer.from("b"));
+        const chosen = await addFile(
+            user.id,
+            trip.id,
+            "c.jpg",
+            Buffer.from("c")
+        );
+        const home = await createCollection(user.id, "Home");
+        const homeFirst = await addFile(
+            user.id,
+            home.id,
+            "a.jpg",
+            Buffer.from("a"),
+            {
+                blurDataUrl: "data:image/png;base64,aaa"
+            }
+        );
+        const homeSecond = await addFile(
+            user.id,
+            home.id,
+            "b.jpg",
+            Buffer.from("b")
+        );
+        const service = new CollectionService(user.id);
+
+        await service.setCover(trip.id, chosen.id);
+
+        const { collections } = await service.browseCollections({
+            sort: "name"
+        });
+        expect(collections.map((c) => c.name)).toEqual(["Home", "Trip"]);
+        expect(collections[0]).toMatchObject({
+            thumbnails: [homeFirst.id, homeSecond.id].map(
+                (id) => `/api/collections/${home.id}/files?thumbnail=${id}`
+            ),
+            cover: {
+                thumbnailSrc: `/api/collections/${home.id}/files?thumbnail=${homeFirst.id}`,
+                blurDataUrl: "data:image/png;base64,aaa"
+            }
+        });
+    });
+
+    it("rejects a file of another collection, or of another user's collection", async () => {
+        const alice = await createUser("alice");
+        const bob = await createUser("bob");
+        const trip = await createCollection(alice.id, "Trip");
+        const first = await addFile(
+            alice.id,
+            trip.id,
+            "a.jpg",
+            Buffer.from("a")
+        );
+        const home = await createCollection(alice.id, "Home");
+        const homes = await addFile(
+            alice.id,
+            home.id,
+            "h.jpg",
+            Buffer.from("h")
+        );
+        const bobs = await createCollection(bob.id, "Secrets");
+        const bobsFile = await addFile(
+            bob.id,
+            bobs.id,
+            "s.jpg",
+            Buffer.from("s")
+        );
+        const service = new CollectionService(alice.id);
+
+        await expect(service.setCover(trip.id, homes.id)).rejects.toThrow(
+            NotFoundError
+        );
+        await expect(service.setCover(trip.id, bobsFile.id)).rejects.toThrow(
+            NotFoundError
+        );
+        await expect(service.setCover(trip.id, "not-a-uuid")).rejects.toThrow(
+            NotFoundError
+        );
+        // Nor may Alice choose, or clear, the Cover of Bob's collection
+        await expect(service.setCover(bobs.id, bobsFile.id)).rejects.toThrow(
+            NotFoundError
+        );
+        await expect(service.setCover(bobs.id, null)).rejects.toThrow(
+            NotFoundError
+        );
+
+        expect((await service.getCollection(trip.id)).cover?.thumbnailSrc).toBe(
+            `/api/collections/${trip.id}/files?thumbnail=${first.id}`
+        );
+    });
+});
+
 describe("Deleting collections (integration)", () => {
     beforeEach(async () => {
         await resetDatabase();
@@ -1729,6 +1970,13 @@ async function createCollections(userId: string, count: number) {
     for (let i = 0; i < count; i++) {
         await createCollection(userId, `Collection ${i}`);
     }
+}
+
+/** The summary of the user's only collection */
+async function browseOnly(service: CollectionService) {
+    const { collections } = await service.browseCollections();
+    expect(collections).toHaveLength(1);
+    return collections[0];
 }
 
 /** Names of every collection a browse returns, in order, across all pages */

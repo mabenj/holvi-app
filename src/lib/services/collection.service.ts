@@ -100,6 +100,34 @@ export class CollectionService {
     }
   }
 
+  /**
+   * Makes one of the collection's files, a photo or a video, its Cover; null
+   * goes back to the automatic Cover. A file of any other collection is not
+   * found.
+   */
+  async setCover(collectionId: string, fileId: string | null) {
+    await this.throwIfNotUserCollection(collectionId);
+    const db = await Database.getInstance();
+    if (fileId !== null) {
+      const file =
+        UUID_PATTERN.test(fileId) &&
+        (await db.models.CollectionFile.findOne({
+          where: { id: fileId, CollectionId: collectionId },
+          attributes: ["id"],
+          raw: true,
+        }));
+      if (!file) {
+        throw new NotFoundError(
+          `File '${fileId}' not found in collection '${collectionId}'`
+        );
+      }
+    }
+    await db.models.Collection.update(
+      { coverFileId: fileId },
+      { where: { id: collectionId, UserId: this.userId } }
+    );
+  }
+
   /** One page of the files of one of the user's collections, newest first unless another sort is asked for */
   async browseFiles(
     collectionId: string,

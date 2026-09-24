@@ -308,17 +308,29 @@ export async function summarizeCollections(
                 lastFileCreatedAt: Date;
             }[]
         >,
-        // The first file by name is the Cover, so it leads the thumbnails
+        // The Cover leads the thumbnails, then the other files by name. The
+        // chosen Cover if it is still in the collection, otherwise the first
+        // file by name. Two queries, so each one reads an index.
         db.select(
             `SELECT c.id AS "collectionId", t.id, t."mimeType",
                     CASE WHEN t.position = 1 THEN t."blurDataUrl" END AS "blurDataUrl"
                 FROM "Collections" c
                 CROSS JOIN LATERAL (
-                    SELECT f.id, f."mimeType", f."blurDataUrl",
-                           row_number() OVER (ORDER BY f.name, f.id) AS position
-                        FROM "CollectionFiles" f
-                        WHERE f."CollectionId" = c.id
-                        ORDER BY f.name, f.id
+                    SELECT u.id, u."mimeType", u."blurDataUrl",
+                           row_number() OVER (ORDER BY u.chosen DESC, u.name, u.id) AS position
+                        FROM (
+                            (SELECT f.id, f."mimeType", f."blurDataUrl", f.name, true AS chosen
+                                FROM "CollectionFiles" f
+                                WHERE f."CollectionId" = c.id AND f.id = c."coverFileId")
+                            UNION ALL
+                            (SELECT f.id, f."mimeType", f."blurDataUrl", f.name, false AS chosen
+                                FROM "CollectionFiles" f
+                                WHERE f."CollectionId" = c.id
+                                    AND f.id IS DISTINCT FROM c."coverFileId"
+                                ORDER BY f.name, f.id
+                                LIMIT :thumbnailsLimit)
+                        ) u
+                        ORDER BY u.chosen DESC, u.name, u.id
                         LIMIT :thumbnailsLimit
                 ) t
                 WHERE c.id IN (:ids)
