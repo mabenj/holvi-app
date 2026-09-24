@@ -1,7 +1,8 @@
 import {
     collectionUrl,
     deleteCollection,
-    fetchCollection
+    fetchCollection,
+    recordOpen
 } from "@/lib/client/collections";
 import { leaveFor } from "@/lib/client/navigation";
 import {
@@ -62,6 +63,22 @@ export default function CollectionPage({ user }: SignedInPageProps) {
     );
 }
 
+/**
+ * Opening the page is a visit to the collection, which the server counts as
+ * an Open unless it extends the previous one. Sent once as the page mounts:
+ * not when its data revalidates, nor as the lightbox shows files.
+ */
+function useRecordOpen(collectionId: string) {
+    // Development's strict mode mounts twice; one visit is one request
+    const recorded = useRef(false);
+    useEffect(() => {
+        if (recorded.current) return;
+        recorded.current = true;
+        // A visit that fails to count is not worth troubling the user with
+        recordOpen(collectionId).catch(() => undefined);
+    }, [collectionId]);
+}
+
 function CollectionScreen({
     collectionId,
     userId
@@ -78,6 +95,8 @@ function CollectionScreen({
         () => fetchCollection(collectionId),
         { revalidateOnFocus: false }
     );
+
+    useRecordOpen(collectionId);
 
     const [sort, changeSort] = useState<FileSort>("newest");
     const [tags, changeTags] = useState<string[]>([]);

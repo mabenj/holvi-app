@@ -23,6 +23,7 @@ import { DroppedFiles, useFileDrop } from "@/lib/hooks/useFileDrop";
 import { useNextPageSentinel } from "@/lib/hooks/useNextPageSentinel";
 import { useSelection } from "@/lib/hooks/useSelection";
 import { startUpload } from "@/lib/hooks/useUpload";
+import type { CollectionSort } from "@/lib/types/collection-sort";
 import { Box, Button, EmptyState, Text, VStack } from "@chakra-ui/react";
 import {
     mdiImageMultipleOutline,
@@ -42,6 +43,7 @@ const NEXT_PAGE_SKELETONS = 12;
 
 export default function CollectionsTab({ user }: SignedInPageProps) {
     const {
+        sort,
         filter,
         pages,
         collections,
@@ -52,6 +54,7 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
         loadMore,
         loadFirstPage,
         changeFilter,
+        changeSort,
         saveScrollPosition,
         takeScrollPosition,
         endVisit,
@@ -99,8 +102,8 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
         refresh();
     }, [refresh]);
 
-    // Another filter shows its own collections from the top. A selection
-    // would keep collections it no longer shows, so it ends.
+    // Another filter or sort shows its own collections from the top. A
+    // selection would keep collections it no longer shows, so it ends.
     const exitSelection = selection.exit;
     const narrow = useCallback(
         (changes: Partial<CollectionsFilter>) => {
@@ -109,6 +112,14 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
             changeFilter(changes);
         },
         [changeFilter, exitSelection]
+    );
+    const reorder = useCallback(
+        (sort: CollectionSort) => {
+            window.scrollTo({ top: 0 });
+            exitSelection();
+            changeSort(sort);
+        },
+        [changeSort, exitSelection]
     );
     const clearFilter = useCallback(
         () => narrow(NO_COLLECTIONS_FILTER),
@@ -149,7 +160,12 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
                     />
                 ) : undefined
             }>
-            <CollectionsFilterBar filter={filter} onChange={narrow} />
+            <CollectionsFilterBar
+                filter={filter}
+                onChange={narrow}
+                sort={sort}
+                onSortChange={reorder}
+            />
             {selectionError && (
                 <Text px="4" py="2" color="fg.error" textStyle="sm" role="alert">
                     {selectionError}

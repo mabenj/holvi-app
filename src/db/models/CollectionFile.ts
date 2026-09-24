@@ -129,6 +129,9 @@ export class CollectionFile extends Model<
                             "id"
                         ]
                     },
+                    // Last added to is the creation time of a collection's
+                    // newest file, which most collection sorts order by
+                    { fields: ["CollectionId", "createdAt"] },
                     // The video processing worker takes the oldest pending video
                     { fields: ["processingStatus", "createdAt", "id"] }
                 ]

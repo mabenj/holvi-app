@@ -25,6 +25,10 @@ export class Collection extends Model<
     declare description: CreationOptional<string | null>;
     declare createdAt: CreationOptional<Date>;
     declare updatedAt: CreationOptional<Date>;
+    /** The number of Opens the collection has had */
+    declare openCount: CreationOptional<number>;
+    /** When the collection was last opened; null if never */
+    declare lastOpened: CreationOptional<Date | null>;
 
     declare UserId: ForeignKey<User["id"]>;
 
@@ -45,12 +49,22 @@ export class Collection extends Model<
                 },
                 description: DataTypes.STRING,
                 createdAt: DataTypes.DATE,
-                updatedAt: DataTypes.DATE
+                updatedAt: DataTypes.DATE,
+                openCount: {
+                    type: DataTypes.INTEGER,
+                    allowNull: false,
+                    defaultValue: 0
+                },
+                lastOpened: DataTypes.DATE
             },
             {
                 sequelize,
-                // Browsing reads one user's collections
-                indexes: [{ fields: ["UserId"] }]
+                indexes: [
+                    // Browsing reads one user's collections
+                    { fields: ["UserId"] },
+                    // Sorting by name pages through them by name
+                    { fields: ["UserId", "name", "id"] }
+                ]
             }
         );
     }

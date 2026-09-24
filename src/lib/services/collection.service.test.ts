@@ -12,7 +12,9 @@ import {
     FileMetadata
 } from "../../../test/fixtures";
 import { pngImage, uploadRequest } from "../../../test/upload-fixtures";
+import { Collection } from "@/db/models/Collection";
 import { NotFoundError } from "../common/errors";
+import { COLLECTION_SORTS, CollectionSort } from "../types/collection-sort";
 import {
     BrowseCollectionsPage,
     BrowseCollectionsQuery,
@@ -291,6 +293,349 @@ describe("Browsing collections (integration)", () => {
         await expect(
             new CollectionService(user.id).browseCollections({
                 cursor: "not-a-cursor"
+            })
+        ).rejects.toThrow("Malformed cursor");
+    });
+});
+
+describe("Sorting collections (integration)", () => {
+    beforeEach(async () => {
+        await resetDatabase();
+    });
+
+    it("sorts by Last added to, newest first, an empty collection by its creation time, then by id", async () => {
+        const user = await createUser("alice");
+        const service = new CollectionService(user.id);
+        const old = await createCollection(user.id, "Old", {
+            createdAt: new Date("2019-01-01T00:00:00Z")
+        });
+        await addFile(user.id, old.id, "a.jpg", Buffer.from("a"), {
+            createdAt: new Date("2021-01-01T00:00:00Z")
+        });
+        await createCollection(user.id, "Empty", {
+            createdAt: new Date("2021-03-01T00:00:00Z")
+        });
+        const tied = [];
+        for (const name of ["Tied 1", "Tied 2", "Tied 3"]) {
+            const collection = await createCollection(user.id, name, {
+                createdAt: new Date("2019-01-01T00:00:00Z")
+            });
+            await addFile(user.id, collection.id, "a.jpg", Buffer.from("a"), {
+                createdAt: new Date("2021-06-01T00:00:00Z")
+            });
+            // An older file does not change Last added to
+            await addFile(user.id, collection.id, "b.jpg", Buffer.from("b"), {
+                createdAt: new Date("2020-06-01T00:00:00Z")
+            });
+            tied.push(collection);
+        }
+        const tiedByIdDescending = [...tied]
+            .sort((a, b) => compareUuids(b.id, a.id))
+            .map((c) => c.name);
+
+        expect(
+            await browseAllNames(service, { sort: "lastAddedTo", limit: 2 })
+        ).toEqual([...tiedByIdDescending, "Empty", "Old"]);
+    });
+
+    it("sorts by recently opened, never-opened collections last, ties by Last added to, then by id", async () => {
+        const user = await createUser("alice");
+        let now = new Date("2026-03-01T10:00:00Z");
+        const service = new CollectionService(user.id, { clock: () => now });
+        const collections = await createCollectionsAddedTo(user.id, {
+            "Opened first": "2021-01-01",
+            "Opened last": "2020-01-01",
+            "Never, added to later": "2021-06-01",
+            "Never, added to earlier": "2019-01-01",
+            "Never, tied 1": "2020-06-01",
+            "Never, tied 2": "2020-06-01",
+            "Never, tied 3": "2020-06-01"
+        });
+        await service.recordOpen(collections["Opened first"].id);
+        now = new Date("2026-03-02T10:00:00Z");
+        await service.recordOpen(collections["Opened last"].id);
+
+        expect(
+            await browseAllNames(service, { sort: "recentlyOpened", limit: 2 })
+        ).toEqual([
+            "Opened last",
+            "Opened first",
+            "Never, added to later",
+            ...namesByIdDescending(collections, [
+                "Never, tied 1",
+                "Never, tied 2",
+                "Never, tied 3"
+            ]),
+            "Never, added to earlier"
+        ]);
+    });
+
+    it("sorts by most opened, ties by Last added to, then by id", async () => {
+        const user = await createUser("alice");
+        let now = new Date("2026-03-01T10:00:00Z");
+        const service = new CollectionService(user.id, { clock: () => now });
+        const collections = await createCollectionsAddedTo(user.id, {
+            "Twice": "2019-01-01",
+            "Once, added to later": "2021-01-01",
+            "Once, added to earlier": "2020-01-01",
+            "Never, tied 1": "2020-06-01",
+            "Never, tied 2": "2020-06-01"
+        });
+        for (const name of [
+            "Twice",
+            "Once, added to later",
+            "Once, added to earlier"
+        ]) {
+            await service.recordOpen(collections[name].id);
+        }
+        now = new Date("2026-03-01T11:00:00Z");
+        await service.recordOpen(collections["Twice"].id);
+
+        expect(
+            await browseAllNames(service, { sort: "mostOpened", limit: 2 })
+        ).toEqual([
+            "Twice",
+            "Once, added to later",
+            "Once, added to earlier",
+            ...namesByIdDescending(collections, [
+                "Never, tied 1",
+                "Never, tied 2"
+            ])
+        ]);
+    });
+
+    it("counts visits less than 30 minutes apart as one Open, and later ones again", async () => {
+        const user = await createUser("alice");
+        let now = new Date("2026-03-01T10:00:00Z");
+        const service = new CollectionService(user.id, { clock: () => now });
+        const collections = await createCollectionsAddedTo(user.id, {
+            "Revisited within the window": "2021-01-01",
+            "Revisited after the window": "2020-01-01"
+        });
+        const within = collections["Revisited within the window"].id;
+        const after = collections["Revisited after the window"].id;
+        const mostOpened = () =>
+            browseAllNames(service, { sort: "mostOpened" });
+
+        await service.recordOpen(within);
+        await service.recordOpen(after);
+        // Each visit extends the Open by another 30 minutes
+        for (const time of ["10:20", "10:40", "11:00", "11:20"]) {
+            now = new Date(`2026-03-01T${time}:00Z`);
+            await service.recordOpen(within);
+        }
+        // Tied at one Open each: the one added to later first
+        expect(await mostOpened()).toEqual([
+            "Revisited within the window",
+            "Revisited after the window"
+        ]);
+
+        // Exactly 30 minutes after its previous visit
+        now = new Date("2026-03-01T10:30:00Z");
+        await service.recordOpen(after);
+        expect(await mostOpened()).toEqual([
+            "Revisited after the window",
+            "Revisited within the window"
+        ]);
+    });
+
+    it("sorts by name A to Z ignoring case, then by id", async () => {
+        const user = await createUser("alice");
+        const service = new CollectionService(user.id);
+        await createCollection(user.id, "beach");
+        await createCollection(user.id, "Zoo");
+        await createCollection(user.id, "city");
+        // Names equal ignoring case, whose pages end between them
+        const tied: Record<string, Collection> = {};
+        for (const name of ["Alps", "alps", "ALPS"]) {
+            tied[name] = await createCollection(user.id, name);
+        }
+        const tiedByIdAscending = Object.keys(tied).sort((a, b) =>
+            compareUuids(tied[a].id, tied[b].id)
+        );
+
+        expect(
+            await browseAllNames(service, { sort: "name", limit: 2 })
+        ).toEqual([...tiedByIdAscending, "beach", "city", "Zoo"]);
+    });
+
+    it("pages concatenated through cursors contain every collection exactly once, for every sort", async () => {
+        const user = await createUser("alice");
+        let now = new Date("2026-03-01T10:00:00Z");
+        const service = new CollectionService(user.id, { clock: () => now });
+        const names: string[] = [];
+        // Few distinct keys, so pages end within runs of ties
+        for (let i = 0; i < 13; i++) {
+            const name = `Collection ${i % 3}`;
+            const collection = await createCollection(user.id, `${name}-${i}`, {
+                createdAt: new Date(Date.UTC(2020, 0, 1 + (i % 2)))
+            });
+            if (i % 4 === 0) {
+                await addFile(user.id, collection.id, "a.jpg", Buffer.from("a"), {
+                    createdAt: new Date(Date.UTC(2021, 0, 1 + (i % 3)))
+                });
+            }
+            for (let open = 0; open < i % 3; open++) {
+                now = new Date(Date.UTC(2026, 2, 1 + open));
+                await service.recordOpen(collection.id);
+            }
+            names.push(collection.name);
+        }
+
+        for (const sort of COLLECTION_SORTS) {
+            const pages = await browseAllPages(service, { sort, limit: 3 });
+            const browsed = pages.flatMap((page) =>
+                page.collections.map((c) => c.name)
+            );
+            const whole = await browseAllNames(service, { sort, limit: 50 });
+
+            expect(pages.length, sort).toBe(5);
+            expect(browsed, sort).toEqual(whole);
+            expect([...browsed].sort(), sort).toEqual([...names].sort());
+        }
+    });
+
+    it("returns a seed for the random order only", async () => {
+        const user = await createUser("alice");
+        const service = new CollectionService(user.id);
+
+        expect((await service.browseCollections()).seed).toBeTruthy();
+        expect(
+            (await service.browseCollections({ sort: "name" })).seed
+        ).toBeUndefined();
+    });
+
+    it("matches Forgotten collections: last opened, or else created, more than a year ago", async () => {
+        const user = await createUser("alice");
+        let now = new Date("2024-02-01T10:00:00Z");
+        const service = new CollectionService(user.id, { clock: () => now });
+        const collections = await createCollectionsAddedTo(user.id, {
+            "Never opened, created long ago": "2019-01-01",
+            "Never opened, created a year and a day ago": "2025-02-28",
+            "Never opened, created a year minus a day ago": "2025-03-02",
+            "Opened long ago": "2019-06-01",
+            "Created long ago, opened recently": "2019-03-01"
+        });
+        await service.recordOpen(collections["Opened long ago"].id);
+        now = new Date("2026-02-01T10:00:00Z");
+        await service.recordOpen(
+            collections["Created long ago, opened recently"].id
+        );
+        now = new Date("2026-03-01T00:00:00Z");
+
+        expect(
+            await browseAllNames(service, {
+                forgotten: true,
+                sort: "lastAddedTo",
+                limit: 1
+            })
+        ).toEqual([
+            "Never opened, created a year and a day ago",
+            "Opened long ago",
+            "Never opened, created long ago"
+        ]);
+        expect(
+            await browseAllNames(service, { forgotten: false })
+        ).toHaveLength(5);
+    });
+
+    it("combines Forgotten with every sort, including random, each match exactly once", async () => {
+        const user = await createUser("alice");
+        let now = new Date("2026-03-01T10:00:00Z");
+        const service = new CollectionService(user.id, { clock: () => now });
+        const forgotten: string[] = [];
+        for (let i = 0; i < 12; i++) {
+            const old = i % 3 !== 0;
+            const collection = await createCollection(user.id, `Trip ${i}`, {
+                createdAt: new Date(Date.UTC(old ? 2020 : 2026, 0, 1 + i))
+            });
+            if (i % 4 === 0) await service.recordOpen(collection.id);
+            if (old && i % 4 !== 0) forgotten.push(collection.name);
+        }
+
+        for (const sort of COLLECTION_SORTS) {
+            const names = await browseAllNames(service, {
+                sort,
+                forgotten: true,
+                limit: 2
+            });
+            const whole = await browseAllNames(service, { sort, limit: 50 });
+
+            expect([...names].sort(), sort).toEqual([...forgotten].sort());
+            // The Forgotten collections keep their places in the sort
+            expect(names, sort).toEqual(
+                whole.filter((name) => forgotten.includes(name))
+            );
+        }
+    });
+
+    it("records Opens, sorts and matches Forgotten collections only for the requesting user", async () => {
+        const alice = await createUser("alice");
+        const bob = await createUser("bob");
+        const now = new Date("2026-03-01T10:00:00Z");
+        const clock = () => now;
+        const aliceService = new CollectionService(alice.id, { clock });
+        const bobService = new CollectionService(bob.id, { clock });
+        const alices = await createCollectionsAddedTo(alice.id, {
+            "Alice newer": "2021-01-01",
+            "Alice older": "2020-01-01"
+        });
+        await createCollectionsAddedTo(bob.id, {
+            "Bob old": "2019-01-01",
+            "Bob new": "2026-02-01"
+        });
+
+        await expect(
+            bobService.recordOpen(alices["Alice older"].id)
+        ).rejects.toThrow(NotFoundError);
+        await expect(
+            bobService.recordOpen("not-a-collection-id")
+        ).rejects.toThrow(NotFoundError);
+        // Bob's visit neither counted nor made Alice's collection recently opened
+        for (const sort of ["mostOpened", "recentlyOpened"] as const) {
+            expect(await browseAllNames(aliceService, { sort })).toEqual([
+                "Alice newer",
+                "Alice older"
+            ]);
+        }
+        expect(
+            await browseAllNames(aliceService, { forgotten: true })
+        ).toHaveLength(2);
+
+        await aliceService.recordOpen(alices["Alice older"].id);
+        for (const sort of COLLECTION_SORTS) {
+            expect(
+                [...(await browseAllNames(aliceService, { sort }))].sort(),
+                sort
+            ).toEqual(["Alice newer", "Alice older"]);
+        }
+        expect(
+            await browseAllNames(aliceService, { forgotten: true })
+        ).toEqual(["Alice newer"]);
+        expect(
+            await browseAllNames(bobService, {
+                sort: "recentlyOpened",
+                forgotten: true
+            })
+        ).toEqual(["Bob old"]);
+    });
+
+    it("rejects an unknown sort and another sort's cursor", async () => {
+        const user = await createUser("alice");
+        await createCollections(user.id, 3);
+        const service = new CollectionService(user.id);
+        const byName = await service.browseCollections({
+            sort: "name",
+            limit: 1
+        });
+
+        await expect(
+            service.browseCollections({ sort: "newest" as CollectionSort })
+        ).rejects.toThrow("Unknown sort");
+        await expect(
+            service.browseCollections({
+                sort: "lastAddedTo",
+                cursor: byName.nextCursor!
             })
         ).rejects.toThrow("Malformed cursor");
     });
@@ -1311,6 +1656,33 @@ async function createCollectionWithFiles(
         });
     }
     return collection;
+}
+
+/**
+ * Empty collections, by name, each created on its date, which is then its
+ * Last added to
+ */
+async function createCollectionsAddedTo(
+    userId: string,
+    lastAddedTo: Record<string, string>
+) {
+    const collections: Record<string, Collection> = {};
+    for (const [name, date] of Object.entries(lastAddedTo)) {
+        collections[name] = await createCollection(userId, name, {
+            createdAt: new Date(`${date}T00:00:00Z`)
+        });
+    }
+    return collections;
+}
+
+/** The named collections, ordered by id, descending */
+function namesByIdDescending(
+    collections: Record<string, Collection>,
+    names: string[]
+) {
+    return [...names].sort((a, b) =>
+        compareUuids(collections[b].id, collections[a].id)
+    );
 }
 
 async function createCollections(userId: string, count: number) {

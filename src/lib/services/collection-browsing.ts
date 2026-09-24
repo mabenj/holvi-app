@@ -8,6 +8,7 @@ import {
     COLLECTION_FILE_TYPES,
     CollectionFileType
 } from "../types/collection-file-type";
+import { COLLECTION_SORTS, CollectionSort } from "../types/collection-sort";
 import { CollectionSummary } from "../types/collection-summary";
 import { allOf, SqlFilter, tagFilter } from "./browse-filters";
 import {
@@ -17,14 +18,17 @@ import {
     UUID_PATTERN
 } from "./keyset-paging";
 
-export type CollectionSort = "random";
+export type { CollectionSort } from "../types/collection-sort";
 
 export interface BrowseCollectionsQuery {
+    /** Random by default */
     sort?: CollectionSort;
     /** Only collections that have every one of these tags */
     tags?: string[];
     /** Only collections holding these types of files; any by default */
     fileType?: CollectionFileType;
+    /** Only Forgotten collections */
+    forgotten?: boolean;
     /** Only collections whose name contains this, ignoring case */
     q?: string;
     /** Keeps the random order of an earlier page; derived from the Shuffle period when absent */
@@ -37,18 +41,105 @@ export interface BrowseCollectionsQuery {
 export interface BrowseCollectionsPage {
     collections: CollectionSummary[];
     nextCursor: string | null;
-    seed: string;
+    /** The seed of the random order; only for the random sort */
+    seed?: string;
 }
 
 const SEED_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
-const SHUFFLE_KEY_PATTERN = /^[0-9a-f]{32}$/;
-
-/** Where a page ends in the random order: the last collection's shuffle key and id */
-type RandomCursor = [shuffleKey: string, id: string];
 
 /**
- * One page of a user's collections as summaries, in random order: by a hash of
- * the collection id and the seed, with the id as the final tie-break.
+ * When a collection was last added to: when its newest file was created, or
+ * when the collection was created if it has no files
+ */
+const LAST_ADDED_TO = `COALESCE(
+    (SELECT max(f."createdAt") FROM "CollectionFiles" f WHERE f."CollectionId" = c.id),
+    c."createdAt")`;
+
+/** One key a sort orders collections by, before the next key and finally the id */
+interface SortKey {
+    /** The SQL expression of the key, over the collection `c` */
+    expression: string;
+    /** The key as text for a cursor, without losing precision, over the key's column `k` */
+    text: (k: string) => string;
+    /** The key read back from a cursor's text in the parameter */
+    fromCursor: (parameter: string) => string;
+    /** Whether a cursor's text is one this key can have made */
+    isCursorText: (text: string) => boolean;
+}
+
+/** Dates travel in cursors as UTC with microseconds, so no precision is lost */
+const dateKey = (expression: string): SortKey => ({
+    expression,
+    text: (k) =>
+        `CASE WHEN ${k} = '-infinity' THEN '-infinity'
+            ELSE to_char(${k} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END`,
+    fromCursor: (parameter) => `CAST(${parameter} AS timestamptz)`,
+    isCursorText: (text) =>
+        text === "-infinity" ||
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(text)
+});
+
+/** How a sort orders collections: by its keys, all in one direction, then by the id */
+interface CollectionOrder {
+    keys: SortKey[];
+    direction: "ASC" | "DESC";
+}
+
+const ORDERS: Record<CollectionSort, CollectionOrder> = {
+    // A hash of the collection id and the seed. "C" collation: hex keys
+    // compare byte by byte, the same in ORDER BY and the cursor.
+    random: {
+        keys: [
+            {
+                expression: `md5(c.id::text || :seed) COLLATE "C"`,
+                text: (k) => k,
+                fromCursor: (parameter) => `${parameter} COLLATE "C"`,
+                isCursorText: (text) => /^[0-9a-f]{32}$/.test(text)
+            }
+        ],
+        direction: "ASC"
+    },
+    lastAddedTo: { keys: [dateKey(LAST_ADDED_TO)], direction: "DESC" },
+    // Never-opened collections sort as opened at the beginning of time: last
+    recentlyOpened: {
+        keys: [
+            dateKey(`COALESCE(c."lastOpened", '-infinity')`),
+            dateKey(LAST_ADDED_TO)
+        ],
+        direction: "DESC"
+    },
+    mostOpened: {
+        keys: [
+            {
+                expression: `c."openCount"`,
+                text: (k) => `${k}::text`,
+                fromCursor: (parameter) => `CAST(${parameter} AS integer)`,
+                isCursorText: (text) => /^\d{1,10}$/.test(text)
+            },
+            dateKey(LAST_ADDED_TO)
+        ],
+        direction: "DESC"
+    },
+    name: {
+        keys: [
+            {
+                // citext compares names ignoring case, in ORDER BY and the cursor
+                expression: `c.name`,
+                text: (k) => `${k}::text`,
+                fromCursor: (parameter) => `CAST(${parameter} AS citext)`,
+                isCursorText: (text) => text.length <= 1024
+            }
+        ],
+        direction: "ASC"
+    }
+};
+
+/** Where a page ends: the sort it belongs to, the last collection's sort keys and its id */
+type CollectionCursor = [sort: CollectionSort, ...keysAndId: string[]];
+
+/**
+ * One page of a user's collections as summaries, in the query's order, with
+ * the collection id as the final tie-break
  */
 export async function browseCollections(
     userId: string,
@@ -56,58 +147,124 @@ export async function browseCollections(
     query: BrowseCollectionsQuery
 ): Promise<BrowseCollectionsPage> {
     const sort = query.sort ?? "random";
-    if (sort !== "random") {
+    if (!COLLECTION_SORTS.includes(sort)) {
         throw new InvalidArgumentError(`Unknown sort '${sort}'`);
     }
     const limit = pageLimit(query.limit);
     if (query.seed !== undefined && !SEED_PATTERN.test(query.seed)) {
         throw new InvalidArgumentError("Malformed seed");
     }
-    const seed = query.seed ?? deriveShuffleSeed(userId, now);
+    const seed =
+        sort === "random"
+            ? (query.seed ?? deriveShuffleSeed(userId, now))
+            : undefined;
+    const { keys, direction } = ORDERS[sort];
     const after = query.cursor
-        ? decodeCursor(query.cursor, isRandomCursor)
+        ? decodeCursor(query.cursor, (parts): parts is CollectionCursor =>
+              isCursorOf(sort, keys, parts)
+          )
         : null;
 
-    const filter = collectionFilter(query);
+    const filter = collectionFilter(query, now);
+    const keyColumns = keys.map((_, i) => `k${i}`);
+    const comparison = direction === "ASC" ? ">" : "<";
+    const afterReplacements = after
+        ? Object.fromEntries(
+              after.slice(1).map((part, i) => [`after${i}`, part])
+          )
+        : {};
 
     const db = await Database.getInstance();
-    // "C" collation: hex keys compare byte by byte, the same in ORDER BY and the cursor
-    const shuffleKey = `md5(c.id::text || :seed) COLLATE "C"`;
     const rows = (await db.select(
-        `SELECT c.id, c.name, c."createdAt", ${shuffleKey} AS "shuffleKey"
-            FROM "Collections" c
-            WHERE c."UserId" = :userId
-            ${filter.conditions}
+        `SELECT s.*, ${keyColumns
+            .map((k, i) => `${keys[i].text(`s.${k}`)} AS "${k}Text"`)
+            .join(", ")}
+            FROM (
+                SELECT c.id, c.name, c."createdAt",
+                    ${keys.map((key, i) => `${key.expression} AS ${keyColumns[i]}`).join(", ")}
+                FROM "Collections" c
+                WHERE c."UserId" = :userId
+                ${filter.conditions}
+            ) s
             ${
                 after
-                    ? `AND (${shuffleKey}, c.id) > (:afterKey COLLATE "C", CAST(:afterId AS uuid))`
+                    ? `WHERE (${keyColumns.map((k) => `s.${k}`).join(", ")}, s.id)
+                        ${comparison} (${keys
+                            .map((key, i) => key.fromCursor(`:after${i}`))
+                            .join(", ")}, CAST(:after${keys.length} AS uuid))`
                     : ""
             }
-            ORDER BY "shuffleKey", c.id
+            ORDER BY ${keyColumns.map((k) => `s.${k} ${direction}`).join(", ")}, s.id ${direction}
             LIMIT :limit`,
         {
             ...filter.replacements,
+            ...afterReplacements,
             userId,
-            seed,
-            afterKey: after?.[0],
-            afterId: after?.[1],
+            ...(seed !== undefined ? { seed } : {}),
             // One extra row tells whether another page follows
             limit: limit + 1
         }
-    )) as { id: string; name: string; createdAt: Date; shuffleKey: string }[];
+    )) as ({ id: string; name: string; createdAt: Date } & Record<
+        string,
+        unknown
+    >)[];
 
     const pageRows = rows.slice(0, limit);
     const last = pageRows.at(-1);
     const nextCursor =
         rows.length > limit && last
-            ? encodeCursor([last.shuffleKey, last.id])
+            ? encodeCursor([
+                  sort,
+                  ...keyColumns.map((k) => String(last[`${k}Text`])),
+                  last.id
+              ])
             : null;
 
     return {
         collections: await summarizeCollections(pageRows),
         nextCursor,
-        seed
+        ...(seed !== undefined ? { seed } : {})
     };
+}
+
+/** A visit this soon after the previous one extends its Open instead of counting again */
+const OPEN_WINDOW = `interval '30 minutes'`;
+
+/**
+ * Records a visit to one of the user's collections at `now`: another Open,
+ * unless it comes less than 30 minutes after the previous visit. Either way
+ * the visit becomes Last opened, so the window slides. Whether the collection
+ * was the user's.
+ */
+export async function recordOpen(
+    userId: string,
+    collectionId: string,
+    now: Date
+): Promise<boolean> {
+    const db = await Database.getInstance();
+    // One statement, so visits at the same moment cannot both count
+    const updated = await db.select(
+        `UPDATE "Collections"
+            SET "openCount" = "openCount" + CASE
+                    WHEN "lastOpened" IS NULL
+                        OR "lastOpened" <= CAST(:now AS timestamptz) - ${OPEN_WINDOW}
+                    THEN 1 ELSE 0 END,
+                "lastOpened" = :now
+            WHERE id = :collectionId AND "UserId" = :userId
+            RETURNING id`,
+        { now, collectionId, userId }
+    );
+    return updated.length === 1;
+}
+
+/** Whether a cursor's parts are the sort's, with its keys and a collection id */
+function isCursorOf(sort: CollectionSort, keys: SortKey[], parts: string[]) {
+    return (
+        parts.length === keys.length + 2 &&
+        parts[0] === sort &&
+        keys.every((key, i) => key.isCursorText(parts[i + 1])) &&
+        UUID_PATTERN.test(parts[keys.length + 1])
+    );
 }
 
 /**
@@ -223,7 +380,10 @@ export async function summarizeCollections(
 }
 
 /** The SQL conditions that narrow a browse to the query's filters, for any sort */
-function collectionFilter(query: BrowseCollectionsQuery): SqlFilter {
+function collectionFilter(
+    query: BrowseCollectionsQuery,
+    now: Date
+): SqlFilter {
     return allOf([
         tagFilter(query.tags, {
             table: `"CollectionTags"`,
@@ -231,8 +391,23 @@ function collectionFilter(query: BrowseCollectionsQuery): SqlFilter {
             owner: `c.id`
         }),
         fileTypeFilter(query.fileType ?? "any"),
+        query.forgotten ? forgottenFilter(now) : NO_FILTER,
         nameSearch(query.q)
     ]);
+}
+
+const NO_FILTER: SqlFilter = { conditions: "", replacements: {} };
+
+/**
+ * Matches Forgotten collections: last opened, or created if never opened,
+ * more than a year before now
+ */
+function forgottenFilter(now: Date): SqlFilter {
+    return {
+        conditions: `AND COALESCE(c."lastOpened", c."createdAt")
+            < CAST(:now AS timestamptz) - interval '1 year'`,
+        replacements: { now }
+    };
 }
 
 /** A search longer than this cannot match any collection name worth finding */
@@ -275,12 +450,4 @@ function fileTypeFilter(fileType: CollectionFileType): SqlFilter {
         throw new InvalidArgumentError(`Unknown file type '${fileType}'`);
     }
     return { conditions: FILE_TYPE_CONDITIONS[fileType], replacements: {} };
-}
-
-function isRandomCursor(parts: string[]): parts is RandomCursor {
-    return (
-        parts.length === 2 &&
-        SHUFFLE_KEY_PATTERN.test(parts[0]) &&
-        UUID_PATTERN.test(parts[1])
-    );
 }
