@@ -1,5 +1,12 @@
 import Router, { useRouter } from "next/router";
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import {
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useSyncExternalStore
+} from "react";
 import {
     collectionsFilterParams,
     hasQueryChanges,
@@ -55,9 +62,14 @@ async function replaceQuery(changes: QueryChanges) {
 function useCanonicalQuery(canonical: QueryChanges | null) {
     const { query } = useRouter();
     const differs = canonical !== null && hasQueryChanges(query, canonical);
+    // The latest, with its undefined values, which take parameters out
+    const latest = useRef(canonical);
+    useLayoutEffect(() => {
+        latest.current = canonical;
+    });
     const key = JSON.stringify(canonical);
     useEffect(() => {
-        if (differs) void replaceQuery(JSON.parse(key));
+        if (differs && latest.current) void replaceQuery(latest.current);
     }, [differs, key]);
 }
 

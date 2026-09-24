@@ -34,14 +34,54 @@ const TAB_HOMES: TabUrls = {
     "/settings": "/settings"
 };
 
-/** The URL each tab returns to, for this app session */
-let lastUrls: TabUrls = TAB_HOMES;
+/** Where the tab URLs are kept, for the browser tab's session, so a reload keeps them */
+const STORAGE_KEY = "holvi.tabUrls";
+
+/**
+ * The tab URLs kept in storage; each tab whose stored URL is missing or is
+ * not its own screen's goes to its own path
+ */
+export function parseTabUrls(stored: string | null): TabUrls {
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(stored ?? "{}");
+    } catch {
+        parsed = {};
+    }
+    const urls = { ...TAB_HOMES };
+    if (typeof parsed !== "object" || parsed === null) return urls;
+    for (const tab of TAB_PATHS) {
+        const url = (parsed as Record<string, unknown>)[tab];
+        if (typeof url !== "string") continue;
+        const visited = tabReturn(url);
+        if (visited?.tab === tab) urls[tab] = visited.url;
+    }
+    return urls;
+}
+
+/** The URL each tab returns to, once read from storage */
+let lastUrls: TabUrls | null = null;
 const listeners = new Set<() => void>();
+
+function readTabUrls(): TabUrls {
+    try {
+        return parseTabUrls(window.sessionStorage.getItem(STORAGE_KEY));
+    } catch {
+        // Storage can be unavailable, e.g. in some private windows
+        return TAB_HOMES;
+    }
+}
 
 function remember(url: string) {
     const visited = tabReturn(url);
-    if (!visited || lastUrls[visited.tab] === visited.url) return;
-    lastUrls = { ...lastUrls, [visited.tab]: visited.url };
+    const urls = getTabUrls();
+    if (!visited || urls[visited.tab] === visited.url) return;
+    lastUrls = { ...urls, [visited.tab]: visited.url };
+    try {
+        window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(lastUrls));
+    } catch {
+        // Without storage, the tabs return to their URLs until a reload
+    }
     listeners.forEach((listener) => listener());
 }
 
@@ -63,8 +103,9 @@ export function subscribeToTabUrls(listener: () => void) {
     };
 }
 
-/** Where each tab goes: its screen's last URL in this app session, or its own path */
-export function getTabUrls() {
+/** Where each tab goes: its screen's last URL in this browser tab's session, or its own path */
+export function getTabUrls(): TabUrls {
+    lastUrls ??= readTabUrls();
     return lastUrls;
 }
 
