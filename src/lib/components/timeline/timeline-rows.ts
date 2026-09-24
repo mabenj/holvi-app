@@ -45,3 +45,11 @@ export function timelineRows(
     }
     return rows;
 }
+
+/** The index of the row of tiles showing a file, or -1 if it is not loaded */
+export function rowOfFile(rows: TimelineRow[], fileId: string) {
+    return rows.findIndex(
+        (row) =>
+            row.kind === "files" && row.files.some((file) => file.id === fileId)
+    );
+}

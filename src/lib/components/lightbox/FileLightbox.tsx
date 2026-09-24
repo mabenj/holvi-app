@@ -6,8 +6,8 @@ import Icon from "@mdi/react";
 import PhotoSwipe from "photoswipe";
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { revealTile, tileOf, tileThumbnail } from "./file-tiles";
 import {
-    FILE_TILE_ATTRIBUTE,
     FileSlideData,
     formatTakenAt,
     isNearEnd,
@@ -88,7 +88,7 @@ export default function FileLightbox({
                 leave();
             }
         } else if (!photoId && pswp && !pswp.isDestroying) {
-            closedByHistory.add(pswp);
+            historyLeftAlready.add(pswp);
             pswp.close();
         }
     }, [photoId, files, leave]);
@@ -107,7 +107,17 @@ export default function FileLightbox({
         }
     }, [files.length]);
 
-    useEffect(() => () => pswpRef.current?.destroy(), []);
+    // Leaving the page, e.g. for "Go to collection", has left the lightbox's
+    // history entry already: going back as well would undo it
+    useEffect(
+        () => () => {
+            const pswp = pswpRef.current;
+            if (!pswp) return;
+            historyLeftAlready.add(pswp);
+            pswp.destroy();
+        },
+        []
+    );
 
     const file = ui ? files[ui.index] : undefined;
     if (!ui || !file) {
@@ -136,8 +146,8 @@ export default function FileLightbox({
     );
 }
 
-/** Lightboxes closing because history left their entry, not by themselves */
-const closedByHistory = new WeakSet<PhotoSwipe>();
+/** Lightboxes whose history entry is already gone (Back, or the page was left), so closing must not go back again */
+const historyLeftAlready = new WeakSet<PhotoSwipe>();
 
 function openLightbox(
     index: number,
@@ -222,7 +232,7 @@ function openLightbox(
         // The closing zoom needs the active file's tile on screen, however
         // far the swipes went
         if (file) revealTile(file.id);
-        if (!closedByHistory.has(pswp)) latest.current.leave();
+        if (!historyLeftAlready.has(pswp)) latest.current.leave();
     });
     pswp.on("destroy", () => {
         const file = files()[pswp.currIndex];
@@ -232,21 +242,6 @@ function openLightbox(
 
     pswp.init();
     return pswp;
-}
-
-function tileOf(fileId: string) {
-    return document.querySelector<HTMLElement>(
-        `[${FILE_TILE_ATTRIBUTE}="${CSS.escape(fileId)}"]`
-    );
-}
-
-function tileThumbnail(fileId: string) {
-    return tileOf(fileId)?.querySelector<HTMLElement>("img") ?? null;
-}
-
-/** Scrolls a file's tile into view, clear of the bars (the tiles' scroll margins) */
-function revealTile(fileId: string) {
-    tileOf(fileId)?.scrollIntoView({ block: "nearest", behavior: "instant" });
 }
 
 /**

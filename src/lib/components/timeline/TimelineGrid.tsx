@@ -6,13 +6,23 @@ import {
 import type { Selection } from "@/lib/hooks/useSelection";
 import { useSelectionGestures } from "@/lib/hooks/useSelectionGestures";
 import { FileSummary } from "@/lib/types/file-summary";
-import { Box, Skeleton, Text } from "@chakra-ui/react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Box, chakra, Skeleton, Text } from "@chakra-ui/react";
+import {
+    memo,
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState
+} from "react";
 import FileTile from "../grid/FileTile";
 import { SELECTABLE_GRID } from "../grid/selectable-grid";
+import { revealTile } from "../lightbox/file-tiles";
 import { FILE_TILE_ATTRIBUTE } from "../lightbox/lightbox-slides";
 import SelectionMark from "../selection/SelectionMark";
-import { TimelineRow, timelineRows } from "./timeline-rows";
+import { TAB_BAR_HEIGHT } from "../theme/system";
+import { rowOfFile, TimelineRow, timelineRows } from "./timeline-rows";
 
 /** Height of a month header, in pixels */
 const MONTH_HEIGHT = 40;
@@ -26,6 +36,14 @@ interface TimelineGridProps {
     loadingMore?: boolean;
     /** Where files can be selected: a long-press starts selecting, and taps then toggle files */
     selection?: Selection;
+    /** Tapping a file's tile outside selection, e.g. to open it in the lightbox */
+    onOpen?: (fileId: string) => void;
+    /**
+     * The file open in the lightbox. Its tile stays rendered and in view
+     * however far the lightbox moves from what was scrolled to, so closing
+     * can zoom back into it.
+     */
+    activeFileId?: string | null;
 }
 
 /**
@@ -36,7 +54,9 @@ interface TimelineGridProps {
 export default function TimelineGrid({
     files,
     loadingMore = false,
-    selection
+    selection,
+    onOpen,
+    activeFileId = null
 }: TimelineGridProps) {
     const layout = useResolvedGridLayout();
     const columns = layout?.columns ?? 1;
@@ -116,6 +136,30 @@ export default function TimelineGrid({
         onScroll
     );
 
+    // The last file open in the lightbox stays pinned after it closes, so the
+    // closing zoom still has its tile while history catches up
+    const [pinnedFileId, setPinnedFileId] = useState(activeFileId);
+    if (activeFileId && activeFileId !== pinnedFileId) {
+        setPinnedFileId(activeFileId);
+    }
+    const pinnedRow = useMemo(
+        () => (pinnedFileId ? rowOfFile(rows, pinnedFileId) : -1),
+        [rows, pinnedFileId]
+    );
+    // Follows the lightbox: scrolling the active file's tile into view brings
+    // the rows around it along, and leaves the Timeline there once it closes
+    useLayoutEffect(() => {
+        if (activeFileId && pinnedRow >= 0) revealTile(activeFileId);
+    }, [activeFileId, pinnedRow]);
+    // The rows in reach of the viewport, and the pinned one wherever it is
+    const rendered = useMemo(() => {
+        const indices = Array.from({ length: end - start }, (_, i) => start + i);
+        if (pinnedRow >= 0 && (pinnedRow < start || pinnedRow >= end)) {
+            indices.push(pinnedRow);
+        }
+        return indices;
+    }, [start, end, pinnedRow]);
+
     if (!layout) {
         return null;
     }
@@ -140,18 +184,18 @@ export default function TimelineGrid({
                 // The first month's own header sits under the sticky one
                 mt={`-${MONTH_HEIGHT}px`}
                 h={`${totalHeight}px`}>
-                {heights.slice(start, end).map((height, i) => {
-                    const index = start + i;
+                {rendered.map((index) => {
                     const row = rows[index];
                     return (
                         <VirtualRow
                             key={row?.key ?? "loading"}
                             row={row}
                             top={offsets[index]}
-                            height={height}
+                            height={heights[index]}
                             columns={columns}
                             selecting={selecting}
                             isSelected={isSelected}
+                            onOpen={onOpen}
                         />
                     );
                 })}
@@ -168,6 +212,7 @@ interface VirtualRowProps {
     columns: number;
     selecting: boolean;
     isSelected: ((fileId: string) => boolean) | undefined;
+    onOpen?: (fileId: string) => void;
 }
 
 /**
@@ -181,6 +226,7 @@ function sameRow(a: VirtualRowProps, b: VirtualRowProps) {
         a.columns === b.columns &&
         a.selecting === b.selecting &&
         a.isSelected === b.isSelected &&
+        a.onOpen === b.onOpen &&
         a.row?.key === b.row?.key &&
         (a.row?.kind === "files" ? a.row.files.length : 0) ===
             (b.row?.kind === "files" ? b.row.files.length : 0)
@@ -194,7 +240,8 @@ const VirtualRow = memo(function VirtualRow({
     height,
     columns,
     selecting,
-    isSelected
+    isSelected,
+    onOpen
 }: VirtualRowProps) {
     return (
         <Box
@@ -217,10 +264,27 @@ const VirtualRow = memo(function VirtualRow({
                     h={`${height - GAP}px`}>
                     {row
                         ? row.files.map((file) => (
-                              <Box
+                              <chakra.button
                                   key={file.id}
+                                  type="button"
+                                  aria-label={file.name}
+                                  aria-pressed={
+                                      selecting
+                                          ? (isSelected?.(file.id) ?? false)
+                                          : undefined
+                                  }
                                   {...{ [FILE_TILE_ATTRIBUTE]: file.id }}
-                                  position="relative">
+                                  display="block"
+                                  position="relative"
+                                  h="100%"
+                                  cursor="pointer"
+                                  // Scrolling a tile into view keeps it clear
+                                  // of the sticky month and the tab bar
+                                  scrollMarginTop={`calc(${MONTH_HEIGHT}px + env(safe-area-inset-top))`}
+                                  scrollMarginBottom={`calc(${TAB_BAR_HEIGHT} + env(safe-area-inset-bottom))`}
+                                  // While selecting, the selection gestures
+                                  // take the click, so it toggles instead
+                                  onClick={() => onOpen?.(file.id)}>
                                   <FileTile file={file} />
                                   {selecting && (
                                       <SelectionMark
@@ -229,7 +293,7 @@ const VirtualRow = memo(function VirtualRow({
                                           }
                                       />
                                   )}
-                              </Box>
+                              </chakra.button>
                           ))
                         : Array.from({ length: columns }, (_, i) => (
                               <Skeleton key={i} h="100%" rounded="none" />
