@@ -48,7 +48,7 @@ export default function FileGrid({
             gap="2px"
             css={HOLDABLE_GRID}>
             {files.map((file) => (
-                <GridTile
+                <FileGridTile
                     key={file.id}
                     file={file}
                     height={tileHeights}
@@ -65,7 +65,7 @@ export default function FileGrid({
     );
 }
 
-interface GridTileProps {
+interface FileGridTileProps {
     file: FileSummary;
     height: string[];
     selecting: boolean;
@@ -76,14 +76,14 @@ interface GridTileProps {
 }
 
 /** One file's tile; only a tile that changes re-renders, e.g. the cycling one */
-const GridTile = memo(function GridTile({
+const FileGridTile = memo(function FileGridTile({
     file,
     height,
     selecting,
     selected,
     frame,
     onOpen
-}: GridTileProps) {
+}: FileGridTileProps) {
     return (
         <chakra.button
             type="button"

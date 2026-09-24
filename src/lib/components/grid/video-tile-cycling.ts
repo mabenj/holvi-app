@@ -1,7 +1,7 @@
 import type { ScrubPreviewLayout } from "@/lib/types/scrub-preview";
 
 /** How many of its Scrub preview's frames a cycling video tile shows */
-export const CYCLED_SCRUB_FRAMES = 10;
+const CYCLED_SCRUB_FRAMES = 10;
 
 /**
  * The Scrub preview frames a cycling video tile shows, in order: the middle
@@ -20,17 +20,17 @@ export function cycledScrubFrames(layout: ScrubPreviewLayout): number[] {
 }
 
 /**
- * Which Scrub preview frame a video tile shows at a frame of its cycling (see
- * `useTileCycling`), where it loops through its thumbnail and then `frames`:
- * null for the thumbnail, which it also shows while still
+ * Which Scrub preview frame a video tile shows at a step of its cycling (the
+ * `frame` of `useTileCycling`), where it loops through its thumbnail and then
+ * `previewFrames`: null for the thumbnail, which it also shows while still
  */
 export function cycledScrubFrame(
-    frames: readonly number[],
-    cycleFrame: number | null
+    previewFrames: readonly number[],
+    cycleStep: number | null
 ): number | null {
-    if (cycleFrame === null || frames.length === 0) return null;
-    const step = cycleFrame % (frames.length + 1);
-    return step === 0 ? null : frames[step - 1];
+    if (cycleStep === null || previewFrames.length === 0) return null;
+    const step = cycleStep % (previewFrames.length + 1);
+    return step === 0 ? null : previewFrames[step - 1];
 }
 
 /** A box's size in pixels */
@@ -42,11 +42,12 @@ export interface BoxSize {
 /**
  * How to show one frame of a Scrub preview's image as a box's background so
  * that it fills the box, cropped and centred like `object-fit: cover`: the
- * image's `background-size` and `background-position`, in pixels
+ * image's `background-size` and `background-position`, in pixels, for the
+ * frame at index `previewFrame`
  */
 export function scrubFrameCover(
     layout: ScrubPreviewLayout,
-    frame: number,
+    previewFrame: number,
     box: BoxSize
 ) {
     const scale = Math.max(
@@ -55,8 +56,8 @@ export function scrubFrameCover(
     );
     const width = layout.tileWidth * scale;
     const height = layout.tileHeight * scale;
-    const column = frame % layout.columns;
-    const row = Math.floor(frame / layout.columns);
+    const column = previewFrame % layout.columns;
+    const row = Math.floor(previewFrame / layout.columns);
     return {
         size: { width: layout.columns * width, height: layout.rows * height },
         position: {
