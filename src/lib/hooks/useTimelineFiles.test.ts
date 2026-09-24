@@ -4,7 +4,16 @@ import type { FileSummary } from "../types/file-summary";
 import { FetchTimelinePage, TimelineBrowse } from "./useTimelineFiles";
 
 function file(id: string, collectionId = "c1"): FileSummary {
-    return { id, collectionId } as FileSummary;
+    return {
+        id,
+        collectionId,
+        name: `${id}.jpg`,
+        mimeType: "image/jpeg",
+        src: `/src/${id}`,
+        thumbnailSrc: `/thumb/${id}`,
+        timestamp: 0,
+        tags: []
+    };
 }
 
 /** A fake Timeline API: two pages of files per tag filter, answered on demand */
