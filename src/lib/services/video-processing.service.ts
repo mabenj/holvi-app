@@ -1,7 +1,7 @@
 import Database from "@/db/Database";
 import { CollectionFile } from "@/db/models/CollectionFile";
 import { createWriteStream } from "fs";
-import { mkdir, rename, rm } from "fs/promises";
+import { mkdir, rename, rm, rmdir } from "fs/promises";
 import path from "path";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
@@ -307,12 +307,25 @@ async function processVideo(
         ref.collectionId,
         ref.fileId
     );
-    // Neither is worth keeping unless the result is recorded
-    const deleteOutputs = () =>
-        Promise.all([
+    // Neither is worth keeping unless the result is recorded. A video deleted
+    // while it was processed may have taken its collection's directory with
+    // it, which storing the outputs made again: those directories go too once
+    // they are empty.
+    const deleteOutputs = async () => {
+        await Promise.all([
             rm(renditionPath, { force: true }),
             rm(scrubPreviewPath, { force: true })
         ]);
+        const collectionDir = path.dirname(path.dirname(renditionPath));
+        for (const dir of [
+            path.dirname(renditionPath),
+            path.dirname(scrubPreviewPath),
+            collectionDir
+        ]) {
+            // Fails, and so keeps the directory, unless it is empty
+            await rmdir(dir).catch(() => {});
+        }
+    };
     let storedRendition = false;
     try {
         await rm(workDir, { recursive: true, force: true });
@@ -369,18 +382,25 @@ async function processVideo(
         );
     } catch (error) {
         logger.error(`Could not process video '${ref.fileId}'`, error);
-        await deleteOutputs().catch(() => {});
-        await recordResult(ref.fileId, {
+        // A Rendition, stored now or by an earlier run, keeps a video that is
+        // not web-safe playable even though its processing failed
+        await rm(scrubPreviewPath, { force: true }).catch(() => {});
+        const recorded = await recordResult(ref.fileId, {
             processingStatus: "failed",
             processingError: getErrorMessage(error),
-            hasRendition: false,
-            scrubPreviewLayout: null
-        }).catch((updateError) =>
+            scrubPreviewLayout: null,
+            ...(storedRendition ? { hasRendition: true } : {})
+        }).catch((updateError) => {
             logger.error(
                 `Could not mark video '${ref.fileId}' failed`,
                 updateError
-            )
-        );
+            );
+            return true;
+        });
+        if (!recorded) {
+            // Deleted while it was being processed
+            await deleteOutputs().catch(() => {});
+        }
     } finally {
         await rm(workDir, { recursive: true, force: true }).catch((error) =>
             logger.error(`Could not delete '${workDir}'`, error)
@@ -418,12 +438,9 @@ async function recordResult(
     fileId: string,
     fields: Pick<
         CollectionFile,
-        | "processingStatus"
-        | "processingError"
-        | "hasRendition"
-        | "scrubPreviewLayout"
+        "processingStatus" | "processingError" | "scrubPreviewLayout"
     > &
-        Partial<Pick<CollectionFile, "takenAt">>
+        Partial<Pick<CollectionFile, "hasRendition" | "takenAt">>
 ) {
     const db = await Database.getInstance();
     const [updated] = await db.models.CollectionFile.update(fields, {
