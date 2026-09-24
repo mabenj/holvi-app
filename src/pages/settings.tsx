@@ -2,6 +2,7 @@ import { signOut } from "@/lib/client/auth";
 import { SignedInPageProps, signedInPageProps } from "@/lib/common/signed-in-page";
 import { getErrorMessage } from "@/lib/common/utilities";
 import AppShell from "@/lib/components/app-shell/AppShell";
+import Activity from "@/lib/components/settings/Activity";
 import Backups from "@/lib/components/settings/Backups";
 import VideoProcessing from "@/lib/components/settings/VideoProcessing";
 import ConfirmationSurface from "@/lib/components/surfaces/ConfirmationSurface";
@@ -30,6 +31,9 @@ export default function SettingsTab({ user }: SignedInPageProps) {
     return (
         <AppShell title="Settings">
             <Stack gap="8" px="4" py="4" maxW="lg">
+                <Section title="Activity">
+                    <Activity />
+                </Section>
                 <Section title="Backups">
                     <Backups />
                 </Section>

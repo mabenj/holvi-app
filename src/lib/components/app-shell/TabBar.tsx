@@ -1,4 +1,4 @@
-import { Box, chakra, Flex, Text } from "@chakra-ui/react";
+import { Box, chakra, Flex, Text, VisuallyHidden } from "@chakra-ui/react";
 import {
     mdiCog,
     mdiCogOutline,
@@ -10,6 +10,7 @@ import {
 import Icon from "@mdi/react";
 import NextLink from "next/link";
 import { useRouter } from "next/router";
+import { useActivity } from "../../hooks/useActivity";
 import { TAB_BAR_HEIGHT } from "../theme/system";
 
 const TabLink = chakra(NextLink);
@@ -20,6 +21,8 @@ interface Tab {
     icon: string;
     activeIcon: string;
     isActive: (pathname: string) => boolean;
+    /** Shows the badge while the user has background work running */
+    badgesActivity?: boolean;
 }
 
 const TABS: Tab[] = [
@@ -44,6 +47,7 @@ const TABS: Tab[] = [
         href: "/settings",
         icon: mdiCogOutline,
         activeIcon: mdiCog,
+        badgesActivity: true,
         isActive: (pathname) => pathname.startsWith("/settings")
     }
 ];
@@ -55,6 +59,8 @@ interface TabBarProps {
 
 export default function TabBar({ onActiveTabReselect }: TabBarProps) {
     const { pathname } = useRouter();
+    const { activity } = useActivity();
+    const working = activity?.active ?? false;
 
     return (
         <Box
@@ -75,6 +81,7 @@ export default function TabBar({ onActiveTabReselect }: TabBarProps) {
                     const active = tab.isActive(pathname);
                     // Only the tab's own screen: from a collection page, Collections goes back
                     const reselected = pathname === tab.href;
+                    const badged = working && tab.badgesActivity;
                     return (
                         <TabLink
                             key={tab.href}
@@ -98,16 +105,37 @@ export default function TabBar({ onActiveTabReselect }: TabBarProps) {
                                 outlineColor: "colorPalette.focusRing",
                                 outlineOffset: "-2px"
                             }}>
-                            <Icon
-                                path={active ? tab.activeIcon : tab.icon}
-                                size="24px"
-                                aria-hidden
-                            />
+                            <Box position="relative">
+                                <Icon
+                                    path={active ? tab.activeIcon : tab.icon}
+                                    size="24px"
+                                    aria-hidden
+                                />
+                                {badged && (
+                                    <Box
+                                        data-testid="activity-badge"
+                                        position="absolute"
+                                        top="-1px"
+                                        right="-3px"
+                                        boxSize="10px"
+                                        rounded="full"
+                                        bg="colorPalette.solid"
+                                        colorPalette="blue"
+                                        borderWidth="2px"
+                                        borderColor="bg.panel"
+                                    />
+                                )}
+                            </Box>
                             <Text
                                 textStyle="2xs"
                                 fontWeight={active ? "semibold" : "medium"}>
                                 {tab.label}
                             </Text>
+                            {badged && (
+                                <VisuallyHidden>
+                                    , background work running
+                                </VisuallyHidden>
+                            )}
                         </TabLink>
                     );
                 })}
