@@ -272,6 +272,7 @@ export class UserFileSystem {
           thumbnailWidth,
           thumbnailHeight,
           durationInSeconds,
+          captureDate,
         } = await this.processVideo(filepath, thumbnailPath);
         processed = {
           ...processed,
@@ -279,7 +280,8 @@ export class UserFileSystem {
           height,
           thumbnailWidth,
           thumbnailHeight,
-          takenAt: file.lastModified || undefined,
+          // When it was shot, so it lands in the right place on the Timeline straight away
+          takenAt: captureDate || file.lastModified || undefined,
           durationInSeconds,
         };
       } else {
@@ -313,9 +315,8 @@ export class UserFileSystem {
 
   private async processVideo(videoPath: string, thumbnailPath: string) {
     const UNSUPPORTED_FORMATS = ["avi"];
-    const { durationInSeconds, format } = await VideoHelper.getVideoMetadata(
-      videoPath
-    );
+    const { durationInSeconds, format, captureDate } =
+      await VideoHelper.getVideoMetadata(videoPath);
 
     if (format && UNSUPPORTED_FORMATS.includes(format)) {
       await VideoHelper.convertToMov(videoPath);
@@ -330,6 +331,7 @@ export class UserFileSystem {
       thumbnailWidth,
       thumbnailHeight,
       durationInSeconds,
+      captureDate,
     };
   }
 

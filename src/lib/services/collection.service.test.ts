@@ -12,6 +12,7 @@ import {
     FileMetadata
 } from "../../../test/fixtures";
 import { pngImage, uploadRequest } from "../../../test/upload-fixtures";
+import { generateVideo } from "../../../test/video-fixtures";
 import { Collection } from "@/db/models/Collection";
 import { NotFoundError } from "../common/errors";
 import { COLLECTION_SORTS, CollectionSort } from "../types/collection-sort";
@@ -1202,6 +1203,45 @@ describe("Creating collections and uploading files (integration)", () => {
         expect(await service.getCollection(trip.id)).toMatchObject({
             imageCount: 2
         });
+    });
+
+    it("dates an uploaded video by its capture date rather than the browser's last-modified time, in its collection and on the Timeline", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const service = new CollectionService(user.id);
+        const lastModified = new Date("2024-06-01T12:00:00.000Z");
+        const captureDate = new Date("2019-07-14T08:30:15.000Z");
+        const webSafe = { videoCodec: "h264", audio: "aac", container: "mp4" } as const;
+        await service.uploadFiles(
+            trip.id,
+            uploadRequest([
+                {
+                    name: "shot.mp4",
+                    content: await generateVideo({ ...webSafe, captureDate }),
+                    mimeType: "video/mp4",
+                    lastModified
+                },
+                {
+                    name: "undated.mp4",
+                    content: await generateVideo(webSafe),
+                    mimeType: "video/mp4",
+                    lastModified
+                }
+            ])
+        );
+
+        const expected = [
+            { name: "undated.mp4", timestamp: lastModified.getTime() },
+            { name: "shot.mp4", timestamp: captureDate.getTime() }
+        ];
+        const dated = (files: { name: string; timestamp: number }[]) =>
+            files.map(({ name, timestamp }) => ({ name, timestamp }));
+        expect(dated((await service.browseFiles(trip.id)).files)).toEqual(
+            expected
+        );
+        expect(dated((await service.browseTimeline({})).files)).toEqual(
+            expected
+        );
     });
 });
 

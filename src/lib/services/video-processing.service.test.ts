@@ -21,6 +21,7 @@ import {
 import { getTestDatabase, resetDatabase } from "../../../test/database";
 import {
     addVideo,
+    CaptureDateTags,
     generateVideo,
     hashVideoStream,
     probeVideo,
@@ -67,6 +68,15 @@ async function playbackSrcOf(userId: string, collectionId: string, fileId: strin
         collectionId
     );
     return files.find((file) => file.id === fileId)?.playbackSrc;
+}
+
+/** A file's date as the Timeline shows it: when it was taken, or else when it was created */
+async function timelineDateOf(userId: string, fileId: string) {
+    const { files } = await new CollectionService(userId).browseTimeline({
+        limit: 200
+    });
+    const timestamp = files.find((file) => file.id === fileId)?.timestamp;
+    return timestamp === undefined ? undefined : new Date(timestamp);
 }
 
 async function scrubPreviewOf(userId: string, collectionId: string, fileId: string) {
@@ -663,5 +673,124 @@ describe("VideoProcessingService (integration)", () => {
         for (const video of [first, last]) {
             expect(await scrubPreviewOf(user.id, trip.id, video.id)).toBeDefined();
         }
+    });
+});
+
+describe("Video capture dates (integration)", () => {
+    beforeEach(async () => {
+        await resetDatabase();
+    });
+
+    const webSafe = { videoCodec: "h264", audio: "aac", container: "mp4" } as const;
+    /** When the browser said the file was last modified, as uploads store it */
+    const lastModified = new Date("2024-06-01T12:00:00.000Z");
+
+    it("sets a video's taken-at time to its capture date", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const captureDate = new Date("2019-07-14T08:30:15.000Z");
+        const video = await addVideo(
+            user.id,
+            trip.id,
+            "clip",
+            { ...webSafe, captureDate },
+            { takenAt: lastModified }
+        );
+
+        await processVideos(new VideoProcessingService(user.id));
+
+        expect(await timelineDateOf(user.id, video.id)).toEqual(captureDate);
+    });
+
+    it("prefers the container's capture date to the video stream's, and uses the video stream's when the container has none", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const containerDate = new Date("2019-01-02T03:04:05.000Z");
+        const videoStreamDate = new Date("2018-03-04T05:06:07.000Z");
+        const both = await addVideo(
+            user.id,
+            trip.id,
+            "both",
+            {
+                ...webSafe,
+                captureDateTags: {
+                    container: containerDate,
+                    videoStream: videoStreamDate
+                }
+            },
+            { takenAt: lastModified }
+        );
+        const streamOnly = await addVideo(
+            user.id,
+            trip.id,
+            "stream-only",
+            { ...webSafe, captureDateTags: { videoStream: videoStreamDate } },
+            { takenAt: lastModified }
+        );
+
+        await processVideos(new VideoProcessingService(user.id));
+
+        expect(await timelineDateOf(user.id, both.id)).toEqual(containerDate);
+        expect(await timelineDateOf(user.id, streamOnly.id)).toEqual(
+            videoStreamDate
+        );
+    });
+
+    it.each<[string, CaptureDateTags | undefined]>([
+        ["no capture date", undefined],
+        ["an unparseable capture date", { container: "not a date" }],
+        [
+            "the Unix epoch as a placeholder",
+            { container: new Date("1970-01-01T00:00:00.000Z") }
+        ],
+        [
+            "the Unix epoch at midnight in a time zone west of UTC",
+            { container: new Date("1970-01-01T05:00:00.000Z") }
+        ],
+        [
+            "the DOS epoch as a placeholder",
+            { container: new Date("1980-01-01T00:00:00.000Z") }
+        ]
+    ])(
+        "leaves the taken-at time of a video with %s unchanged",
+        async (_, captureDateTags) => {
+            const user = await createUser("alice");
+            const trip = await createCollection(user.id, "Trip");
+            const video = await addVideo(
+                user.id,
+                trip.id,
+                "clip",
+                { ...webSafe, captureDateTags },
+                { takenAt: lastModified }
+            );
+
+            const status = await processVideos(new VideoProcessingService(user.id));
+
+            expect(status).toMatchObject({ done: 1 });
+            expect(await timelineDateOf(user.id, video.id)).toEqual(lastModified);
+        }
+    );
+
+    it("uses the video stream's capture date when the container's is a placeholder", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const videoStreamDate = new Date("2018-03-04T05:06:07.000Z");
+        const video = await addVideo(
+            user.id,
+            trip.id,
+            "clip",
+            {
+                ...webSafe,
+                captureDateTags: {
+                    container: new Date("1970-01-01T00:00:00.000Z"),
+                    videoStream: videoStreamDate
+                }
+            },
+            { takenAt: lastModified }
+        );
+
+        await processVideos(new VideoProcessingService(user.id));
+
+        expect(await timelineDateOf(user.id, video.id)).toEqual(videoStreamDate);
     });
 });
