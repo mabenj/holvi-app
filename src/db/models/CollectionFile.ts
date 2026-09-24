@@ -107,6 +107,9 @@ export class CollectionFile extends Model<
             },
             {
                 sequelize,
+                // Named explicitly: the production build minifies class names
+                modelName: "CollectionFile",
+                tableName: "CollectionFiles",
                 indexes: [
                     // Collection summaries read each collection's first files
                     // by name, and a collection page pages through them by name

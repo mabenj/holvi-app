@@ -103,7 +103,10 @@ export class BackupJob extends Model<
                 updatedAt: DataTypes.DATE
             },
             {
-                sequelize
+                sequelize,
+                // Named explicitly: the production build minifies class names
+                modelName: "BackupJob",
+                tableName: "BackupJobs"
             }
         );
     }
