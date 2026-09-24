@@ -2,17 +2,20 @@ import { useMemo, useSyncExternalStore } from "react";
 import {
     CollectionsFilter,
     CollectionsPage,
-    collectionsFilterKey,
+    collectionsQueryKey,
     fetchCollectionsPage,
     NO_COLLECTIONS_FILTER
 } from "../client/collections";
 import { getErrorMessage } from "../common/utilities";
+import type { CollectionSort } from "../types/collection-sort";
 import type { CollectionSummary } from "../types/collection-summary";
 
 export interface CollectionsBrowseState {
+    /** The order the tab shows collections in; random by default */
+    sort: CollectionSort;
     /** What the tab shows: the collections that match it */
     filter: CollectionsFilter;
-    /** The filter's loaded pages */
+    /** The sort and filter's loaded pages */
     pages: CollectionsPage[];
     /** A page is being fetched */
     loading: boolean;
@@ -28,6 +31,7 @@ export interface CollectionsBrowseState {
 }
 
 const INITIAL_STATE: CollectionsBrowseState = {
+    sort: "random",
     filter: NO_COLLECTIONS_FILTER,
     pages: [],
     loading: false,
@@ -36,22 +40,23 @@ const INITIAL_STATE: CollectionsBrowseState = {
     featured: []
 };
 
-/** Pages of this many other filters stay cached, the most recently shown ones */
-const CACHED_FILTERS = 10;
+/** Pages of this many other queries stay cached, the most recently shown ones */
+const CACHED_QUERIES = 10;
 
 /**
- * The Collections tab's filter, its loaded pages, the Shuffle seed they were
- * fetched with and where the grid was scrolled to. Every filter keeps its own
- * pages, so coming back to it shows them again instead of starting over. One
- * seed serves every filter, so they all share one random order. Kept in app
- * memory only, so a full reload starts from the current Shuffle period's order,
- * while going back from a collection returns to the same filter, pages and place.
+ * The Collections tab's sort and filter, their loaded pages, the Shuffle seed
+ * they were fetched with and where the grid was scrolled to. Every query (a
+ * sort with a filter) keeps its own pages, so coming back to it shows them
+ * again instead of starting over. One seed serves every filter, so they all
+ * share one random order. Kept in app memory only, so a full reload starts
+ * from the default sort and the current Shuffle period's order, while going
+ * back from a collection returns to the same query, pages and place.
  */
 class CollectionsBrowse {
     private state = INITIAL_STATE;
     /** Sent with every page after the first, so one scroll keeps one order */
     private seed: string | undefined;
-    /** The loaded pages of filters other than the current one, by filter key */
+    /** The loaded pages of queries other than the current one, by query key */
     private readonly cachedPages = new Map<string, CollectionsPage[]>();
     private request: AbortController | null = null;
     /** Where the grid was scrolled to when the user left it, until it is restored */
@@ -81,14 +86,25 @@ class CollectionsBrowse {
 
     /**
      * Changes the filter, e.g. only its search, and shows the collections that
-     * match: the new filter's cached pages if it has any, or else its first page
+     * match: the new query's cached pages if it has any, or else its first page
      */
     changeFilter = (changes: Partial<CollectionsFilter>) => {
-        const filter = { ...this.state.filter, ...changes };
-        const key = collectionsFilterKey(filter);
-        const currentKey = collectionsFilterKey(this.state.filter);
+        this.show(this.state.sort, { ...this.state.filter, ...changes });
+    };
+
+    /** Shows the collections in another order: its cached pages if it has any, or else its first page */
+    changeSort = (sort: CollectionSort) => {
+        this.show(sort, this.state.filter);
+    };
+
+    private show(sort: CollectionSort, filter: CollectionsFilter) {
+        const key = collectionsQueryKey(sort, filter);
+        const currentKey = collectionsQueryKey(
+            this.state.sort,
+            this.state.filter
+        );
         if (key === currentKey) {
-            this.update({ filter });
+            this.update({ sort, filter });
             return;
         }
         this.abort();
@@ -97,13 +113,14 @@ class CollectionsBrowse {
         }
         const pages = this.cachedPages.get(key) ?? [];
         this.cachedPages.delete(key);
-        // The least recently shown filters go first
+        // The least recently shown queries go first
         const oldestFirst = Array.from(this.cachedPages.keys());
         oldestFirst
-            .slice(0, Math.max(0, oldestFirst.length - CACHED_FILTERS))
+            .slice(0, Math.max(0, oldestFirst.length - CACHED_QUERIES))
             .forEach((oldKey) => this.cachedPages.delete(oldKey));
         this.scrollPosition = null;
         this.update({
+            sort,
             filter,
             pages,
             loading: false,
@@ -111,7 +128,7 @@ class CollectionsBrowse {
             error: null
         });
         this.loadFirstPage();
-    };
+    }
 
     /** Remembers where the grid is scrolled to, as the user leaves it */
     saveScrollPosition = (scrollY: number) => {
@@ -147,21 +164,21 @@ class CollectionsBrowse {
         if (this.state.featured.length > 0) this.update({ featured: [] });
     };
 
-    /** Shows the collection's new summary wherever it is loaded, under every filter, e.g. after an edit */
+    /** Shows the collection's new summary wherever it is loaded, under every query, e.g. after an edit */
     replace = (collection: CollectionSummary) => {
         this.changeCollections((collections) =>
             collections.map((c) => (c.id === collection.id ? collection : c))
         );
     };
 
-    /** Takes a deleted collection out of every filter's loaded pages */
+    /** Takes a deleted collection out of every query's loaded pages */
     remove = (collectionId: string) => {
         this.changeCollections((collections) =>
             collections.filter((c) => c.id !== collectionId)
         );
     };
 
-    /** Applies a change to the collections of the current pages, every cached filter's pages and the featured ones */
+    /** Applies a change to the collections of the current pages, every cached query's pages and the featured ones */
     private changeCollections(
         change: (collections: CollectionSummary[]) => CollectionSummary[]
     ) {
@@ -190,7 +207,7 @@ class CollectionsBrowse {
         this.request?.abort();
     };
 
-    /** Drops the held seed and every filter's pages, and starts again from the first page */
+    /** Drops the held seed and every query's pages, and starts again from the first page */
     refresh = () => {
         this.abort();
         this.seed = undefined;
@@ -209,12 +226,18 @@ class CollectionsBrowse {
         this.update({ loading: true, error: null });
         try {
             const page = await fetchCollectionsPage(
-                { filter: this.state.filter, seed: this.seed, cursor },
+                {
+                    sort: this.state.sort,
+                    filter: this.state.filter,
+                    seed: this.seed,
+                    cursor
+                },
                 request.signal
             );
-            // A refresh or another filter can replace this request after its response arrived
+            // A refresh or another query can replace this request after its response arrived
             if (request.signal.aborted) return;
-            this.seed = page.seed;
+            // Only the random order has a seed; the other sorts keep it for later
+            if (page.seed) this.seed = page.seed;
             this.update({
                 pages: nextPages(page),
                 loading: false,
@@ -281,7 +304,7 @@ function collectionsToShow({ featured, pages }: CollectionsBrowseState) {
     ];
 }
 
-/** The user's collections that match the tab's filter, in random order, a page at a time */
+/** The user's collections that match the tab's filter, in its sort's order, a page at a time */
 export function useCollectionsBrowse(userId: string) {
     const browse = browseFor(userId);
     const state = useSyncExternalStore(
@@ -298,6 +321,7 @@ export function useCollectionsBrowse(userId: string) {
         loadMore: browse.loadMore,
         loadFirstPage: browse.loadFirstPage,
         changeFilter: browse.changeFilter,
+        changeSort: browse.changeSort,
         saveScrollPosition: browse.saveScrollPosition,
         takeScrollPosition: browse.takeScrollPosition,
         retry: browse.retry,
