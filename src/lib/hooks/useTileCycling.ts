@@ -11,7 +11,9 @@ const CYCLE_FRAME_MS = 500;
  * counts up from 0, the image the tile shows at rest (a collection's Cover),
  * every time a tile starts cycling, one frame per `CYCLE_FRAME_MS`; the tile
  * loops through its frames itself. Nothing cycles under reduced motion.
- * Listens on the grid, like `useHoldGesture`.
+ * Listens on the grid, like `useHoldGesture`. Scrolling hands the hover to
+ * whatever tile it brings under the mouse, so a tile scrolled away, which a
+ * virtualized grid unmounts, never comes back mid-cycle.
  */
 export function useTileCycling(
     grid: HTMLElement | null,
@@ -26,18 +28,50 @@ export function useTileCycling(
 
     useEffect(() => {
         if (!grid) return;
+        /** Where the mouse is over the grid, or null while it isn't */
+        let mouse: { x: number; y: number } | null = null;
+        let pendingScroll = 0;
         // Only a mouse hovers: a touch or pen passing over a tile doesn't count
         const onPointerOver = (event: PointerEvent) => {
             if (event.pointerType !== "mouse") return;
+            mouse = { x: event.clientX, y: event.clientY };
             setHoveredId(tileIdAt(event.target, idAttribute));
         };
-        const onPointerLeave = () => setHoveredId(null);
+        const onPointerMove = (event: PointerEvent) => {
+            if (event.pointerType === "mouse") {
+                mouse = { x: event.clientX, y: event.clientY };
+            }
+        };
+        const onPointerLeave = () => {
+            mouse = null;
+            setHoveredId(null);
+        };
+        // Browsers only tell of the tile now under a still mouse some time
+        // after scrolling, if at all
+        const onScroll = () => {
+            if (!mouse || pendingScroll) return;
+            pendingScroll = requestAnimationFrame(() => {
+                pendingScroll = 0;
+                if (!mouse) return;
+                const under = document.elementFromPoint(mouse.x, mouse.y);
+                setHoveredId(
+                    under && grid.contains(under)
+                        ? tileIdAt(under, idAttribute)
+                        : null
+                );
+            });
+        };
         grid.addEventListener("pointerover", onPointerOver);
+        grid.addEventListener("pointermove", onPointerMove, { passive: true });
         grid.addEventListener("pointerleave", onPointerLeave);
+        window.addEventListener("scroll", onScroll, { passive: true });
         return () => {
             setHoveredId(null);
+            cancelAnimationFrame(pendingScroll);
             grid.removeEventListener("pointerover", onPointerOver);
+            grid.removeEventListener("pointermove", onPointerMove);
             grid.removeEventListener("pointerleave", onPointerLeave);
+            window.removeEventListener("scroll", onScroll);
         };
     }, [grid, idAttribute]);
 

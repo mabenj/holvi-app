@@ -1,8 +1,9 @@
 import { useHoldGesture } from "@/lib/hooks/useHoldGesture";
 import type { Selection } from "@/lib/hooks/useSelection";
+import { useTileCycling } from "@/lib/hooks/useTileCycling";
 import { FileSummary } from "@/lib/types/file-summary";
 import { chakra, SimpleGrid, Skeleton } from "@chakra-ui/react";
-import { useState } from "react";
+import { memo, useState } from "react";
 import FileTile from "../grid/FileTile";
 import { HOLDABLE_GRID } from "../grid/holdable-grid";
 import { useGridLayout } from "../grid/useGridLayout";
@@ -30,7 +31,12 @@ export default function FileGrid({
 }: FileGridProps) {
     const layout = useGridLayout();
     const [grid, setGrid] = useState<HTMLDivElement | null>(null);
-    useHoldGesture(grid, FILE_TILE_ATTRIBUTE, selection);
+    const heldId = useHoldGesture(grid, FILE_TILE_ATTRIBUTE, selection);
+    const { cyclingId, frame } = useTileCycling(
+        grid,
+        FILE_TILE_ATTRIBUTE,
+        heldId
+    );
     if (!layout) {
         return null;
     }
@@ -42,29 +48,15 @@ export default function FileGrid({
             gap="2px"
             css={HOLDABLE_GRID}>
             {files.map((file) => (
-                <chakra.button
+                <GridTile
                     key={file.id}
-                    type="button"
-                    aria-label={file.name}
-                    aria-pressed={
-                        selection?.selecting
-                            ? selection.isSelected(file.id)
-                            : undefined
-                    }
-                    {...{ [FILE_TILE_ATTRIBUTE]: file.id }}
-                    display="block"
-                    position="relative"
-                    h={tileHeights}
-                    cursor="pointer"
-                    // Scrolling a tile into view keeps it clear of the bars
-                    scrollMarginTop={`calc(${TITLE_BAR_HEIGHT} + env(safe-area-inset-top))`}
-                    scrollMarginBottom={`calc(${TAB_BAR_HEIGHT} + env(safe-area-inset-bottom))`}
-                    onClick={() => onOpen?.(file.id)}>
-                    <FileTile file={file} />
-                    {selection?.selecting && (
-                        <SelectionMark selected={selection.isSelected(file.id)} />
-                    )}
-                </chakra.button>
+                    file={file}
+                    height={tileHeights}
+                    selecting={selection?.selecting ?? false}
+                    selected={selection?.isSelected(file.id) ?? false}
+                    frame={file.id === cyclingId ? frame : null}
+                    onOpen={onOpen}
+                />
             ))}
             {Array.from({ length: skeletons }, (_, i) => (
                 <Skeleton key={`skeleton-${i}`} h={tileHeights} rounded="none" />
@@ -72,3 +64,42 @@ export default function FileGrid({
         </SimpleGrid>
     );
 }
+
+interface GridTileProps {
+    file: FileSummary;
+    height: string[];
+    selecting: boolean;
+    selected: boolean;
+    /** The frame the tile's cycling is on, or null while it is still */
+    frame: number | null;
+    onOpen?: (fileId: string) => void;
+}
+
+/** One file's tile; only a tile that changes re-renders, e.g. the cycling one */
+const GridTile = memo(function GridTile({
+    file,
+    height,
+    selecting,
+    selected,
+    frame,
+    onOpen
+}: GridTileProps) {
+    return (
+        <chakra.button
+            type="button"
+            aria-label={file.name}
+            aria-pressed={selecting ? selected : undefined}
+            {...{ [FILE_TILE_ATTRIBUTE]: file.id }}
+            display="block"
+            position="relative"
+            h={height}
+            cursor="pointer"
+            // Scrolling a tile into view keeps it clear of the bars
+            scrollMarginTop={`calc(${TITLE_BAR_HEIGHT} + env(safe-area-inset-top))`}
+            scrollMarginBottom={`calc(${TAB_BAR_HEIGHT} + env(safe-area-inset-bottom))`}
+            onClick={() => onOpen?.(file.id)}>
+            <FileTile file={file} frame={frame} />
+            {selecting && <SelectionMark selected={selected} />}
+        </chakra.button>
+    );
+});

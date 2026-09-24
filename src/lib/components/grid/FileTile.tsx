@@ -3,9 +3,20 @@ import { Box, Flex } from "@chakra-ui/react";
 import { mdiPlay } from "@mdi/js";
 import Icon from "@mdi/react";
 import Image from "next/image";
+import ScrubFrameCycle from "./ScrubFrameCycle";
 
-/** A file's thumbnail cropped to fill its tile; a video shows a play mark and its length */
-export default function FileTile({ file }: { file: FileSummary }) {
+interface FileTileProps {
+    file: FileSummary;
+    /** The frame the tile's cycling is on (see `useTileCycling`), or null while it is still */
+    frame?: number | null;
+}
+
+/**
+ * A file's thumbnail cropped to fill its tile; a video shows a play mark and
+ * its length. While cycling, a video with a Scrub preview steps from its
+ * thumbnail through frames of it; photos and other videos stay still.
+ */
+export default function FileTile({ file, frame = null }: FileTileProps) {
     const isVideo = file.playbackSrc !== undefined;
     return (
         <Box
@@ -25,6 +36,9 @@ export default function FileTile({ file }: { file: FileSummary }) {
                 blurDataURL={file.blurDataUrl}
                 style={{ objectFit: "cover" }}
             />
+            {file.scrubPreview && frame !== null && (
+                <ScrubFrameCycle preview={file.scrubPreview} frame={frame} />
+            )}
             {isVideo && (
                 <Flex
                     position="absolute"

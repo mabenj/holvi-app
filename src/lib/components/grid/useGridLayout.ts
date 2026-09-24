@@ -32,7 +32,11 @@ export function useGridLayout(): GridLayout | null {
     const [density] = useGridDensity();
     const [mounted, setMounted] = useState(false);
     useEffect(() => setMounted(true), []);
-    return mounted ? gridLayout(density) : null;
+    // The same object until the density changes, so tiles can skip re-rendering
+    return useMemo(
+        () => (mounted ? gridLayout(density) : null),
+        [mounted, density]
+    );
 }
 
 /** The grid's column count and tile height at the current screen width, in pixels */
@@ -66,9 +70,7 @@ export function useResolvedGridLayout(): ResolvedGridLayout | null {
             byBreakpoint(layout?.columns ?? [0]),
             byBreakpoint(layout?.tileHeights ?? ["0rem"])
         ],
-        // The layout is a new object each render, but follows the density
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [layout?.columns.join(), layout?.tileHeights.join()]
+        [layout]
     );
     const columns = useBreakpointValue(columnsByBreakpoint);
     const tileHeight = useBreakpointValue(heightsByBreakpoint);
