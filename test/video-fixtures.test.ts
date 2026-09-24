@@ -3,6 +3,7 @@ import { resetDatabase } from "./database";
 import { createCollection, createUser, readDecryptedFile } from "./fixtures";
 import {
     addVideo,
+    generateVideo,
     GeneratedVideoOptions,
     probeVideo
 } from "./video-fixtures";
@@ -68,4 +69,44 @@ describe("video fixture (integration)", () => {
         const decrypted = await readDecryptedFile(user.id, holiday.id, file.id);
         expect((await probeVideo(decrypted)).captureDate).toBeNull();
     });
+
+    it.each<[string, GeneratedVideoOptions["captureDateTags"], object]>([
+        [
+            "the video stream only",
+            { videoStream: new Date("2018-03-04T05:06:07Z") },
+            { container: null, videoStream: "2018-03-04T05:06:07.000000Z" }
+        ],
+        [
+            "the container and the video stream, disagreeing",
+            {
+                container: new Date("2019-01-02T03:04:05Z"),
+                videoStream: new Date("2018-03-04T05:06:07Z")
+            },
+            {
+                container: "2019-01-02T03:04:05.000000Z",
+                videoStream: "2018-03-04T05:06:07.000000Z"
+            }
+        ],
+        [
+            "the container only, as malformed text",
+            { container: "not a date" },
+            { container: "not a date", videoStream: null }
+        ]
+    ])(
+        "writes capture date tags into %s",
+        async (_, captureDateTags, expected) => {
+            for (const container of ["mp4", "mov"] as const) {
+                const content = await generateVideo({
+                    videoCodec: "h264",
+                    audio: "aac",
+                    container,
+                    captureDateTags
+                });
+
+                expect((await probeVideo(content)).captureDateTags).toEqual(
+                    expected
+                );
+            }
+        }
+    );
 });
