@@ -133,10 +133,8 @@ describe("nextHoldState", () => {
     it("selects nothing when the browser takes the pointer over during a hold", () => {
         const { state, effects } = run(down("a"), elapsed, lost);
         expect(state).toEqual(IDLE);
-        expect(effects.slice(2)).toEqual([
-            { type: "holdEnded", id: "a" },
-            { type: "swallowClick" }
-        ]);
+        // No click follows a pointer that never lifted
+        expect(effects.slice(2)).toEqual([{ type: "holdEnded", id: "a" }]);
     });
 
     it("ignores other pointers", () => {

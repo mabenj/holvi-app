@@ -6,7 +6,7 @@ export const MOVE_TOLERANCE_PX = 10;
 /**
  * Where one pointer's press on a grid's tile stands:
  * - `pressing`: down on the tile, not yet held long enough to be a hold;
- * - `holding`: held for `HOLD_MS` without moving away, so the tile previews;
+ * - `holding`: held for `HOLD_MS` without moving away, so the tile cycles;
  * - `cancelled`: was a hold, then moved away (or the page scrolled), and the
  *   pointer is still down. Lifting it selects nothing.
  */
@@ -38,9 +38,9 @@ export type HoldEffect =
     | { type: "wait" }
     /** Stop that timer */
     | { type: "stopWaiting" }
-    /** The tile is now held: vibrate, start its preview and keep the page from scrolling */
+    /** The tile is now held: vibrate, start its cycling and keep the page from scrolling */
     | { type: "holdStarted"; id: string }
-    /** The tile is no longer held: its preview stops */
+    /** The tile is no longer held: its cycling stops */
     | { type: "holdEnded"; id: string }
     /** The hold was lifted in place: select the tile, or toggle it while selecting */
     | { type: "select"; id: string }
@@ -81,18 +81,15 @@ export function nextHoldState(
                 effects: [{ type: "holdStarted", id: state.id }]
             };
         case "move": {
-            if (state.phase === "idle" || state.phase === "cancelled") {
+            if (!isDown(state) || event.pointerId !== state.pointerId) {
                 return unchanged(state);
             }
-            if (event.pointerId !== state.pointerId) return unchanged(state);
             const moved = Math.hypot(event.x - state.x, event.y - state.y);
             if (moved <= MOVE_TOLERANCE_PX) return unchanged(state);
             return cancel(state);
         }
         case "interrupt":
-            return state.phase === "idle" || state.phase === "cancelled"
-                ? unchanged(state)
-                : cancel(state);
+            return isDown(state) ? cancel(state) : unchanged(state);
         case "up":
         case "lost": {
             if (state.phase === "idle") return unchanged(state);
@@ -100,12 +97,15 @@ export function nextHoldState(
             if (state.phase === "pressing") {
                 return { state: IDLE, effects: [{ type: "stopWaiting" }] };
             }
-            const lifted = event.type === "up";
+            // No click follows a pointer that never lifted
+            if (event.type === "lost") {
+                return { state: IDLE, effects: endHold(state) };
+            }
             return {
                 state: IDLE,
                 effects: [
                     ...endHold(state),
-                    ...(lifted && state.phase === "holding"
+                    ...(state.phase === "holding"
                         ? [{ type: "select", id: state.id } as const]
                         : []),
                     { type: "swallowClick" }
@@ -125,14 +125,19 @@ export function heldId(state: HoldState) {
     return state.phase === "holding" ? state.id : null;
 }
 
+type DownState = Extract<HoldState, { phase: "pressing" | "holding" }>;
+
+/** Whether a press or hold is on and not cancelled */
+function isDown(state: HoldState): state is DownState {
+    return state.phase === "pressing" || state.phase === "holding";
+}
+
 function unchanged(state: HoldState): HoldTransition {
     return { state, effects: [] };
 }
 
 /** A press is simply dropped; a hold stays cancelled until its pointer lifts */
-function cancel(
-    state: Extract<HoldState, { phase: "pressing" | "holding" }>
-): HoldTransition {
+function cancel(state: DownState): HoldTransition {
     if (state.phase === "pressing") {
         return { state: IDLE, effects: [{ type: "stopWaiting" }] };
     }

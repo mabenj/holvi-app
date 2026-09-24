@@ -1,5 +1,5 @@
 import { useHoldGesture } from "@/lib/hooks/useHoldGesture";
-import { usePreviewCycling } from "@/lib/hooks/usePreviewCycling";
+import { useTileCycling } from "@/lib/hooks/useTileCycling";
 import type { Selection } from "@/lib/hooks/useSelection";
 import { CollectionSummary } from "@/lib/types/collection-summary";
 import { Box, SimpleGrid, Skeleton } from "@chakra-ui/react";
@@ -39,7 +39,7 @@ export default function CollectionGrid({
     }, [laidOut, onLaidOut]);
     const [grid, setGrid] = useState<HTMLDivElement | null>(null);
     const heldId = useHoldGesture(grid, CARD_ID_ATTRIBUTE, selection);
-    const { cyclingId, frame } = usePreviewCycling(
+    const { cyclingId, frame } = useTileCycling(
         grid,
         CARD_ID_ATTRIBUTE,
         heldId

@@ -1,3 +1,4 @@
+import { tileIdAt } from "@/lib/components/grid/holdable-grid";
 import {
     blocksScroll,
     HOLD_MS,
@@ -9,11 +10,14 @@ import {
 import { useEffect, useRef, useState } from "react";
 import type { Selection } from "./useSelection";
 
+/** How long after a hold is lifted the click that follows it may arrive */
+const CLICK_DELAY_MS = 400;
+
 /**
  * The hold gesture on a grid's tiles, each marked with its id in
  * `idAttribute`, for any pointer. Holding a tile for `HOLD_MS` vibrates where
  * the device can, keeps the page from scrolling and makes the tile the held
- * one, which the grid previews (see `usePreviewCycling`). Lifting the hold in
+ * one, which the grid cycles (see `useTileCycling`). Lifting the hold in
  * place selects the tile, or toggles it while selecting; moving away cancels
  * both (see `nextHoldState`). A tap opens the tile as before, or toggles it
  * while selecting. Listens on the grid, so the tiles need no handlers of
@@ -24,7 +28,7 @@ import type { Selection } from "./useSelection";
 export function useHoldGesture(
     grid: HTMLElement | null,
     idAttribute: string,
-    /** Absent where nothing can be selected: a hold then only previews */
+    /** Absent where nothing can be selected: a hold then only cycles the tile */
     selection: Selection | undefined
 ): string | null {
     const latest = useRef(selection);
@@ -36,14 +40,16 @@ export function useHoldGesture(
 
         let state: HoldState = IDLE;
         let timer: ReturnType<typeof setTimeout> | undefined;
-        /** A hold just ended, so the click that may follow it is not a tap */
-        let swallowClick = false;
+        /**
+         * Until when a click is taken to follow a hold that just ended, and so
+         * is no tap. A touch hold may end without one, and a later click from
+         * the keyboard must still count.
+         */
+        let swallowClickUntil = 0;
         let pointerType = "mouse";
 
         const tileId = (target: EventTarget | null) =>
-            target instanceof Element
-                ? target.closest(`[${idAttribute}]`)?.getAttribute(idAttribute)
-                : null;
+            tileIdAt(target, idAttribute);
 
         const dispatch = (event: HoldEvent) => {
             const transition = nextHoldState(state, event);
@@ -74,14 +80,14 @@ export function useHoldGesture(
                         break;
                     }
                     case "swallowClick":
-                        swallowClick = true;
+                        swallowClickUntil = performance.now() + CLICK_DELAY_MS;
                         break;
                 }
             }
         };
 
         const onPointerDown = (event: PointerEvent) => {
-            swallowClick = false;
+            swallowClickUntil = 0;
             pointerType = event.pointerType;
             if (!event.isPrimary || event.button !== 0) return;
             const id = tileId(event.target);
@@ -117,8 +123,8 @@ export function useHoldGesture(
         // Captured, so neither a tile's link nor its own click handler sees it
         const onClick = (event: MouseEvent) => {
             const id = tileId(event.target);
-            if (swallowClick) {
-                swallowClick = false;
+            if (performance.now() < swallowClickUntil) {
+                swallowClickUntil = 0;
                 event.preventDefault();
                 event.stopPropagation();
             } else if (id && latest.current?.selecting) {
