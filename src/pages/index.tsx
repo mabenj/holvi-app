@@ -4,6 +4,7 @@ import {
     signedInPageProps
 } from "@/lib/common/signed-in-page";
 import {
+    collectionsQueryKey,
     CollectionsFilter,
     isFiltering,
     NO_COLLECTIONS_FILTER
@@ -15,6 +16,7 @@ import CollectionEditor from "@/lib/components/collections/CollectionEditor";
 import CollectionGrid from "@/lib/components/collections/CollectionGrid";
 import CollectionSelectionBar from "@/lib/components/collections/CollectionSelectionBar";
 import CollectionsFilterBar from "@/lib/components/collections/CollectionsFilterBar";
+import { useCollectionsQuery } from "@/lib/hooks/useBrowseQuery";
 import {
     featureCollection,
     useCollectionsBrowse
@@ -32,7 +34,7 @@ import {
 } from "@mdi/js";
 import Icon from "@mdi/react";
 import { useRouter } from "next/router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 
 export const getServerSideProps = signedInPageProps;
 
@@ -42,25 +44,23 @@ const FIRST_PAGE_SKELETONS = 24;
 const NEXT_PAGE_SKELETONS = 12;
 
 export default function CollectionsTab({ user }: SignedInPageProps) {
+    // The sort and filter come from the URL; the browse shows their pages
+    const { sortKnown, sort, filter, changeFilter, chooseSort } =
+        useCollectionsQuery();
+    const browse = useCollectionsBrowse(user.id);
     const {
-        sort,
-        filter,
-        pages,
-        collections,
         loading,
         refreshing,
         error,
         hasMore,
         loadMore,
-        loadFirstPage,
-        changeFilter,
-        changeSort,
+        show,
         saveScrollPosition,
         takeScrollPosition,
         endVisit,
         retry,
         refresh
-    } = useCollectionsBrowse(user.id);
+    } = browse;
     const router = useRouter();
     const creator = useCollectionCreator(user.id);
     const selection = useSelection();
@@ -70,10 +70,21 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
     }, [selection.selecting]);
 
     // The first visit in this app session fetches the first page; coming back
-    // from another screen keeps the pages already loaded
-    useEffect(() => {
-        loadFirstPage();
-    }, [loadFirstPage]);
+    // from another screen keeps the pages already loaded. A sort or filter
+    // changed in the URL shows its own pages. Before the tab paints, so it
+    // never shows another query's pages.
+    const queryKey = JSON.stringify([sort, filter]);
+    useLayoutEffect(() => {
+        if (sortKnown) show(sort, filter);
+        // The sort and filter are in the key
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sortKnown, queryKey, show]);
+    const showing =
+        sortKnown &&
+        collectionsQueryKey(sort, filter) ===
+            collectionsQueryKey(browse.sort, browse.filter);
+    const pages = showing ? browse.pages : [];
+    const collections = showing ? browse.collections : [];
 
     // Leaving the tab remembers the place in the grid, and ends the visit that
     // showed a collection just uploaded into first...
@@ -117,9 +128,9 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
         (sort: CollectionSort) => {
             window.scrollTo({ top: 0 });
             exitSelection();
-            changeSort(sort);
+            chooseSort(sort);
         },
-        [changeSort, exitSelection]
+        [chooseSort, exitSelection]
     );
     const clearFilter = useCallback(
         () => narrow(NO_COLLECTIONS_FILTER),
@@ -127,7 +138,7 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
     );
 
     const sentinel = useNextPageSentinel(
-        restored && hasMore && !error ? loadMore : undefined,
+        restored && showing && hasMore && !error ? loadMore : undefined,
         pages.length
     );
 
@@ -180,7 +191,7 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
                     <CollectionGrid
                         collections={collections}
                         skeletons={skeletons}
-                        onLaidOut={restoreScrollPosition}
+                        onLaidOut={showing ? restoreScrollPosition : undefined}
                         selection={selection}
                     />
                 )}

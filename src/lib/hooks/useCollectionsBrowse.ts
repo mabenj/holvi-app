@@ -41,16 +41,20 @@ const INITIAL_STATE: CollectionsBrowseState = {
     featured: []
 };
 
+/** Fetches a page of the user's collections: the one after the cursor, or the first without one */
+export type FetchCollectionsPage = typeof fetchCollectionsPage;
+
 /**
  * The Collections tab's sort and filter, their loaded pages, the Shuffle seed
  * they were fetched with and where the grid was scrolled to. Every query (a
  * sort with a filter) keeps its own pages, so coming back to it shows them
  * again instead of starting over. One seed serves every filter, so they all
- * share one random order. Kept in app memory only, so a full reload starts
- * from the default sort and the current Shuffle period's order, while going
- * back from a collection returns to the same query, pages and place.
+ * share one random order. The sort and filter come from the tab's URL. The
+ * rest is kept in app memory only, so a full reload starts from the current
+ * Shuffle period's order, while going back from a collection returns to the
+ * same pages and place.
  */
-class CollectionsBrowse {
+export class CollectionsBrowse {
     private state = INITIAL_STATE;
     /** Sent with every page after the first, so one scroll keeps one order */
     private seed: string | undefined;
@@ -60,6 +64,10 @@ class CollectionsBrowse {
     /** Where the grid was scrolled to when the user left it, until it is restored */
     private scrollPosition: number | null = null;
     private readonly listeners = new Set<() => void>();
+
+    constructor(
+        private readonly fetchCollections: FetchCollectionsPage = fetchCollectionsPage
+    ) {}
 
     subscribe = (listener: () => void) => {
         this.listeners.add(listener);
@@ -78,46 +86,47 @@ class CollectionsBrowse {
     }
 
     /** Fetches the first page, unless pages are loaded already, e.g. when coming back to the tab */
-    loadFirstPage = () => {
+    private loadFirstPage() {
         if (this.state.pages.length === 0) this.loadMore();
-    };
+    }
 
     /**
-     * Changes the filter, e.g. only its search, and shows the collections that
-     * match: the new query's cached pages if it has any, or else its first page
+     * Shows the collections of a sort and filter, e.g. those in the URL: the
+     * pages already loaded if it is the current query, e.g. coming back to the
+     * tab, and the place in them; else its cached pages if it has any; else
+     * its first page
      */
-    changeFilter = (changes: Partial<CollectionsFilter>) => {
-        this.show(this.state.sort, { ...this.state.filter, ...changes });
-    };
-
-    /** Shows the collections in another order: its cached pages if it has any, or else its first page */
-    changeSort = (sort: CollectionSort) => {
-        this.show(sort, this.state.filter);
-    };
-
-    private show(sort: CollectionSort, filter: CollectionsFilter) {
+    show = (sort: CollectionSort, filter: CollectionsFilter) => {
         const key = collectionsQueryKey(sort, filter);
         const currentKey = collectionsQueryKey(
             this.state.sort,
             this.state.filter
         );
-        if (key === currentKey) {
+        if (key !== currentKey) {
+            this.abort();
+            const pages = this.cachedPages.swap(
+                currentKey,
+                this.state.pages,
+                key
+            );
+            this.scrollPosition = null;
+            this.update({
+                sort,
+                filter,
+                pages,
+                loading: false,
+                refreshing: false,
+                error: null
+            });
+        } else if (
+            JSON.stringify([sort, filter]) !==
+            JSON.stringify([this.state.sort, this.state.filter])
+        ) {
+            // The same collections, e.g. a search with a trailing space
             this.update({ sort, filter });
-            return;
         }
-        this.abort();
-        const pages = this.cachedPages.swap(currentKey, this.state.pages, key);
-        this.scrollPosition = null;
-        this.update({
-            sort,
-            filter,
-            pages,
-            loading: false,
-            refreshing: false,
-            error: null
-        });
         this.loadFirstPage();
-    }
+    };
 
     /** Remembers where the grid is scrolled to, as the user leaves it */
     saveScrollPosition = (scrollY: number) => {
@@ -212,7 +221,7 @@ class CollectionsBrowse {
         this.request = request;
         this.update({ loading: true, error: null });
         try {
-            const page = await fetchCollectionsPage(
+            const page = await this.fetchCollections(
                 {
                     sort: this.state.sort,
                     filter: this.state.filter,
@@ -306,9 +315,7 @@ export function useCollectionsBrowse(userId: string) {
         endVisit: browse.endVisit,
         hasMore: browse.hasMore,
         loadMore: browse.loadMore,
-        loadFirstPage: browse.loadFirstPage,
-        changeFilter: browse.changeFilter,
-        changeSort: browse.changeSort,
+        show: browse.show,
         saveScrollPosition: browse.saveScrollPosition,
         takeScrollPosition: browse.takeScrollPosition,
         retry: browse.retry,

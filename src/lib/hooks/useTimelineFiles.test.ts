@@ -183,4 +183,32 @@ describe("TimelineBrowse", () => {
         expect(timeline.getSnapshot().tags).toEqual(["beach"]);
         expect(ids(timeline)).toEqual(["beach-1a", "beach-1b"]);
     });
+
+    it("comes back to the same pages and place when the visit's tags, e.g. from the URL, are the last visit's", async () => {
+        const api = fakeTimeline();
+        const timeline = new TimelineBrowse(api.fetchPage);
+        timeline.startVisit(["beach"]);
+        await api.answer();
+        timeline.saveScrollPosition(800);
+
+        timeline.startVisit(["Beach"]);
+        expect(api.requests).toHaveLength(0);
+        expect(ids(timeline)).toEqual(["beach-1a", "beach-1b"]);
+        expect(timeline.takeScrollPosition()).toBe(800);
+    });
+
+    it("shows other tags' files when a visit comes with other tags, e.g. an older URL", async () => {
+        const api = fakeTimeline();
+        const timeline = new TimelineBrowse(api.fetchPage);
+        timeline.startVisit([]);
+        await api.answer();
+        timeline.changeTags(["beach"]);
+        await api.answer();
+        timeline.saveScrollPosition(800);
+
+        timeline.startVisit([]);
+        expect(api.requests).toHaveLength(0);
+        expect(ids(timeline)).toEqual(["all-1a", "all-1b"]);
+        expect(timeline.takeScrollPosition()).toBeNull();
+    });
 });
