@@ -6,6 +6,7 @@ import {
     fetchCollectionsPage,
     NO_COLLECTIONS_FILTER
 } from "../client/collections";
+import { QueryPageCache } from "../client/query-page-cache";
 import { getErrorMessage } from "../common/utilities";
 import type { CollectionSort } from "../types/collection-sort";
 import type { CollectionSummary } from "../types/collection-summary";
@@ -40,9 +41,6 @@ const INITIAL_STATE: CollectionsBrowseState = {
     featured: []
 };
 
-/** Pages of this many other queries stay cached, the most recently shown ones */
-const CACHED_QUERIES = 10;
-
 /**
  * The Collections tab's sort and filter, their loaded pages, the Shuffle seed
  * they were fetched with and where the grid was scrolled to. Every query (a
@@ -57,7 +55,7 @@ class CollectionsBrowse {
     /** Sent with every page after the first, so one scroll keeps one order */
     private seed: string | undefined;
     /** The loaded pages of queries other than the current one, by query key */
-    private readonly cachedPages = new Map<string, CollectionsPage[]>();
+    private readonly cachedPages = new QueryPageCache<CollectionsPage>();
     private request: AbortController | null = null;
     /** Where the grid was scrolled to when the user left it, until it is restored */
     private scrollPosition: number | null = null;
@@ -108,16 +106,7 @@ class CollectionsBrowse {
             return;
         }
         this.abort();
-        if (this.state.pages.length > 0) {
-            this.cachedPages.set(currentKey, this.state.pages);
-        }
-        const pages = this.cachedPages.get(key) ?? [];
-        this.cachedPages.delete(key);
-        // The least recently shown queries go first
-        const oldestFirst = Array.from(this.cachedPages.keys());
-        oldestFirst
-            .slice(0, Math.max(0, oldestFirst.length - CACHED_QUERIES))
-            .forEach((oldKey) => this.cachedPages.delete(oldKey));
+        const pages = this.cachedPages.swap(currentKey, this.state.pages, key);
         this.scrollPosition = null;
         this.update({
             sort,
@@ -187,9 +176,7 @@ class CollectionsBrowse {
                 ...page,
                 collections: change(page.collections)
             }));
-        this.cachedPages.forEach((pages, key) =>
-            this.cachedPages.set(key, changePages(pages))
-        );
+        this.cachedPages.change(changePages);
         this.update({
             pages: changePages(this.state.pages),
             featured: change(this.state.featured)

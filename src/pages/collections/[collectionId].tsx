@@ -33,6 +33,10 @@ import { useFileDrop } from "@/lib/hooks/useFileDrop";
 import { useLightboxHistory } from "@/lib/hooks/useLightboxHistory";
 import { useNextPageSentinel } from "@/lib/hooks/useNextPageSentinel";
 import { useSelection } from "@/lib/hooks/useSelection";
+import {
+    forgetTimeline,
+    removeFromTimeline
+} from "@/lib/hooks/useTimelineFiles";
 import { isUploading, startUpload, useUpload } from "@/lib/hooks/useUpload";
 import { CollectionDetails as Collection } from "@/lib/types/collection-details";
 import { FileSort } from "@/lib/types/file-sort";
@@ -215,13 +219,20 @@ function CollectionScreen({
                         collectionId={collectionId}
                         onDeleted={(ids) => {
                             selectionChanges.onDeleted(ids);
+                            removeFromTimeline(userId, (file) =>
+                                ids.includes(file.id)
+                            );
                             void refreshCollection();
                         }}
                         onEdited={(id, fields) => {
                             selectionChanges.onEdited(id, fields);
+                            forgetTimeline(userId);
                             void refreshCollection();
                         }}
-                        onTagged={selectionChanges.onTagged}
+                        onTagged={(tagsById) => {
+                            selectionChanges.onTagged(tagsById);
+                            forgetTimeline(userId);
+                        }}
                     />
                 ) : undefined
             }>
@@ -342,6 +353,8 @@ function EditCollection({
     const onSaved = async () => {
         const updated = await refetch();
         if (updated) replaceCollection(userId, updated);
+        // Its tags match Timeline files under a tag filter
+        forgetTimeline(userId);
         onClose();
     };
     return (
@@ -372,6 +385,10 @@ function DeleteCollection({
         try {
             await deleteCollection(collection.id);
             removeCollection(userId, collection.id);
+            removeFromTimeline(
+                userId,
+                (file) => file.collectionId === collection.id
+            );
             leaveFor(router, "/");
         } catch (error) {
             setError(getErrorMessage(error));
