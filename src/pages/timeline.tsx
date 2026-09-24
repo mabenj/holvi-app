@@ -7,12 +7,15 @@ import AppShell from "@/lib/components/app-shell/AppShell";
 import FileGrid from "@/lib/components/collection-page/FileGrid";
 import FileSelectionBar from "@/lib/components/files/FileSelectionBar";
 import { showSelectionChanges } from "@/lib/components/files/selection-changes";
+import FileLightbox from "@/lib/components/lightbox/FileLightbox";
+import GoToCollection from "@/lib/components/lightbox/GoToCollection";
 import TimelineGrid from "@/lib/components/timeline/TimelineGrid";
 import {
     ActiveTagFilters,
     TimelineFilterButton
 } from "@/lib/components/timeline/TimelineTagFilter";
 import { replaceCollection } from "@/lib/hooks/useCollectionsBrowse";
+import { useLightboxHistory } from "@/lib/hooks/useLightboxHistory";
 import { useNextPageSentinel } from "@/lib/hooks/useNextPageSentinel";
 import { useSelection } from "@/lib/hooks/useSelection";
 import { useTimelineFiles } from "@/lib/hooks/useTimelineFiles";
@@ -31,6 +34,8 @@ const FIRST_PAGE_SKELETONS = 12;
  * Every file the user owns, newest first, under sticky month headers, with no
  * floating action button. It can be filtered by tag, on a file or its
  * collection, and its files selected for bulk actions as on a collection page.
+ * Tapping a file opens the lightbox, which swipes through the whole
+ * (filtered) Timeline.
  */
 export default function TimelineTab({ user }: SignedInPageProps) {
     const [tags, changeTags] = useState<string[]>([]);
@@ -46,6 +51,7 @@ export default function TimelineTab({ user }: SignedInPageProps) {
         retry
     } = useTimelineFiles(tags);
     const selection = useSelection();
+    const lightbox = useLightboxHistory();
     // Other tags load the files afresh, so a selection ends
     const setTags = (tags: string[]) => {
         selection.exit();
@@ -124,6 +130,8 @@ export default function TimelineTab({ user }: SignedInPageProps) {
                     files={files}
                     loadingMore={loading}
                     selection={selection}
+                    onOpen={lightbox.open}
+                    activeFileId={lightbox.photoId}
                 />
             )}
             {error && (
@@ -135,6 +143,14 @@ export default function TimelineTab({ user }: SignedInPageProps) {
                 </VStack>
             )}
             <Box ref={sentinel} h="1px" />
+            {/* Swiping on past the loaded files loads the next page */}
+            <FileLightbox
+                files={files}
+                onNearEnd={hasMore && !error ? loadMore : undefined}
+                actions={(file) => (
+                    <GoToCollection collectionId={file.collectionId} />
+                )}
+            />
         </AppShell>
     );
 }
