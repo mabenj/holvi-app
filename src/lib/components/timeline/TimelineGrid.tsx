@@ -5,6 +5,7 @@ import {
 } from "@/lib/hooks/useWindowVirtualRows";
 import { useHoldGesture } from "@/lib/hooks/useHoldGesture";
 import type { Selection } from "@/lib/hooks/useSelection";
+import { useTileCycling } from "@/lib/hooks/useTileCycling";
 import { FileSummary } from "@/lib/types/file-summary";
 import { Box, chakra, Skeleton, Text } from "@chakra-ui/react";
 import {
@@ -94,7 +95,12 @@ export default function TimelineGrid({
         listRef.current = element;
         setList(element);
     }, []);
-    useHoldGesture(list, FILE_TILE_ATTRIBUTE, selection);
+    const heldId = useHoldGesture(list, FILE_TILE_ATTRIBUTE, selection);
+    const { cyclingId, frame } = useTileCycling(
+        list,
+        FILE_TILE_ATTRIBUTE,
+        heldId
+    );
     const selecting = selection?.selecting ?? false;
     const isSelected = selection?.isSelected;
     const stickyRef = useRef<HTMLDivElement>(null);
@@ -199,6 +205,10 @@ export default function TimelineGrid({
                 h={`${totalHeight}px`}>
                 {rendered.map((index) => {
                     const row = rows[index];
+                    // Only the row with the cycling tile re-renders as it cycles
+                    const cycling =
+                        row?.kind === "files" &&
+                        row.files.some((file) => file.id === cyclingId);
                     return (
                         <VirtualRow
                             key={row?.key ?? "loading"}
@@ -209,6 +219,8 @@ export default function TimelineGrid({
                             selecting={selecting}
                             isSelected={isSelected}
                             onOpen={onOpen}
+                            cyclingId={cycling ? cyclingId : null}
+                            frame={cycling ? frame : null}
                         />
                     );
                 })}
@@ -226,6 +238,10 @@ interface VirtualRowProps {
     selecting: boolean;
     isSelected: ((fileId: string) => boolean) | undefined;
     onOpen?: (fileId: string) => void;
+    /** The row's cycling tile (see `useTileCycling`), or null if none of its tiles cycles */
+    cyclingId: string | null;
+    /** The frame that tile is on, or null */
+    frame: number | null;
 }
 
 /**
@@ -240,6 +256,8 @@ function sameRow(a: VirtualRowProps, b: VirtualRowProps) {
         a.selecting === b.selecting &&
         a.isSelected === b.isSelected &&
         a.onOpen === b.onOpen &&
+        a.cyclingId === b.cyclingId &&
+        a.frame === b.frame &&
         a.row?.key === b.row?.key &&
         (a.row?.kind === "files" ? a.row.files.length : 0) ===
             (b.row?.kind === "files" ? b.row.files.length : 0)
@@ -254,7 +272,9 @@ const VirtualRow = memo(function VirtualRow({
     columns,
     selecting,
     isSelected,
-    onOpen
+    onOpen,
+    cyclingId,
+    frame
 }: VirtualRowProps) {
     return (
         <Box
@@ -298,7 +318,12 @@ const VirtualRow = memo(function VirtualRow({
                                   // While selecting, the hold gesture takes
                                   // the click, so it toggles instead
                                   onClick={() => onOpen?.(file.id)}>
-                                  <FileTile file={file} />
+                                  <FileTile
+                                      file={file}
+                                      frame={
+                                          file.id === cyclingId ? frame : null
+                                      }
+                                  />
                                   {selecting && (
                                       <SelectionMark
                                           selected={
