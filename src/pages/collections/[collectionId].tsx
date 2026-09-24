@@ -23,6 +23,7 @@ import CollectionEditor from "@/lib/components/collections/CollectionEditor";
 import FileSelectionBar from "@/lib/components/files/FileSelectionBar";
 import { showSelectionChanges } from "@/lib/components/files/selection-changes";
 import FileLightbox from "@/lib/components/lightbox/FileLightbox";
+import SetAsCover from "@/lib/components/lightbox/SetAsCover";
 import ConfirmationSurface from "@/lib/components/surfaces/ConfirmationSurface";
 import { useCollectionFiles } from "@/lib/hooks/useCollectionFiles";
 import {
@@ -126,8 +127,8 @@ function CollectionScreen({
         tags.length > 0
     );
 
-    // Deleting or renaming files can change the counts and the Cover, here
-    // and on the Collections tab
+    // Deleting or renaming files, or choosing the Cover, can change the counts
+    // and the Cover, here and on the Collections tab
     const refreshCollection = async () => {
         const updated = await refetchCollection();
         if (updated) replaceCollection(userId, updated);
@@ -287,6 +288,16 @@ function CollectionScreen({
                     <FileLightbox
                         files={files}
                         onNearEnd={hasMore && !error ? loadMore : undefined}
+                        actions={(file) => (
+                            <SetAsCover
+                                file={file}
+                                isCover={
+                                    collection?.cover?.thumbnailSrc ===
+                                    file.thumbnailSrc
+                                }
+                                onSet={refreshCollection}
+                            />
+                        )}
                     />
                 </>
             )}
