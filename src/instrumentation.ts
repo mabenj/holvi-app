@@ -10,7 +10,8 @@ export async function register() {
         const { VideoProcessingService } = await import(
             "./lib/services/video-processing.service"
         );
-        // Picks up videos left pending, such as uploads just before a restart
-        VideoProcessingService.kick();
+        // Resumes videos left pending or processing, such as uploads just
+        // before a restart. Failures are logged by the service.
+        await VideoProcessingService.recover().catch(() => {});
     }
 }
