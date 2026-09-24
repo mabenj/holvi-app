@@ -1,4 +1,5 @@
 import { countNavigations } from "@/lib/client/navigation";
+import { rememberTabUrls } from "@/lib/client/tab-urls";
 import ThemeColor from "@/lib/components/theme/ThemeColor";
 import { system } from "@/lib/components/theme/system";
 import { ChakraProvider } from "@chakra-ui/react";
@@ -17,6 +18,8 @@ export default function App({ Component, pageProps }: AppProps) {
     }, []);
 
     useEffect(() => countNavigations(Router.events), []);
+    // Each tab of the tab bar returns to where its screen last was
+    useEffect(() => rememberTabUrls(Router.events), []);
 
     return (
         <ChakraProvider value={system}>

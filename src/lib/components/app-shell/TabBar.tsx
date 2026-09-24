@@ -10,6 +10,13 @@ import {
 import Icon from "@mdi/react";
 import NextLink from "next/link";
 import { useRouter } from "next/router";
+import { useSyncExternalStore } from "react";
+import {
+    getServerTabUrls,
+    getTabUrls,
+    subscribeToTabUrls,
+    TabPath
+} from "../../client/tab-urls";
 import { useActivity } from "../../hooks/useActivity";
 import { TAB_BAR_HEIGHT } from "../theme/system";
 
@@ -17,7 +24,8 @@ const TabLink = chakra(NextLink);
 
 interface Tab {
     label: string;
-    href: string;
+    /** Its screen; the tab returns to the URL the screen was last at */
+    href: TabPath;
     icon: string;
     activeIcon: string;
     isActive: (pathname: string) => boolean;
@@ -61,6 +69,12 @@ export default function TabBar({ onActiveTabReselect }: TabBarProps) {
     const { pathname } = useRouter();
     const { activity } = useActivity();
     const working = activity?.active ?? false;
+    // Each tab goes back to its screen's last URL, with its sort and filters
+    const tabUrls = useSyncExternalStore(
+        subscribeToTabUrls,
+        getTabUrls,
+        getServerTabUrls
+    );
 
     return (
         <Box
@@ -85,7 +99,7 @@ export default function TabBar({ onActiveTabReselect }: TabBarProps) {
                     return (
                         <TabLink
                             key={tab.href}
-                            href={tab.href}
+                            href={tabUrls[tab.href]}
                             aria-current={active ? "page" : undefined}
                             onClick={(event) => {
                                 if (reselected && onActiveTabReselect) {

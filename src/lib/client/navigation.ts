@@ -1,4 +1,5 @@
 import type { NextRouter } from "next/router";
+import { openingUrl } from "./tab-urls";
 
 /** Screens shown in this app session after the first one */
 let navigations = 0;
@@ -25,25 +26,27 @@ export function countNavigations(events: NextRouter["events"]) {
 
 /**
  * Goes back in history when the previous screen belongs to this app session;
- * otherwise (e.g. a collection opened from a bookmark) goes to `fallback`
+ * otherwise (e.g. a collection opened from a bookmark) goes to `fallback`,
+ * which for a tab's screen is its last URL
  */
 export function goBack(router: NextRouter, fallback: string) {
     if (navigations > 0) {
         router.back();
     } else {
-        void router.push(fallback);
+        void router.push(openingUrl(fallback));
     }
 }
 
 /**
  * Leaves the current screen for `path`, e.g. after deleting what it showed:
  * back in history when the previous screen was `path`, so it returns to where
- * it was, and otherwise in place of the current screen
+ * it was, and otherwise in place of the current screen. A tab's screen opens
+ * at its last URL, with its sort and filters.
  */
 export function leaveFor(router: NextRouter, path: string) {
     if (navigations > 0 && previousPath === path) {
         router.back();
     } else {
-        void router.replace(path);
+        void router.replace(openingUrl(path));
     }
 }

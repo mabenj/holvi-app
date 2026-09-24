@@ -1,4 +1,8 @@
-import { collectionUrl, fetchCollection } from "@/lib/client/collections";
+import {
+    collectionUrl,
+    fetchCollection,
+    timelineQueryKey
+} from "@/lib/client/collections";
 import {
     SignedInPageProps,
     signedInPageProps
@@ -15,21 +19,31 @@ import {
     TimelineFilterButton
 } from "@/lib/components/timeline/TimelineTagFilter";
 import { replaceCollection } from "@/lib/hooks/useCollectionsBrowse";
+import { useTimelineQuery } from "@/lib/hooks/useBrowseQuery";
 import { useLightboxHistory } from "@/lib/hooks/useLightboxHistory";
 import { useNextPageSentinel } from "@/lib/hooks/useNextPageSentinel";
 import { useSelection } from "@/lib/hooks/useSelection";
 import { useTimelineFiles } from "@/lib/hooks/useTimelineFiles";
+import type { FileSummary } from "@/lib/types/file-summary";
 import { Box, Button, EmptyState, Text, VStack } from "@chakra-ui/react";
 import { mdiTagOffOutline, mdiTimelineClockOutline } from "@mdi/js";
 import Icon from "@mdi/react";
 import { useRouter } from "next/router";
-import { useCallback, useEffect, useState } from "react";
+import {
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState
+} from "react";
 import { mutate } from "swr";
 
 export const getServerSideProps = signedInPageProps;
 
 /** Skeleton tiles while the first page of the Timeline loads */
 const FIRST_PAGE_SKELETONS = 12;
+/** No files, the same array every render, while other tags' files are on their way */
+const NO_FILES: FileSummary[] = [];
 
 /**
  * Every file the user owns, newest first, under sticky month headers, with no
@@ -40,15 +54,15 @@ const FIRST_PAGE_SKELETONS = 12;
  * same tags, files and place in the grid.
  */
 export default function TimelineTab({ user }: SignedInPageProps) {
+    // The tags come from the URL; the Timeline's store shows their files
+    const { tags, changeTags } = useTimelineQuery();
+    const timeline = useTimelineFiles(user.id);
     const {
-        tags,
-        files,
-        pages,
         loading,
         error,
         hasMore,
         startVisit,
-        changeTags,
+        changeTags: showTags,
         loadMore,
         reload,
         changeFiles,
@@ -56,7 +70,7 @@ export default function TimelineTab({ user }: SignedInPageProps) {
         saveScrollPosition,
         takeScrollPosition,
         retry
-    } = useTimelineFiles(user.id);
+    } = timeline;
     const router = useRouter();
     const selection = useSelection();
     const lightbox = useLightboxHistory();
@@ -66,6 +80,23 @@ export default function TimelineTab({ user }: SignedInPageProps) {
         selection.exit();
         changeTags(tags);
     };
+
+    // The first visit in this app session fetches the first page; coming
+    // back from another screen keeps the pages already loaded. Tags changed
+    // in the URL show their own files. Before the Timeline paints, so it
+    // never shows other tags' files.
+    const visited = useRef(false);
+    useLayoutEffect(() => {
+        if (visited.current) {
+            showTags(tags);
+        } else {
+            visited.current = true;
+            startVisit(tags);
+        }
+    }, [tags, startVisit, showTags]);
+    const showing = timelineQueryKey(tags) === timelineQueryKey(timeline.tags);
+    const pages = showing ? timeline.pages : [];
+    const files = showing ? timeline.files : NO_FILES;
     const selectionChanges = showSelectionChanges(
         { reload, changeFiles },
         tags.length > 0
@@ -91,12 +122,6 @@ export default function TimelineTab({ user }: SignedInPageProps) {
         files
             .filter((file) => fileIds.includes(file.id))
             .map((file) => file.collectionId);
-
-    // The first visit in this app session fetches the first page; coming
-    // back from another screen keeps the pages already loaded
-    useEffect(() => {
-        startVisit();
-    }, [startVisit]);
 
     // Leaving the Timeline remembers the place in the grid...
     useEffect(() => {
