@@ -46,7 +46,10 @@ export class User extends Model<
                 }
             },
             {
-                sequelize
+                sequelize,
+                // Named explicitly: the production build minifies class names
+                modelName: "User",
+                tableName: "Users"
             }
         );
     }

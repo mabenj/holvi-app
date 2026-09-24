@@ -27,7 +27,10 @@ export class Tag extends Model<
                 }
             },
             {
-                sequelize
+                sequelize,
+                // Named explicitly: the production build minifies class names
+                modelName: "Tag",
+                tableName: "Tags"
             }
         );
     }

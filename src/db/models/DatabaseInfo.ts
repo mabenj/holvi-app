@@ -22,7 +22,12 @@ export class DatabaseInfo extends Model<
                 },
                 version: { type: DataTypes.INTEGER, defaultValue: 1 }
             },
-            { sequelize }
+            {
+                sequelize,
+                // Named explicitly: the production build minifies class names
+                modelName: "DatabaseInfo",
+                tableName: "DatabaseInfos"
+            }
         );
     }
 }
