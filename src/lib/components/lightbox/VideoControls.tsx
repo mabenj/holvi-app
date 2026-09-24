@@ -48,7 +48,10 @@ interface VideoControlsProps {
     video: HTMLVideoElement;
     /** Seconds, from the file's metadata, until the video knows its own */
     knownDuration?: number;
-    /** Shows the frame being scrubbed to or hovered over, if video processing has made one */
+    /**
+     * Shows the frame being scrubbed to or hovered over, if video processing
+     * has made one
+     */
     scrubPreview?: ScrubPreview;
 }
 
@@ -57,9 +60,9 @@ interface VideoControlsProps {
  * progress bar to scrub with (showing the frame being scrubbed to from the
  * video's Scrub preview, if it has one, and previewing the frame and time
  * under a hovering mouse without seeking), loop, picture-in-picture where the
- * browser supports it, and volume or mute. They show and hide with the rest of the
- * lightbox's controls, and hide by themselves once playback has run for a
- * few seconds.
+ * browser supports it, and volume or mute. They show and hide with the rest
+ * of the lightbox's controls, and hide by themselves once playback has run
+ * for a few seconds.
  *
  * Double-tapping the video's left or right third skips, with a cue, and the
  * keyboard controls the video while it is the active slide.
