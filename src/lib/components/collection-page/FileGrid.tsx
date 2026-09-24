@@ -1,10 +1,10 @@
+import { useHoldGesture } from "@/lib/hooks/useHoldGesture";
 import type { Selection } from "@/lib/hooks/useSelection";
-import { useSelectionGestures } from "@/lib/hooks/useSelectionGestures";
 import { FileSummary } from "@/lib/types/file-summary";
 import { chakra, SimpleGrid, Skeleton } from "@chakra-ui/react";
 import { useState } from "react";
 import FileTile from "../grid/FileTile";
-import { SELECTABLE_GRID } from "../grid/selectable-grid";
+import { HOLDABLE_GRID } from "../grid/holdable-grid";
 import { useGridLayout } from "../grid/useGridLayout";
 import { FILE_TILE_ATTRIBUTE } from "../lightbox/lightbox-slides";
 import SelectionMark from "../selection/SelectionMark";
@@ -17,7 +17,7 @@ interface FileGridProps {
     skeletons?: number;
     /** Tapping a file's tile, e.g. to open it in the lightbox */
     onOpen?: (fileId: string) => void;
-    /** Where files can be selected: a long-press starts selecting, and taps then toggle files instead of opening them */
+    /** Where files can be selected: lifting a hold in place starts selecting, and taps then toggle files instead of opening them */
     selection?: Selection;
 }
 
@@ -30,7 +30,7 @@ export default function FileGrid({
 }: FileGridProps) {
     const layout = useGridLayout();
     const [grid, setGrid] = useState<HTMLDivElement | null>(null);
-    useSelectionGestures(grid, FILE_TILE_ATTRIBUTE, selection);
+    useHoldGesture(grid, FILE_TILE_ATTRIBUTE, selection);
     if (!layout) {
         return null;
     }
@@ -40,7 +40,7 @@ export default function FileGrid({
             ref={setGrid}
             columns={columns}
             gap="2px"
-            css={selection ? SELECTABLE_GRID : undefined}>
+            css={HOLDABLE_GRID}>
             {files.map((file) => (
                 <chakra.button
                     key={file.id}

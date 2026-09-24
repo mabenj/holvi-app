@@ -3,8 +3,8 @@ import {
     firstAbove,
     useWindowVirtualRows
 } from "@/lib/hooks/useWindowVirtualRows";
+import { useHoldGesture } from "@/lib/hooks/useHoldGesture";
 import type { Selection } from "@/lib/hooks/useSelection";
-import { useSelectionGestures } from "@/lib/hooks/useSelectionGestures";
 import { FileSummary } from "@/lib/types/file-summary";
 import { Box, chakra, Skeleton, Text } from "@chakra-ui/react";
 import {
@@ -17,7 +17,7 @@ import {
     useState
 } from "react";
 import FileTile from "../grid/FileTile";
-import { SELECTABLE_GRID } from "../grid/selectable-grid";
+import { HOLDABLE_GRID } from "../grid/holdable-grid";
 import { revealTile } from "../lightbox/file-tiles";
 import { FILE_TILE_ATTRIBUTE } from "../lightbox/lightbox-slides";
 import SelectionMark from "../selection/SelectionMark";
@@ -34,7 +34,7 @@ interface TimelineGridProps {
     files: FileSummary[];
     /** A row of skeleton tiles after the files, while the next page loads */
     loadingMore?: boolean;
-    /** Where files can be selected: a long-press starts selecting, and taps then toggle files */
+    /** Where files can be selected: lifting a hold in place starts selecting, and taps then toggle files */
     selection?: Selection;
     /** Tapping a file's tile outside selection, e.g. to open it in the lightbox */
     onOpen?: (fileId: string) => void;
@@ -87,14 +87,14 @@ export default function TimelineGrid({
     );
 
     const listRef = useRef<HTMLDivElement>(null);
-    // The selection gestures listen on the list, so they need it as state
+    // The hold gesture listens on the list, so it needs it as state
     // to attach once it mounts; the virtualizer reads it through the ref
     const [list, setList] = useState<HTMLDivElement | null>(null);
     const attachList = useCallback((element: HTMLDivElement | null) => {
         listRef.current = element;
         setList(element);
     }, []);
-    useSelectionGestures(list, FILE_TILE_ATTRIBUTE, selection);
+    useHoldGesture(list, FILE_TILE_ATTRIBUTE, selection);
     const selecting = selection?.selecting ?? false;
     const isSelected = selection?.isSelected;
     const stickyRef = useRef<HTMLDivElement>(null);
@@ -193,7 +193,7 @@ export default function TimelineGrid({
                 ref={attachList}
                 aria-label="Timeline"
                 position="relative"
-                css={selection ? SELECTABLE_GRID : undefined}
+                css={HOLDABLE_GRID}
                 // The first month's own header sits under the sticky one
                 mt={`-${MONTH_HEIGHT}px`}
                 h={`${totalHeight}px`}>
@@ -295,8 +295,8 @@ const VirtualRow = memo(function VirtualRow({
                                   // of the sticky month and the tab bar
                                   scrollMarginTop={`calc(${MONTH_HEIGHT}px + env(safe-area-inset-top))`}
                                   scrollMarginBottom={`calc(${TAB_BAR_HEIGHT} + env(safe-area-inset-bottom))`}
-                                  // While selecting, the selection gestures
-                                  // take the click, so it toggles instead
+                                  // While selecting, the hold gesture takes
+                                  // the click, so it toggles instead
                                   onClick={() => onOpen?.(file.id)}>
                                   <FileTile file={file} />
                                   {selecting && (

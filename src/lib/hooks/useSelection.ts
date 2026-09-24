@@ -45,7 +45,7 @@ export interface Selection {
     /** Ids of the selected collections or files, in the order they were selected */
     selected: string[];
     isSelected: (id: string) => boolean;
-    /** Enters selection mode with the collection or file selected, e.g. on a long-press */
+    /** Enters selection mode with the collection or file selected, e.g. when a hold is lifted */
     start: (id: string) => void;
     /** Adds the collection or file to the selection, or takes it out */
     toggle: (id: string) => void;
@@ -56,9 +56,10 @@ export interface Selection {
 }
 
 /**
- * Selecting collections or files: a long-press enters selection mode (see
- * `useSelectionGestures`), taps then select or deselect, and Back (including
- * the phone's back gesture) leaves it, as does Escape in the selection bar.
+ * Selecting collections or files: lifting a hold in place enters selection
+ * mode (see `useHoldGesture`), taps then select or deselect, and Back
+ * (including the phone's back gesture) leaves it, as does Escape in the
+ * selection bar.
  * Selection mode is a shallow `?selecting=1` history entry on the page, so
  * Back leaves it instead of the page.
  */
