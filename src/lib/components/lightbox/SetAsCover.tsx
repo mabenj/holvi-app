@@ -1,15 +1,13 @@
 import { setCover } from "@/lib/client/collections";
 import { getErrorMessage } from "@/lib/common/utilities";
 import { FileSummary } from "@/lib/types/file-summary";
-import { chakra } from "@chakra-ui/react";
 import {
     mdiAlertCircleOutline,
     mdiImageCheck,
     mdiImageCheckOutline
 } from "@mdi/js";
-import Icon from "@mdi/react";
 import { useState } from "react";
-import { TAPPABLE_WHILE_VISIBLE } from "./lightbox-controls";
+import LightboxBarButton from "./LightboxBarButton";
 
 interface SetAsCoverProps {
     file: FileSummary;
@@ -45,39 +43,30 @@ export default function SetAsCover({ file, isCover, onSet }: SetAsCoverProps) {
         }
     };
 
-    const label = failed
-        ? `Could not set as cover: ${failed}`
-        : isCover
-          ? "Cover of this collection"
-          : "Set as cover";
     return (
-        <chakra.button
-            type="button"
-            // PhotoSwipe's own top-bar buttons, for size and feel
-            className="pswp__button"
-            title={label}
-            aria-label={label}
+        <LightboxBarButton
+            label={
+                failed ? `Could not set as cover: ${failed}` : "Set as cover"
+            }
+            // Pressed, and filled, while the file is the Cover
             aria-pressed={isCover}
+            title={
+                failed
+                    ? `Could not set as cover: ${failed}`
+                    : isCover
+                      ? "The cover of this collection"
+                      : "Set as cover"
+            }
+            icon={
+                failed
+                    ? mdiAlertCircleOutline
+                    : isCover
+                      ? mdiImageCheck
+                      : mdiImageCheckOutline
+            }
             disabled={saving}
-            display="flex"
-            alignItems="center"
-            justifyContent="center"
-            color="var(--pswp-icon-color)"
-            filter="drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6))"
             opacity={saving ? 0.5 : undefined}
-            css={TAPPABLE_WHILE_VISIBLE}
-            onClick={() => void choose()}>
-            <Icon
-                path={
-                    failed
-                        ? mdiAlertCircleOutline
-                        : isCover
-                          ? mdiImageCheck
-                          : mdiImageCheckOutline
-                }
-                size="26px"
-                aria-hidden
-            />
-        </chakra.button>
+            onClick={() => void choose()}
+        />
     );
 }
