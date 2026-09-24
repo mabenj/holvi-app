@@ -15,34 +15,24 @@ const TEXT_OUTLINE = `-1px -1px 0 rgba(0, 0, 0, 0.4),
     1px 1px 0 rgba(0, 0, 0, 0.4)`;
 const ICON_SHADOW = "drop-shadow(0 0 2px black)";
 const OVERLAY_FONT_SIZE = ["x-small", "x-small", "xs", "sm"];
-/** Where hover cycles a card, its name and counts fade out of the way, as before */
-const HOVER_CYCLING =
-    "@media (hover: hover) and (prefers-reduced-motion: no-preference)";
 
 interface CollectionCardProps {
     collection: CollectionSummary;
     /** The frame the card's thumbnail cycling is on, or null while it is still */
     frame?: number | null;
-    onHoverChange?: (collectionId: string, hovering: boolean) => void;
 }
 
 /**
  * A collection's tile: the Cover cropped to fill it, with its name and counts
- * over a bottom gradient. While cycling, it steps through its thumbnails.
+ * over a bottom gradient. While cycling, it steps through its thumbnails, and
+ * its name and counts fade out of the way.
  */
-function CollectionCard({
-    collection,
-    frame = null,
-    onHoverChange
-}: CollectionCardProps) {
+function CollectionCard({ collection, frame = null }: CollectionCardProps) {
     const { cover } = collection;
     const shown = useCyclingThumbnail(collection.thumbnails, frame);
     return (
         <CardLink
             href={`/collections/${collection.id}`}
-            className="group"
-            onMouseEnter={() => onHoverChange?.(collection.id, true)}
-            onMouseLeave={() => onHoverChange?.(collection.id, false)}
             display="flex"
             alignItems="center"
             justifyContent="center"
@@ -92,12 +82,9 @@ function CollectionCard({
                 px="2"
                 pointerEvents="none"
                 color="white"
-                opacity={0.9}
+                opacity={frame === null ? 0.9 : 0}
                 backgroundImage="linear-gradient(rgba(0, 0, 0, 0) 80%, rgba(0, 0, 0, 0.9) 100%)"
                 transition="opacity 0.3s"
-                css={{
-                    [HOVER_CYCLING]: { ".group:hover &": { opacity: 0 } }
-                }}
                 style={{ textShadow: TEXT_OUTLINE }}>
                 <Heading
                     as="h2"

@@ -41,7 +41,8 @@ export default function PullToRefresh({
                     : null;
         };
         const onTouchMove = (event: TouchEvent) => {
-            if (startY === null) return;
+            // Something on the page, e.g. a held tile, keeps it still
+            if (startY === null || event.defaultPrevented) return;
             const moved = event.touches[0].clientY - startY;
             if (moved <= 0 || window.scrollY > 0) {
                 setDistance(0);
