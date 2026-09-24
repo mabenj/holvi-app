@@ -105,13 +105,8 @@ function CollectionScreen({
     useRecordOpen(collectionId);
 
     // From the URL; without a sort there, the remembered file sort applies
-    const {
-        known: sortKnown,
-        sort,
-        tags,
-        chooseSort,
-        changeTags
-    } = useCollectionFilesQuery();
+    const { sortKnown, sort, tags, chooseSort, changeTags } =
+        useCollectionFilesQuery();
     const {
         files,
         pages,

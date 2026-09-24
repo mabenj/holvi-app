@@ -14,7 +14,6 @@ import {
     parseSortParam,
     parseTagsParam,
     QueryChanges,
-    sortParam,
     tagsParam,
     withQueryChanges
 } from "../client/browse-query";
@@ -54,6 +53,11 @@ async function replaceQuery(changes: QueryChanges) {
     });
 }
 
+/** Changes the tag filter in the URL, in place */
+function replaceTags(tags: string[]) {
+    void replaceQuery(tagsParam(tags));
+}
+
 /**
  * Keeps the URL's parameters as they should read: e.g. the remembered sort
  * written in, and values that are not valid or at their default taken out.
@@ -87,12 +91,12 @@ function useRememberedSort<S extends string>(memory: SortMemory<S>) {
 
 /**
  * The sort in the URL, or else the remembered one, or else the built-in one.
- * `known` is false until the remembered sort can be read, during hydration.
+ * `sortKnown` is false until the remembered sort can be read, during hydration.
  */
 function useSortQuery<S extends string>(memory: SortMemory<S>) {
     const { query } = useRouter();
     const remembered = useRememberedSort(memory);
-    const known = remembered !== NOT_KNOWN;
+    const sortKnown = remembered !== NOT_KNOWN;
     const { sort, param } = resolveSort(
         parseSortParam(query, memory.sorts),
         remembered ?? undefined,
@@ -104,12 +108,12 @@ function useSortQuery<S extends string>(memory: SortMemory<S>) {
         (sort: S) => {
             // Remembered first: with no sort in the URL, the remembered one applies
             rememberSort(memory, sort);
-            void replaceQuery(sortParam(chosenSortParam(sort, memory.builtIn)));
+            void replaceQuery({ sort: chosenSortParam(sort, memory.builtIn) });
         },
         [memory]
     );
 
-    return { known, sort, param, chooseSort };
+    return { sortKnown, sort, param, chooseSort };
 }
 
 /** The same array for the same tags, so effects and memos can depend on it */
@@ -127,7 +131,7 @@ function useTagsParam() {
  */
 export function useCollectionsQuery() {
     const { query } = useRouter();
-    const { known, sort, param, chooseSort } = useSortQuery(
+    const { sortKnown, sort, param, chooseSort } = useSortQuery(
         COLLECTION_SORT_MEMORY
     );
     const parsed = parseCollectionsFilter(query);
@@ -138,8 +142,8 @@ export function useCollectionsQuery() {
     );
 
     useCanonicalQuery(
-        known
-            ? { ...sortParam(param), ...collectionsFilterParams(filter) }
+        sortKnown
+            ? { sort: param, ...collectionsFilterParams(filter) }
             : null
     );
 
@@ -151,7 +155,7 @@ export function useCollectionsQuery() {
         [filter]
     );
 
-    return { known, sort, filter, changeFilter, chooseSort };
+    return { sortKnown, sort, filter, changeFilter, chooseSort };
 }
 
 /**
@@ -160,19 +164,14 @@ export function useCollectionsQuery() {
  * applies.
  */
 export function useCollectionFilesQuery() {
-    const { known, sort, param, chooseSort } = useSortQuery(FILE_SORT_MEMORY);
+    const { sortKnown, sort, param, chooseSort } = useSortQuery(FILE_SORT_MEMORY);
     const tags = useTagsParam();
 
     useCanonicalQuery(
-        known ? { ...sortParam(param), ...tagsParam(tags) } : null
+        sortKnown ? { sort: param, ...tagsParam(tags) } : null
     );
 
-    const changeTags = useCallback(
-        (tags: string[]) => void replaceQuery(tagsParam(tags)),
-        []
-    );
-
-    return { known, sort, tags, changeTags, chooseSort };
+    return { sortKnown, sort, tags, changeTags: replaceTags, chooseSort };
 }
 
 /** The Timeline's tag filter, from the URL, which changing it updates in place */
@@ -181,10 +180,5 @@ export function useTimelineQuery() {
 
     useCanonicalQuery(tagsParam(tags));
 
-    const changeTags = useCallback(
-        (tags: string[]) => void replaceQuery(tagsParam(tags)),
-        []
-    );
-
-    return { tags, changeTags };
+    return { tags, changeTags: replaceTags };
 }

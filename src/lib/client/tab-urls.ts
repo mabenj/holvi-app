@@ -3,8 +3,10 @@ import type { NextRouter } from "next/router";
 /** The tab bar's screens, by the path each tab goes to */
 export const TAB_PATHS = ["/", "/timeline", "/settings"] as const;
 
+/** The path of a tab's own screen */
 export type TabPath = (typeof TAB_PATHS)[number];
 
+/** The URL each tab goes to */
 export type TabUrls = Readonly<Record<TabPath, string>>;
 
 /**
@@ -96,6 +98,7 @@ export function rememberTabUrls(events: NextRouter["events"]) {
     return () => events.off("routeChangeComplete", onChange);
 }
 
+/** Calls back when a tab's URL changes, e.g. for the tab bar's links */
 export function subscribeToTabUrls(listener: () => void) {
     listeners.add(listener);
     return () => {
@@ -112,4 +115,13 @@ export function getTabUrls(): TabUrls {
 /** Where each tab goes when rendered on the server, and while hydrating */
 export function getServerTabUrls() {
     return TAB_HOMES;
+}
+
+/**
+ * Where to open a screen: a tab's screen at its last URL, with its sort and
+ * filters; any other path as it is
+ */
+export function openingUrl(path: string) {
+    const tab = TAB_PATHS.find((tabPath) => tabPath === path);
+    return tab ? getTabUrls()[tab] : path;
 }

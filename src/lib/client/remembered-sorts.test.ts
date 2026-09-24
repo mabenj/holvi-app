@@ -27,6 +27,17 @@ describe("which sort applies", () => {
         });
     });
 
+    it("takes a built-in sort named in the URL out when nothing else is remembered", () => {
+        expect(resolveSort("random", undefined, "random")).toEqual({
+            sort: "random",
+            param: undefined
+        });
+        expect(resolveSort("newest", "newest", "newest")).toEqual({
+            sort: "newest",
+            param: undefined
+        });
+    });
+
     it("is the remembered one without a sort in the URL, which the URL then carries", () => {
         expect(resolveSort(undefined, "lastAddedTo", "random")).toEqual({
             sort: "lastAddedTo",

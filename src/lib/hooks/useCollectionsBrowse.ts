@@ -41,6 +41,9 @@ const INITIAL_STATE: CollectionsBrowseState = {
     featured: []
 };
 
+/** Fetches a page of the user's collections: the one after the cursor, or the first without one */
+export type FetchCollectionsPage = typeof fetchCollectionsPage;
+
 /**
  * The Collections tab's sort and filter, their loaded pages, the Shuffle seed
  * they were fetched with and where the grid was scrolled to. Every query (a
@@ -51,7 +54,7 @@ const INITIAL_STATE: CollectionsBrowseState = {
  * Shuffle period's order, while going back from a collection returns to the
  * same pages and place.
  */
-class CollectionsBrowse {
+export class CollectionsBrowse {
     private state = INITIAL_STATE;
     /** Sent with every page after the first, so one scroll keeps one order */
     private seed: string | undefined;
@@ -61,6 +64,10 @@ class CollectionsBrowse {
     /** Where the grid was scrolled to when the user left it, until it is restored */
     private scrollPosition: number | null = null;
     private readonly listeners = new Set<() => void>();
+
+    constructor(
+        private readonly fetchCollections: FetchCollectionsPage = fetchCollectionsPage
+    ) {}
 
     subscribe = (listener: () => void) => {
         this.listeners.add(listener);
@@ -214,7 +221,7 @@ class CollectionsBrowse {
         this.request = request;
         this.update({ loading: true, error: null });
         try {
-            const page = await fetchCollectionsPage(
+            const page = await this.fetchCollections(
                 {
                     sort: this.state.sort,
                     filter: this.state.filter,

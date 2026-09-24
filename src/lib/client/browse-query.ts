@@ -85,11 +85,6 @@ export function tagsParam(tags: string[]): QueryChanges {
     return { tags: tags.length > 0 ? tags : undefined };
 }
 
-/** The `sort` parameter for a sort: left out when there is none to show */
-export function sortParam<S extends string>(sort: S | undefined): QueryChanges {
-    return { sort };
-}
-
 /** The Collections tab's filter that the query names; anything missing or not valid is its default */
 export function parseCollectionsFilter(
     query: ParsedUrlQuery

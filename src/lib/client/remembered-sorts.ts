@@ -37,14 +37,21 @@ export interface ResolvedSort<S extends string> {
  * Which sort applies: the URL's wins; without one, the remembered sort, which
  * the URL then carries too; without either, the built-in sort, which the URL
  * leaves out. A remembered sort that is the built-in one is left out as well,
- * so random is never written.
+ * so random is never written. The built-in sort named in the URL stays there
+ * only while another sort is remembered, which would apply without it.
  */
 export function resolveSort<S extends string>(
     fromUrl: S | undefined,
     remembered: S | undefined,
     builtIn: S
 ): ResolvedSort<S> {
-    if (fromUrl !== undefined) return { sort: fromUrl, param: fromUrl };
+    if (fromUrl !== undefined) {
+        // The built-in sort stays in the URL only where it holds off another remembered one
+        const holdsOff =
+            fromUrl !== builtIn ||
+            (remembered !== undefined && remembered !== builtIn);
+        return { sort: fromUrl, param: holdsOff ? fromUrl : undefined };
+    }
     if (remembered !== undefined && remembered !== builtIn) {
         return { sort: remembered, param: remembered };
     }

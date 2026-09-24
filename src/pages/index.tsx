@@ -45,7 +45,7 @@ const NEXT_PAGE_SKELETONS = 12;
 
 export default function CollectionsTab({ user }: SignedInPageProps) {
     // The sort and filter come from the URL; the browse shows their pages
-    const { known, sort, filter, changeFilter, chooseSort } =
+    const { sortKnown, sort, filter, changeFilter, chooseSort } =
         useCollectionsQuery();
     const browse = useCollectionsBrowse(user.id);
     const {
@@ -75,12 +75,12 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
     // never shows another query's pages.
     const queryKey = JSON.stringify([sort, filter]);
     useLayoutEffect(() => {
-        if (known) show(sort, filter);
+        if (sortKnown) show(sort, filter);
         // The sort and filter are in the key
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [known, queryKey, show]);
+    }, [sortKnown, queryKey, show]);
     const showing =
-        known &&
+        sortKnown &&
         collectionsQueryKey(sort, filter) ===
             collectionsQueryKey(browse.sort, browse.filter);
     const pages = showing ? browse.pages : [];

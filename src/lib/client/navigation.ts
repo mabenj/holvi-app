@@ -1,5 +1,5 @@
 import type { NextRouter } from "next/router";
-import { getTabUrls, TAB_PATHS } from "./tab-urls";
+import { openingUrl } from "./tab-urls";
 
 /** Screens shown in this app session after the first one */
 let navigations = 0;
@@ -26,13 +26,14 @@ export function countNavigations(events: NextRouter["events"]) {
 
 /**
  * Goes back in history when the previous screen belongs to this app session;
- * otherwise (e.g. a collection opened from a bookmark) goes to `fallback`
+ * otherwise (e.g. a collection opened from a bookmark) goes to `fallback`,
+ * which for a tab's screen is its last URL
  */
 export function goBack(router: NextRouter, fallback: string) {
     if (navigations > 0) {
         router.back();
     } else {
-        void router.push(fallback);
+        void router.push(openingUrl(fallback));
     }
 }
 
@@ -46,7 +47,6 @@ export function leaveFor(router: NextRouter, path: string) {
     if (navigations > 0 && previousPath === path) {
         router.back();
     } else {
-        const tab = TAB_PATHS.find((tabPath) => tabPath === path);
-        void router.replace(tab ? getTabUrls()[tab] : path);
+        void router.replace(openingUrl(path));
     }
 }

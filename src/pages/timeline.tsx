@@ -24,6 +24,7 @@ import { useLightboxHistory } from "@/lib/hooks/useLightboxHistory";
 import { useNextPageSentinel } from "@/lib/hooks/useNextPageSentinel";
 import { useSelection } from "@/lib/hooks/useSelection";
 import { useTimelineFiles } from "@/lib/hooks/useTimelineFiles";
+import type { FileSummary } from "@/lib/types/file-summary";
 import { Box, Button, EmptyState, Text, VStack } from "@chakra-ui/react";
 import { mdiTagOffOutline, mdiTimelineClockOutline } from "@mdi/js";
 import Icon from "@mdi/react";
@@ -35,7 +36,6 @@ import {
     useRef,
     useState
 } from "react";
-import type { FileSummary } from "@/lib/types/file-summary";
 import { mutate } from "swr";
 
 export const getServerSideProps = signedInPageProps;
@@ -55,14 +55,14 @@ const NO_FILES: FileSummary[] = [];
  */
 export default function TimelineTab({ user }: SignedInPageProps) {
     // The tags come from the URL; the Timeline's store shows their files
-    const { tags, changeTags: changeUrlTags } = useTimelineQuery();
+    const { tags, changeTags } = useTimelineQuery();
     const timeline = useTimelineFiles(user.id);
     const {
         loading,
         error,
         hasMore,
         startVisit,
-        changeTags,
+        changeTags: showTags,
         loadMore,
         reload,
         changeFiles,
@@ -78,7 +78,7 @@ export default function TimelineTab({ user }: SignedInPageProps) {
     const setTags = (tags: string[]) => {
         window.scrollTo({ top: 0 });
         selection.exit();
-        changeUrlTags(tags);
+        changeTags(tags);
     };
 
     // The first visit in this app session fetches the first page; coming
@@ -88,12 +88,12 @@ export default function TimelineTab({ user }: SignedInPageProps) {
     const visited = useRef(false);
     useLayoutEffect(() => {
         if (visited.current) {
-            changeTags(tags);
+            showTags(tags);
         } else {
             visited.current = true;
             startVisit(tags);
         }
-    }, [tags, startVisit, changeTags]);
+    }, [tags, startVisit, showTags]);
     const showing = timelineQueryKey(tags) === timelineQueryKey(timeline.tags);
     const pages = showing ? timeline.pages : [];
     const files = showing ? timeline.files : NO_FILES;
