@@ -102,6 +102,35 @@ export default class TagService {
     }
 
     /**
+     * Tag autocomplete for tag inputs: the tags of the user's collections and
+     * files that contain the query, ignoring case. Once each, by name.
+     */
+    async suggestTags(query: string): Promise<string[]> {
+        const search = query.trim();
+        if (!search || search.length > TAG_MAX_LENGTH) {
+            return [];
+        }
+        // The query's own % and _ are plain characters, not wildcards
+        const escaped = search.replace(/[\\%_]/g, (char) => `\\${char}`);
+        const db = await Database.getInstance();
+        const rows = (await db.select(
+            `SELECT tag.name
+                FROM "Tags" tag
+                WHERE tag.name ILIKE :pattern ESCAPE '\\'
+                AND (EXISTS (SELECT 1 FROM "CollectionTags" ct
+                        JOIN "Collections" c ON c.id = ct."CollectionId"
+                        WHERE ct."TagName" = tag.name AND c."UserId" = :userId)
+                    OR EXISTS (SELECT 1 FROM "CollectionFileTags" ft
+                        JOIN "CollectionFiles" f ON f.id = ft."CollectionFileId"
+                        JOIN "Collections" c ON c.id = f."CollectionId"
+                        WHERE ft."TagName" = tag.name AND c."UserId" = :userId))
+                ORDER BY tag.name`,
+            { userId: this.userId, pattern: `%${escaped}%` }
+        )) as { name: string }[];
+        return rows.map(({ name }) => name);
+    }
+
+    /**
      * Adds and removes tags on every one of the user's collections, or files,
      * in the selection, all at once. Returns each one's tags afterwards.
      */

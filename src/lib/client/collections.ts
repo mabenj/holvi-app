@@ -261,13 +261,13 @@ export async function updateFile(
     );
 }
 
-/** Existing tags that contain the query, for tag inputs */
+/** Existing tags that contain the query, once each, for tag inputs */
 export async function fetchTagSuggestions(
     query: string,
     signal?: AbortSignal
 ): Promise<string[]> {
     const data = await getJson(
-        `/api/search/tags?${new URLSearchParams({ query })}`,
+        `/api/tags/suggestions?${new URLSearchParams({ query })}`,
         "Could not load tag suggestions",
         { signal }
     );

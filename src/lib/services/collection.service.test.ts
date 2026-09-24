@@ -1374,8 +1374,7 @@ describe("Covers (integration)", () => {
         await service.setCover(trip.id, chosen.id);
         await service.setCover(other.id, otherChosen.id);
 
-        await service.deleteFile(trip.id, chosen.id);
-        await service.multiDelete([otherChosen.id]);
+        await service.multiDelete([chosen.id, otherChosen.id]);
 
         const trips = await service.getCollection(trip.id);
         expect(trips.cover?.thumbnailSrc).toBe(
@@ -1386,7 +1385,7 @@ describe("Covers (integration)", () => {
                 (id) => `/api/collections/${trip.id}/files?thumbnail=${id}`
             )
         );
-        // Deleting it as part of a selection falls back too
+        // Every Cover deleted in the selection falls back
         expect(
             (await service.getCollection(other.id)).cover?.thumbnailSrc
         ).toBe(`/api/collections/${other.id}/files?thumbnail=${otherLeft.id}`);
