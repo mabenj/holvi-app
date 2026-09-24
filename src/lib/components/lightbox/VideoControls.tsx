@@ -31,6 +31,7 @@ import { useDoubleTapSkip, useKeyboardControls } from "./usePlayerShortcuts";
 import {
     CONTROLS_AUTO_HIDE_MS,
     formatPlaybackTime,
+    progressPreview,
     setVolume,
     SkipDirection,
     togglePlay
@@ -47,15 +48,16 @@ interface VideoControlsProps {
     video: HTMLVideoElement;
     /** Seconds, from the file's metadata, until the video knows its own */
     knownDuration?: number;
-    /** Shows the frame being scrubbed to, if video processing has made one */
+    /** Shows the frame being scrubbed to or hovered over, if video processing has made one */
     scrubPreview?: ScrubPreview;
 }
 
 /**
  * The active video's controls: play and pause, position and duration, a
  * progress bar to scrub with (showing the frame being scrubbed to from the
- * video's Scrub preview, if it has one), loop, picture-in-picture where the browser
- * supports it, and volume or mute. They show and hide with the rest of the
+ * video's Scrub preview, if it has one, and previewing the frame and time
+ * under a hovering mouse without seeking), loop, picture-in-picture where the
+ * browser supports it, and volume or mute. They show and hide with the rest of the
  * lightbox's controls, and hide by themselves once playback has run for a
  * few seconds.
  *
@@ -79,6 +81,8 @@ export default function VideoControls({
 
     const [scrubTime, setScrubTime] = useState<number | null>(null);
     const resumeAfterScrub = useRef(false);
+    // Where a mouse hovers over the progress bar, from 0 to 1
+    const [hoverFraction, setHoverFraction] = useState<number | null>(null);
     const [hovered, setHovered] = useState(false);
     // Changes on each interaction, so the auto-hide countdown starts over
     const [lastInteraction, setLastInteraction] = useState(0);
@@ -145,6 +149,12 @@ export default function VideoControls({
             : 0;
     const silent = playback.muted || playback.volume === 0;
     const audibleVolume = silent ? 0 : playback.volume;
+    const preview = progressPreview({
+        duration,
+        hasScrubPreview: scrubPreview !== undefined,
+        dragTime: scrubTime,
+        hoverFraction
+    });
     const position = formatPlaybackTime(shownTime);
     const length = formatPlaybackTime(duration);
 
@@ -164,11 +174,11 @@ export default function VideoControls({
                 }
                 onPointerLeave={() => setHovered(false)}>
                 <Flex alignItems="center" position="relative">
-                    {scrubPreview && scrubTime !== null && (
+                    {preview && (
                         <ScrubPreviewFrame
                             preview={scrubPreview}
-                            time={scrubTime}
-                            progress={progress}
+                            time={preview.time}
+                            progress={preview.fraction}
                         />
                     )}
                     <PlayerSlider
@@ -181,6 +191,7 @@ export default function VideoControls({
                             video.pause();
                         }}
                         onChange={seekTo}
+                        onHover={setHoverFraction}
                         onDragEnd={() => {
                             setScrubTime(null);
                             if (resumeAfterScrub.current) {

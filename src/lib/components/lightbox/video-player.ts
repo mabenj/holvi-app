@@ -141,3 +141,41 @@ export function scrubPreviewTile(layout: ScrubPreviewLayout, seconds: number) {
         top: Math.floor(frame / layout.columns) * layout.tileHeight
     };
 }
+
+/** What the progress bar previews above itself */
+export interface ProgressPreview {
+    /** The position previewed, in seconds */
+    time: number;
+    /** How far along the bar it is, from 0 to 1 */
+    fraction: number;
+}
+
+/**
+ * What the progress bar previews, if anything: the position a press or drag
+ * has moved to, or else the one under a hovering mouse. Hovering never seeks.
+ * A mouse over the bar sees the Scrub preview's frame with the time, or only
+ * the time for a video without one. Touch has no hover, so it previews only
+ * while dragging, and only with a Scrub preview.
+ */
+export function progressPreview({
+    duration,
+    hasScrubPreview,
+    dragTime,
+    hoverFraction
+}: {
+    duration: number;
+    hasScrubPreview: boolean;
+    /** Where a press or drag has moved playback to, in seconds, while one is under way */
+    dragTime: number | null;
+    /** How far along the bar a hovering mouse is, from 0 to 1, while it is over it */
+    hoverFraction: number | null;
+}): ProgressPreview | null {
+    if (!Number.isFinite(duration) || duration <= 0) return null;
+    if (!hasScrubPreview && hoverFraction === null) return null;
+    if (dragTime !== null) {
+        const fraction = Math.min(1, Math.max(0, dragTime / duration));
+        return { time: dragTime, fraction };
+    }
+    if (hoverFraction === null) return null;
+    return { time: hoverFraction * duration, fraction: hoverFraction };
+}

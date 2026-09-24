@@ -13,12 +13,18 @@ interface PlayerSliderProps {
     onChange: (value: number) => void;
     onDragStart?: () => void;
     onDragEnd?: () => void;
+    /**
+     * Called as a mouse moves over the slider, pressed or not, with the value
+     * under it, and with null once it leaves. Hovering changes nothing itself.
+     */
+    onHover?: (value: number | null) => void;
 }
 
 /**
  * A horizontal slider for the video controls. A press jumps to the pointer
  * and dragging follows it, even off the track. It sits outside PhotoSwipe's
- * gesture area, so dragging it never changes slide.
+ * gesture area, so dragging it never changes slide. It reports where a mouse
+ * hovers over it, for a preview; touch has no hover.
  */
 export default function PlayerSlider({
     value,
@@ -26,7 +32,8 @@ export default function PlayerSlider({
     valueText,
     onChange,
     onDragStart,
-    onDragEnd
+    onDragEnd,
+    onHover
 }: PlayerSliderProps) {
     const trackRef = useRef<HTMLDivElement>(null);
     const [dragging, setDragging] = useState(false);
@@ -48,7 +55,12 @@ export default function PlayerSlider({
         onChange(valueAt(event));
     };
     const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+        if (event.pointerType === "mouse") onHover?.(valueAt(event));
         if (event.pointerId === dragPointer.current) onChange(valueAt(event));
+    };
+    // While a drag holds the pointer, it leaves only once released
+    const onPointerLeave = (event: PointerEvent<HTMLDivElement>) => {
+        if (event.pointerType === "mouse") onHover?.(null);
     };
     const endDrag = (event: PointerEvent<HTMLDivElement>) => {
         if (event.pointerId !== dragPointer.current) return;
@@ -76,7 +88,8 @@ export default function PlayerSlider({
             onPointerMove={onPointerMove}
             onPointerUp={endDrag}
             onPointerCancel={endDrag}
-            onLostPointerCapture={endDrag}>
+            onLostPointerCapture={endDrag}
+            onPointerLeave={onPointerLeave}>
             <Box
                 ref={trackRef}
                 position="absolute"
