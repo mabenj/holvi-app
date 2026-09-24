@@ -1,12 +1,11 @@
 import Database from "@/db/Database";
-import { Collection } from "@/db/models/Collection";
 import { IncomingMessage } from "http";
 import { Op, Transaction } from "sequelize";
 import { Readable } from "stream";
 import { Clock, realClock } from "../common/clock";
 import { HolviError, NotFoundError } from "../common/errors";
 import { UserFileSystem } from "../common/user-file-system";
-import { EMPTY_UUIDV4, caseInsensitiveSorter } from "../common/utilities";
+import { EMPTY_UUIDV4 } from "../common/utilities";
 import { CollectionDto } from "../types/collection-dto";
 import { CollectionFileDto } from "../types/collection-file-dto";
 import { CollectionFileFormData } from "../validators/collection-file.validator";
@@ -45,7 +44,6 @@ export type {
 interface CreateResult {
   collection?: CollectionDto;
   nameError?: string;
-  errors?: string[];
 }
 
 interface GetBufferResult {
@@ -142,20 +140,6 @@ export class CollectionService {
     query: BrowseTimelineQuery = {}
   ): Promise<BrowseFilesPage> {
     return browseTimeline(this.userId, query);
-  }
-
-  async getAllFiles(): Promise<CollectionFileDto[]> {
-    const db = await Database.getInstance();
-    const files = await db.models.CollectionFile.findAll({
-      include: {
-        model: db.models.Collection,
-        required: true,
-        where: {
-          UserId: this.userId,
-        },
-      },
-    });
-    return files.map((file) => file.toDto());
   }
 
   async updateFile(
@@ -294,28 +278,6 @@ export class CollectionService {
     }
   }
 
-  async deleteFile(collectionId: string, fileId: string) {
-    const db = await Database.getInstance();
-    const transaction = await db.transaction();
-    await this.throwIfNotUserCollection(collectionId);
-
-    try {
-      const collectionFile = await db.models.CollectionFile.findByPk(fileId);
-      if (!collectionFile) {
-        throw new NotFoundError(`File not found '${fileId}'`);
-      }
-      collectionFile.destroy({ transaction });
-
-      const fileSystem = new UserFileSystem(this.userId);
-      await fileSystem.deleteFileAndThumbnail(collectionId, collectionFile.id);
-
-      await transaction.commit();
-    } catch (error) {
-      await transaction.rollback();
-      throw new HolviError(`Error deleting file '${fileId}'`, error);
-    }
-  }
-
   /** Streams a chunk of a video's original, or of its Rendition if it has one */
   async getVideoStream(
     collectionId: string,
@@ -401,44 +363,10 @@ export class CollectionService {
     };
   }
 
-  async uploadCollection(
-    collectionName: string,
-    req: IncomingMessage
-  ): Promise<CreateResult> {
-    const { collection, nameError } = await this.createCollection(
-      collectionName,
-      []
-    );
-    if (!collection || nameError) {
-      return { nameError };
-    }
-    try {
-      const { files, errors } = await this.uploadFiles(collection.id, req);
-      collection.thumbnails = files
-        .sort(caseInsensitiveSorter("name"))
-        .slice(0, Collection.thumbnailsLimit)
-        .map((file) => file.thumbnailSrc);
-      collection.imageCount = files.filter((file) =>
-        file.mimeType.includes("image")
-      ).length;
-      collection.videoCount = files.filter((file) =>
-        file.mimeType.includes("video")
-      ).length;
-      return {
-        collection,
-        errors,
-      };
-    } catch (error) {
-      await this.deleteCollection(collection.id);
-      throw new HolviError("Error uploading collection", error);
-    }
-  }
-
   async uploadFiles(
     collectionId: string,
     req: IncomingMessage
   ): Promise<{
-    collection: CollectionDto;
     files: CollectionFileDto[];
     errors: string[];
   }> {
@@ -510,15 +438,7 @@ export class CollectionService {
       // Not awaited: the upload finishes without waiting for video processing
       VideoProcessingService.kick();
 
-      const collection = await db.models.Collection.findByPk(collectionId, {
-        include: [db.models.CollectionFile, db.models.Tag],
-      });
-      if (!collection) {
-        throw new NotFoundError(`Collection '${collectionId}' not found`);
-      }
-
       return {
-        collection: collection.toDto(),
         files: insertedRows.map((row) => row.toDto()),
         errors: errors,
       };

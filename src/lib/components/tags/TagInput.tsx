@@ -93,7 +93,7 @@ function useTagSuggestions(input: string) {
         const request = new AbortController();
         const timer = setTimeout(() => {
             fetchTagSuggestions(query, request.signal)
-                .then((tags) => setSuggestions(unique(tags)))
+                .then(setSuggestions)
                 .catch(() => undefined);
         }, SUGGESTION_DELAY_MS);
         return () => {
@@ -102,15 +102,4 @@ function useTagSuggestions(input: string) {
         };
     }, [query]);
     return query ? suggestions : [];
-}
-
-/** The autocomplete lists collection and file tags together, so a tag can appear twice */
-function unique(tags: string[]) {
-    const seen = new Set<string>();
-    return tags.filter((tag) => {
-        const key = tag.toLowerCase();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
 }

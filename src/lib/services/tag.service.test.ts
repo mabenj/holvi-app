@@ -339,3 +339,63 @@ describe("Bulk tagging (integration)", () => {
         expect(await collectionTags(user.id)).toEqual({ Beach: ["summer"] });
     });
 });
+
+describe("Suggesting tags (integration)", () => {
+    beforeEach(async () => {
+        await resetDatabase();
+    });
+
+    it("suggests the user's collection and file tags that contain the query, ignoring case, once each and by name", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip", {
+            tags: ["Summer", "travel"]
+        });
+        await addFile(user.id, trip.id, "a.jpg", Buffer.from("a"), {
+            tags: ["summer", "sunset", "beach"]
+        });
+        await createCollection(user.id, "Garden", { tags: ["midsummer"] });
+
+        const service = new TagService(user.id);
+
+        expect(await service.suggestTags("SUM")).toEqual([
+            "midsummer",
+            "Summer"
+        ]);
+        expect(await service.suggestTags("  s  ")).toEqual([
+            "midsummer",
+            "Summer",
+            "sunset"
+        ]);
+    });
+
+    it("suggests nothing for an empty query, and treats % and _ as plain characters", async () => {
+        const user = await createUser("alice");
+        await createCollection(user.id, "Trip", {
+            tags: ["100%", "snake_case", "plain"]
+        });
+
+        const service = new TagService(user.id);
+
+        expect(await service.suggestTags("")).toEqual([]);
+        expect(await service.suggestTags("   ")).toEqual([]);
+        expect(await service.suggestTags("%")).toEqual(["100%"]);
+        expect(await service.suggestTags("_")).toEqual(["snake_case"]);
+    });
+
+    it("suggests only the user's own tags", async () => {
+        const alice = await createUser("alice");
+        const bob = await createUser("bob");
+        await createCollection(alice.id, "Trip", { tags: ["travel"] });
+        const bobs = await createCollection(bob.id, "Bob's", {
+            tags: ["bobs-secret"]
+        });
+        await addFile(bob.id, bobs.id, "b.jpg", Buffer.from("b"), {
+            tags: ["bobs-file-secret"]
+        });
+
+        expect(await new TagService(alice.id).suggestTags("bobs")).toEqual([]);
+        expect(await new TagService(alice.id).suggestTags("t")).toEqual([
+            "travel"
+        ]);
+    });
+});

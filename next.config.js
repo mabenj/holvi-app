@@ -19,14 +19,7 @@ const nextConfig = {
     },
     images: {
         // File and thumbnail sources name the file in their query string
-        localPatterns: [{ pathname: "/api/collections/**" }],
-        remotePatterns: [
-            {
-                protocol: "https",
-                hostname: "picsum.photos",
-                port: ""
-            }
-        ]
+        localPatterns: [{ pathname: "/api/collections/**" }]
     }
 };
 

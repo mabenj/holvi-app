@@ -369,13 +369,13 @@ describe("VideoProcessingService (integration)", () => {
         ).toEqual([]);
     });
 
-    it("deletes a video's Rendition and Scrub preview with the video, whether deleted alone or among others", async () => {
+    it("deletes the Renditions and Scrub previews of deleted videos", async () => {
         const user = await createUser("alice");
         const trip = await createCollection(user.id, "Trip");
         const hevc = { videoCodec: "hevc", audio: "aac", container: "mov" } as const;
-        const alone = await addVideo(user.id, trip.id, "alone", hevc);
-        const among = await addVideo(user.id, trip.id, "among", hevc);
-        for (const video of [alone, among]) {
+        const first = await addVideo(user.id, trip.id, "first", hevc);
+        const second = await addVideo(user.id, trip.id, "second", hevc);
+        for (const video of [first, second]) {
             await addThumbnail(user.id, trip.id, video.id, Buffer.from("png"));
         }
         await processVideos(new VideoProcessingService(user.id));
@@ -384,8 +384,7 @@ describe("VideoProcessingService (integration)", () => {
         expect(await listFiles(userDir)).toHaveLength(8);
 
         const collections = new CollectionService(user.id);
-        await collections.deleteFile(trip.id, alone.id);
-        await collections.multiDelete([among.id]);
+        await collections.multiDelete([first.id, second.id]);
 
         expect(await listFiles(userDir)).toEqual([]);
     });
