@@ -164,7 +164,7 @@ export type SaveCollectionResult = { id: string } | { nameError: string };
  */
 async function sendJson(
     url: string,
-    method: "POST" | "DELETE",
+    method: "POST" | "PUT" | "DELETE",
     body: unknown,
     failure: string
 ) {
@@ -204,6 +204,19 @@ export async function updateCollection(
         "Could not save the collection"
     );
     return data.nameError ? { nameError: data.nameError } : { id: collectionId };
+}
+
+/**
+ * Makes one of the collection's files, a photo or a video, its Cover; null
+ * goes back to the automatic Cover
+ */
+export async function setCover(collectionId: string, fileId: string | null) {
+    await sendJson(
+        `${collectionUrl(collectionId)}/cover`,
+        "PUT",
+        { fileId },
+        "Could not set the cover"
+    );
 }
 
 export async function deleteCollection(collectionId: string) {
