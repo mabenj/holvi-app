@@ -11,7 +11,6 @@ import {
     CollectionFileType,
     CollectionService
 } from "@/lib/services/collection.service";
-import { CollectionDto } from "@/lib/types/collection-dto";
 import {
     CollectionFormData,
     CollectionValidator
@@ -44,25 +43,21 @@ async function browseCollections(
 
 async function createCollection(
     req: ApiRequest<CollectionFormData>,
-    res: ApiResponse<{ collection?: CollectionDto; nameError?: string }>
+    res: ApiResponse<{ id?: string; nameError?: string }>
 ) {
     const { name, tags, description } = req.body;
     const collectionService = new CollectionService(req.session.user.id);
-    const { collection, nameError } = await collectionService.createCollection(
+    const { id, nameError } = await collectionService.createCollection(
         name,
         tags,
         description
     );
-    if (!collection || nameError) {
-        res.status(400).json({
-            status: "error",
-            error: nameError || "Error creating collection",
-            nameError
-        });
+    if (nameError !== undefined) {
+        res.status(400).json({ status: "error", error: nameError, nameError });
         return;
     }
 
-    res.status(201).json({ status: "ok", collection });
+    res.status(201).json({ status: "ok", id });
 }
 
 export default ApiRoute.create({

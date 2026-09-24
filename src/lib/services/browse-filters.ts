@@ -1,4 +1,5 @@
 import { InvalidArgumentError } from "../common/errors";
+import { TAG_MAX_LENGTH } from "../types/tag-count";
 
 /** Filters shared by the browsing services, as SQL conditions for a WHERE clause */
 
@@ -10,8 +11,6 @@ export interface SqlFilter {
 
 /** At most this many tags in one filter */
 export const MAX_FILTER_TAGS = 20;
-/** Tags are at most this long, as the editors allow */
-const MAX_TAG_LENGTH = 50;
 
 /** Where the tags of the browsed rows are stored */
 interface TagJunction {
@@ -38,7 +37,7 @@ export function tagFilter(
             `Filter by at most ${MAX_FILTER_TAGS} tags`
         );
     }
-    if (names.some((name) => !name || name.length > MAX_TAG_LENGTH)) {
+    if (names.some((name) => !name || name.length > TAG_MAX_LENGTH)) {
         throw new InvalidArgumentError("Malformed tag");
     }
     const holders = [junctions].flat();

@@ -74,6 +74,31 @@ describe("CollectionService (integration)", () => {
             new CollectionService(alice.id).getCollection(bobs.id)
         ).rejects.toThrow(NotFoundError);
     });
+
+    it("finds no file, rather than failing, for an id that is not a file id", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const photo = await addFile(user.id, trip.id, "a.jpg", Buffer.from("a"));
+        const service = new CollectionService(user.id);
+
+        for (const [collectionId, fileId] of [
+            [trip.id, "not-a-file"],
+            ["not-a-collection", photo.id]
+        ]) {
+            await expect(
+                service.getFileBuffer(collectionId, fileId)
+            ).rejects.toThrow(NotFoundError);
+            await expect(
+                service.getFileBuffer(collectionId, fileId, true)
+            ).rejects.toThrow(NotFoundError);
+            await expect(
+                service.getScrubPreview(collectionId, fileId)
+            ).rejects.toThrow(NotFoundError);
+            await expect(
+                service.getVideoStream(collectionId, fileId, 0)
+            ).rejects.toThrow(NotFoundError);
+        }
+    });
 });
 
 describe("Browsing collections (integration)", () => {
@@ -1144,13 +1169,13 @@ describe("Creating collections and uploading files (integration)", () => {
         const user = await createUser("alice");
         const service = new CollectionService(user.id);
 
-        const { collection } = await service.createCollection(
+        const { id } = await service.createCollection(
             "Lapland",
             ["winter", "travel"],
             "Northern lights"
         );
 
-        expect(await service.getCollection(collection!.id)).toMatchObject({
+        expect(await service.getCollection(id!)).toMatchObject({
             name: "Lapland",
             description: "Northern lights",
             tags: expect.arrayContaining(["winter", "travel"]),

@@ -10,7 +10,6 @@ import {
     CollectionService,
     FileSort
 } from "@/lib/services/collection.service";
-import { CollectionFileDto } from "@/lib/types/collection-file-dto";
 import {
     CollectionFileFormData,
     CollectionFileValidator
@@ -18,17 +17,18 @@ import {
 import contentDisposition from "content-disposition";
 import { pipeline } from "stream";
 
-async function post(
-    req: ApiRequest<CollectionFileFormData>,
-    res: ApiResponse<{ file?: CollectionFileDto }>
-) {
-    const { collectionId } = req.query as {
-        collectionId: string;
-        fileId: string;
-    };
+/**
+ * Decrypted content is the user's alone: browsers may cache it for a day, but
+ * shared caches such as a reverse proxy must not keep it
+ */
+const PRIVATE_CACHE_CONTROL = "private, max-age=86400";
+
+/** Renames and retags one of the collection's files */
+async function post(req: ApiRequest<CollectionFileFormData>, res: ApiResponse) {
+    const { collectionId } = req.query as { collectionId: string };
     const collectionService = new CollectionService(req.session.user.id);
-    const file = await collectionService.updateFile(collectionId, req.body);
-    res.status(200).json({ status: "ok", file });
+    await collectionService.updateFile(collectionId, req.body);
+    res.status(200).json({ status: "ok" });
 }
 
 async function get(req: ApiRequest, res: ApiResponse) {
@@ -88,7 +88,7 @@ async function handleGetThumbnail(
         true
     );
     res.setHeader("Content-Type", "image/png");
-    res.setHeader("Cache-Control", "public, max-age=86400"); // 24h
+    res.setHeader("Cache-Control", PRIVATE_CACHE_CONTROL);
     res.setHeader(
         "Content-Disposition",
         contentDisposition(`thumbnail_${filename}`, { type: "inline" })
@@ -112,7 +112,7 @@ async function handleGetCollectionImage(
             ? await service.getScrubPreview(collectionId, imageId)
             : await service.getFileBuffer(collectionId, imageId);
     res.setHeader("Content-Type", mimeType);
-    res.setHeader("Cache-Control", "public, max-age=86400"); // 24h
+    res.setHeader("Cache-Control", PRIVATE_CACHE_CONTROL);
     res.setHeader(
         "Content-Disposition",
         contentDisposition(`${filename}`, { type: "inline" })

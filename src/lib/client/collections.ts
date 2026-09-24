@@ -195,7 +195,7 @@ export async function createCollection(
     );
     return data.nameError
         ? { nameError: data.nameError }
-        : { id: data.collection.id };
+        : { id: data.id };
 }
 
 export async function updateCollection(

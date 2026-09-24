@@ -271,9 +271,11 @@ export class VideoHelper {
                 audioCodecs: metadata.streams
                     .filter((stream) => stream.codec_type === "audio")
                     .map((stream) => stream.codec_name ?? "unknown"),
-                // MP4 and MOV share one demuxer; QuickTime files carry the qt brand
+                // MP4 and MOV share one demuxer. QuickTime files carry the qt
+                // brand, or no brand at all in older files without an ftyp box.
                 isMp4:
                     !!metadata.format.format_name?.includes("mp4") &&
+                    majorBrand !== "" &&
                     majorBrand !== "qt" &&
                     !majorBrand.startsWith("3g")
             },

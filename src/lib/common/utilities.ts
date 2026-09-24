@@ -36,21 +36,6 @@ export function formatBytes(bytes: number) {
   return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
-export function caseInsensitiveSorter<T, K extends keyof T>(
-  key: K,
-  asc: boolean = true
-): (a: T, b: T) => number {
-  return (a: T, b: T) => {
-    const valueA = String(a[key]).toLowerCase();
-    const valueB = String(b[key]).toLowerCase();
-
-    const result = valueA.localeCompare(valueB, undefined, {
-      sensitivity: "accent",
-    });
-    return asc ? result : -result;
-  };
-}
-
 export function getFileSrc(options: {
   collectionId: string;
   fileId: string;

@@ -9,6 +9,7 @@ import {
     TagScope
 } from "../types/tag-count";
 import { UUID_PATTERN } from "./keyset-paging";
+import { throwIfNotUserCollection } from "./user-collections";
 
 export type { BulkTagChanges, TagsById } from "../types/bulk-tag";
 export type { TagCount, TagScope } from "../types/tag-count";
@@ -72,7 +73,7 @@ export default class TagService {
             );
         }
         if (collectionId !== undefined) {
-            await this.throwIfNotUserCollection(collectionId);
+            await throwIfNotUserCollection(this.userId, collectionId);
         }
 
         const db = await Database.getInstance();
@@ -209,22 +210,5 @@ export default class TagService {
             tags.sort((a, b) => a.localeCompare(b))
         );
         return tagsById;
-    }
-
-    private async throwIfNotUserCollection(collectionId: string) {
-        const notFound = new NotFoundError(
-            `Collection not found '${collectionId}'`
-        );
-        if (!UUID_PATTERN.test(collectionId)) {
-            throw notFound;
-        }
-        const db = await Database.getInstance();
-        const collection = await db.models.Collection.findByPk(collectionId, {
-            attributes: ["UserId"],
-            raw: true
-        });
-        if (!collection || collection.UserId !== this.userId) {
-            throw notFound;
-        }
     }
 }

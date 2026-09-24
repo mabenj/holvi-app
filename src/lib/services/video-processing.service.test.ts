@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { mkdir, readFile, rename, writeFile } from "fs/promises";
+import { mkdir, readdir, readFile, rename, rm, writeFile } from "fs/promises";
 import path from "path";
 import sharp from "sharp";
 import { Readable } from "stream";
@@ -290,6 +290,31 @@ describe("VideoProcessingService (integration)", () => {
         expect(boxes.indexOf("moov")).toBeLessThan(boxes.indexOf("mdat"));
     });
 
+    it("gives an older QuickTime MOV, which has no ftyp box, a Rendition", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const original = await generateVideo({
+            videoCodec: "h264",
+            audio: "aac",
+            container: "mov"
+        });
+        // Older QuickTime files start without an ftyp box. A free box of the
+        // same size in its place keeps every offset in the file right.
+        expect(original.subarray(4, 8).toString("latin1")).toBe("ftyp");
+        original.write("free", 4, "latin1");
+        const video = await addFile(user.id, trip.id, "old.mov", original, {
+            mimeType: "video/quicktime"
+        });
+
+        await processVideos(new VideoProcessingService(user.id));
+
+        const playbackSrc = await playbackSrcOf(user.id, trip.id, video.id);
+        expect(playbackSrc).not.toBe(originalSrc(trip.id, video.id));
+        expect(
+            await probeVideo(await readPlaybackSrc(user.id, playbackSrc!))
+        ).toMatchObject({ videoCodec: "h264", audioCodec: "aac", container: "mp4" });
+    });
+
     it("stores the Rendition and the Scrub preview encrypted, next to an original that stays byte-identical", async () => {
         const user = await createUser("alice");
         const trip = await createCollection(user.id, "Trip");
@@ -387,6 +412,50 @@ describe("VideoProcessingService (integration)", () => {
         await collections.multiDelete([first.id, second.id]);
 
         expect(await listFiles(userDir)).toEqual([]);
+    });
+
+    it("leaves nothing behind of a collection deleted while one of its videos is being processed", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        await addVideo(user.id, trip.id, "iphone", {
+            videoCodec: "hevc",
+            audio: "aac",
+            container: "mov"
+        });
+        const collections = new CollectionService(user.id);
+        let deleted = false;
+        const service = new VideoProcessingService(user.id, {
+            // The collection is deleted once its video has been decrypted
+            openDecryptedFile: (ref) =>
+                Readable.from(
+                    (async function* () {
+                        const chunks: Buffer[] = [];
+                        for await (const chunk of new UserFileSystem(
+                            ref.userId
+                        ).openDecryptedFile(ref.collectionId, ref.fileId)) {
+                            chunks.push(chunk);
+                        }
+                        await collections.deleteCollection(ref.collectionId);
+                        deleted = true;
+                        yield Buffer.concat(chunks);
+                    })()
+                )
+        });
+
+        await service.processVideos();
+        // The deleted video no longer counts as processing, so wait until the
+        // worker has emptied its processing directory
+        const processingDir = path.join(appConfig.dataDir, "processing");
+        await waitFor(
+            async () =>
+                deleted &&
+                (await readdir(processingDir).catch(() => [])).length === 0,
+            Boolean,
+            60_000
+        );
+
+        expect(await readdir(path.join(appConfig.dataDir, user.id))).toEqual([]);
+        expect(await findPlaintextFiles()).toEqual([]);
     });
 
     it("leaves Renditions and Scrub previews out of a Backup, which holds the original only", async () => {
@@ -621,6 +690,65 @@ describe("VideoProcessingService (integration)", () => {
             true
         );
         expect(await scrubPreviewOf(user.id, trip.id, video.id)).toBeUndefined();
+    });
+
+    it("keeps a video's Rendition when only its Scrub preview fails, so the video still plays", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const video = await addVideo(user.id, trip.id, "iphone", {
+            videoCodec: "hevc",
+            audio: "aac",
+            container: "mov"
+        });
+        // Something already in the way where the Scrub preview is stored
+        await mkdir(
+            new UserFileSystem(user.id).getScrubPreviewPath(trip.id, video.id),
+            { recursive: true }
+        );
+        const service = new VideoProcessingService(user.id);
+
+        const status = await processVideos(service);
+
+        expect(status).toMatchObject({ done: 0, failed: 1 });
+        expect((await service.getFailedVideos()).map((failed) => failed.id)).toEqual([
+            video.id
+        ]);
+        expect(await scrubPreviewOf(user.id, trip.id, video.id)).toBeUndefined();
+        const playbackSrc = await playbackSrcOf(user.id, trip.id, video.id);
+        expect(playbackSrc).not.toBe(originalSrc(trip.id, video.id));
+        expect(await probeVideo(await readPlaybackSrc(user.id, playbackSrc!))).toMatchObject({
+            videoCodec: "h264",
+            container: "mp4"
+        });
+    });
+
+    it("keeps a failed video's Rendition when retrying it fails before a new one is made", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const video = await addVideo(user.id, trip.id, "iphone", {
+            videoCodec: "hevc",
+            audio: "aac",
+            container: "mov"
+        });
+        const scrubPreviewPath = new UserFileSystem(user.id).getScrubPreviewPath(
+            trip.id,
+            video.id
+        );
+        await mkdir(scrubPreviewPath, { recursive: true });
+        await processVideos(new VideoProcessingService(user.id));
+        await rm(scrubPreviewPath, { recursive: true });
+
+        const status = await processVideos(
+            new VideoProcessingService(user.id, { openDecryptedFile: failingOpener })
+        );
+
+        expect(status).toMatchObject({ done: 0, failed: 1 });
+        const playbackSrc = await playbackSrcOf(user.id, trip.id, video.id);
+        expect(playbackSrc).not.toBe(originalSrc(trip.id, video.id));
+        expect(await probeVideo(await readPlaybackSrc(user.id, playbackSrc!))).toMatchObject({
+            videoCodec: "h264",
+            container: "mp4"
+        });
     });
 
     it("retries a failed video when videos are queued again", async () => {
