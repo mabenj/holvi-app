@@ -29,6 +29,12 @@ export class Collection extends Model<
     declare openCount: CreationOptional<number>;
     /** When the collection was last opened; null if never */
     declare lastOpened: CreationOptional<Date | null>;
+    /**
+     * The file the user chose as the Cover; null for the automatic Cover.
+     * No foreign key: it may name a file that is gone, which falls back to
+     * the automatic Cover when collections are read.
+     */
+    declare coverFileId: CreationOptional<string | null>;
 
     declare UserId: ForeignKey<User["id"]>;
 
@@ -50,6 +56,9 @@ export class Collection extends Model<
                 description: DataTypes.STRING,
                 createdAt: DataTypes.DATE,
                 updatedAt: DataTypes.DATE,
+                // Collections and CollectionFiles referencing each other
+                // would be a cycle that model sync cannot create
+                coverFileId: DataTypes.UUID,
                 openCount: {
                     type: DataTypes.INTEGER,
                     allowNull: false,
