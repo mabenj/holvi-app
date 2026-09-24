@@ -1,4 +1,5 @@
 import { Activity } from "../types/activity";
+import { isVideoProcessingActive } from "../types/video-processing-status";
 import { BackupService } from "./backup.service";
 import { VideoProcessingService } from "./video-processing.service";
 
@@ -16,10 +17,7 @@ export class ActivityService {
         return {
             backupJob,
             videoProcessing,
-            active:
-                backupJob !== null ||
-                videoProcessing.pending > 0 ||
-                videoProcessing.processing > 0
+            active: backupJob !== null || isVideoProcessingActive(videoProcessing)
         };
     }
 }

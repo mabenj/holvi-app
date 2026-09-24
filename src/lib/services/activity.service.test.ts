@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { CollectionFile } from "@/db/models/CollectionFile";
 import { addFile, createCollection, createUser } from "../../../test/fixtures";
 import { getTestDatabase, resetDatabase } from "../../../test/database";
 import { ActivityService } from "./activity.service";
@@ -7,7 +8,7 @@ async function addVideoRow(
     userId: string,
     collectionId: string,
     name: string,
-    processingStatus: "pending" | "processing" | "done" | "failed" | null
+    processingStatus: CollectionFile["processingStatus"]
 ) {
     return addFile(userId, collectionId, name, Buffer.from(name), {
         mimeType: "video/mp4",
@@ -48,22 +49,33 @@ describe("ActivityService", () => {
         });
         const aliceJob = await db.models.BackupJob.create({
             UserId: alice.id,
-            status: "queued",
-            queuedAt: new Date("2026-02-01T00:00:00Z")
+            status: "running",
+            queuedAt: new Date("2026-02-01T00:00:00Z"),
+            startedAt: new Date("2026-02-01T00:00:00Z"),
+            filesDone: 3,
+            filesTotal: 10,
+            bytesDone: 3_000,
+            bytesTotal: 10_000,
+            currentFileName: "beach.jpg"
         });
         await db.models.BackupJob.create({
             UserId: bob.id,
-            status: "running",
-            queuedAt: new Date("2026-01-15T00:00:00Z"),
-            startedAt: new Date("2026-01-15T00:00:00Z")
+            status: "queued",
+            queuedAt: new Date("2026-01-15T00:00:00Z")
         });
 
         const activity = await new ActivityService(alice.id).getActivity();
 
         expect(activity.backupJob).toMatchObject({
             id: aliceJob.id,
-            status: "queued",
-            progress: { filesDone: 0 }
+            status: "running",
+            progress: {
+                filesDone: 3,
+                filesTotal: 10,
+                bytesDone: 3_000,
+                bytesTotal: 10_000,
+                currentFileName: "beach.jpg"
+            }
         });
         expect(activity.videoProcessing).toEqual({
             pending: 2,

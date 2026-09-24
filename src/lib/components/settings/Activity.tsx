@@ -1,8 +1,10 @@
 import { formatBytes, plural } from "@/lib/common/utilities";
 import { useActivity } from "@/lib/hooks/useActivity";
-import { isVideoProcessingActive } from "@/lib/hooks/useVideoProcessing";
 import { BackupJobDto } from "@/lib/types/backup-job-dto";
-import { VideoProcessingStatus } from "@/lib/types/video-processing-status";
+import {
+    isVideoProcessingActive,
+    VideoProcessingStatus
+} from "@/lib/types/video-processing-status";
 import { Box, Flex, Progress, Spinner, Stack, Text } from "@chakra-ui/react";
 import { mdiArchiveArrowDownOutline, mdiMovieCogOutline } from "@mdi/js";
 import Icon from "@mdi/react";

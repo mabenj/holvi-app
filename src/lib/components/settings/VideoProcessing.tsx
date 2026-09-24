@@ -3,13 +3,14 @@ import {
     getFailedVideos,
     processVideos
 } from "@/lib/client/video-processing";
-import { getErrorMessage } from "@/lib/common/utilities";
+import { getErrorMessage, plural } from "@/lib/common/utilities";
 import { refreshActivity } from "@/lib/hooks/useActivity";
+import { useVideoProcessing } from "@/lib/hooks/useVideoProcessing";
 import {
     isVideoProcessingActive,
-    useVideoProcessing
-} from "@/lib/hooks/useVideoProcessing";
-import { VideoProcessingStatus } from "@/lib/types/video-processing-status";
+    FailedVideo,
+    VideoProcessingStatus
+} from "@/lib/types/video-processing-status";
 import {
     Box,
     Button,
@@ -144,7 +145,7 @@ export default function VideoProcessing() {
 function FailedVideos({ count }: { count: number }) {
     const [open, setOpen] = useState(false);
     // Keyed by the count, so a video failing or being retried reloads the list
-    const { data: videos, error } = useSWR(
+    const { data: videos, error } = useSWR<FailedVideo[], Error>(
         open ? [FAILED_VIDEOS_URL, count] : null,
         getFailedVideos
     );
@@ -163,7 +164,7 @@ function FailedVideos({ count }: { count: number }) {
                             transform: "rotate(180deg)"
                         }
                     }}>
-                    {count} failed {count === 1 ? "video" : "videos"}
+                    {plural(count, "failed video", "failed videos")}
                     <Box as="span" data-chevron display="inline-flex">
                         <Icon path={mdiChevronDown} size="18px" aria-hidden />
                     </Box>
@@ -177,7 +178,7 @@ function FailedVideos({ count }: { count: number }) {
                     </Text>
                     {error && (
                         <Text textStyle="sm" color="fg.error">
-                            {(error as Error).message}
+                            {error.message}
                         </Text>
                     )}
                     {!videos && !error && <Spinner size="sm" />}
