@@ -15,6 +15,30 @@ function urlWithSelecting(selecting: boolean) {
     };
 }
 
+/** How long to wait for Back to leave the selection entry before going on regardless */
+const LEAVE_TIMEOUT_MS = 1000;
+
+/**
+ * Resolves once the page is off selection mode's history entry, e.g. once
+ * Back from `exit` arrives. Changing the query in place before then would
+ * change the selection entry, which Back then leaves.
+ */
+export function selectionEntryLeft(): Promise<void> {
+    if (!Router.query[SELECTING]) return Promise.resolve();
+    return new Promise((resolve) => {
+        const done = () => {
+            clearTimeout(timer);
+            Router.events.off("routeChangeComplete", check);
+            resolve();
+        };
+        const check = () => {
+            if (!Router.query[SELECTING]) done();
+        };
+        const timer = setTimeout(done, LEAVE_TIMEOUT_MS);
+        Router.events.on("routeChangeComplete", check);
+    });
+}
+
 export interface Selection {
     /** Whether selection mode is on: tapping then selects or deselects */
     selecting: boolean;

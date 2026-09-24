@@ -26,6 +26,7 @@ import FileLightbox from "@/lib/components/lightbox/FileLightbox";
 import SetAsCover from "@/lib/components/lightbox/SetAsCover";
 import ConfirmationSurface from "@/lib/components/surfaces/ConfirmationSurface";
 import { useCollectionFiles } from "@/lib/hooks/useCollectionFiles";
+import { useCollectionFilesQuery } from "@/lib/hooks/useBrowseQuery";
 import {
     removeCollection,
     replaceCollection
@@ -58,7 +59,7 @@ const NEXT_PAGE_SKELETONS = 6;
 export default function CollectionPage({ user }: SignedInPageProps) {
     const { query } = useRouter();
     const collectionId = query.collectionId as string;
-    // Another collection starts afresh, with the default sort
+    // Another collection starts afresh, with the sort and tags in its URL
     return (
         <CollectionScreen
             key={collectionId}
@@ -103,8 +104,14 @@ function CollectionScreen({
 
     useRecordOpen(collectionId);
 
-    const [sort, changeSort] = useState<FileSort>("newest");
-    const [tags, changeTags] = useState<string[]>([]);
+    // From the URL; without a sort there, the remembered file sort applies
+    const {
+        known: sortKnown,
+        sort,
+        tags,
+        chooseSort,
+        changeTags
+    } = useCollectionFilesQuery();
     const {
         files,
         pages,
@@ -120,7 +127,7 @@ function CollectionScreen({
     // Another sort or tags loads the files afresh, so a selection ends
     const setSort = (sort: FileSort) => {
         selection.exit();
-        changeSort(sort);
+        chooseSort(sort);
     };
     const setTags = (tags: string[]) => {
         selection.exit();
@@ -179,10 +186,11 @@ function CollectionScreen({
         !!collection && !editing && !confirmingDelete && !isUploading(upload)
     );
 
-    // Opening the collection or choosing another sort or tags fetches the first page
+    // Opening the collection or choosing another sort or tags fetches the first
+    // page, once the remembered sort is known, so it is not fetched in two sorts
     useEffect(() => {
-        if (pages.length === 0) loadMore();
-    }, [pages.length, loadMore]);
+        if (sortKnown && pages.length === 0) loadMore();
+    }, [sortKnown, pages.length, loadMore]);
 
     const sentinel = useNextPageSentinel(
         pages.length > 0 && hasMore && !error ? loadMore : undefined,

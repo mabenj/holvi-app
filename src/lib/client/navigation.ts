@@ -1,4 +1,5 @@
 import type { NextRouter } from "next/router";
+import { getTabUrls, TAB_PATHS } from "./tab-urls";
 
 /** Screens shown in this app session after the first one */
 let navigations = 0;
@@ -38,12 +39,14 @@ export function goBack(router: NextRouter, fallback: string) {
 /**
  * Leaves the current screen for `path`, e.g. after deleting what it showed:
  * back in history when the previous screen was `path`, so it returns to where
- * it was, and otherwise in place of the current screen
+ * it was, and otherwise in place of the current screen. A tab's screen opens
+ * at its last URL, with its sort and filters.
  */
 export function leaveFor(router: NextRouter, path: string) {
     if (navigations > 0 && previousPath === path) {
         router.back();
     } else {
-        void router.replace(path);
+        const tab = TAB_PATHS.find((tabPath) => tabPath === path);
+        void router.replace(tab ? getTabUrls()[tab] : path);
     }
 }

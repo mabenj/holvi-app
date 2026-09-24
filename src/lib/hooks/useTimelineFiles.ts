@@ -34,10 +34,10 @@ export type FetchTimelinePage = (
 /**
  * The Timeline's tag filter, its loaded pages and where the grid was scrolled
  * to. Every query (a set of tags) keeps its own pages, so coming back to it
- * shows them again instead of starting over. Kept in app memory only, so a
- * full reload starts from the top of the whole Timeline, while going back to
- * it from a collection or another tab returns to the same tags, pages and
- * place.
+ * shows them again instead of starting over. The tags come from the
+ * Timeline's URL. The rest is kept in app memory only, so a full reload starts
+ * from the top, while going back to the Timeline from a collection or another
+ * tab returns to the same pages and place.
  */
 export class TimelineBrowse {
     private state = INITIAL_STATE;
@@ -72,32 +72,42 @@ export class TimelineBrowse {
      * Starts a visit to the Timeline: shows the pages already loaded, or
      * fetches the first page. After files were added or changed elsewhere,
      * the loaded pages are dropped and the Timeline starts again from the
-     * top, with the same tags.
+     * top. Tags other than the last visit's, e.g. from the URL, show their
+     * own files.
      */
-    startVisit = () => {
+    startVisit = (tags: string[] = this.state.tags) => {
         if (this.stale) {
             this.stale = false;
             this.abort();
             this.cachedPages.clear();
             this.scrollPosition = null;
-            this.update({ pages: [], loading: false, error: null });
+            this.update({ tags, pages: [], loading: false, error: null });
         }
-        if (this.state.pages.length === 0) this.loadMore();
+        this.changeTags(tags);
     };
 
-    /** Shows the files with these tags: their cached pages if they have any, or else their first page */
+    /**
+     * Shows the files with these tags: the loaded pages if they are the
+     * current tags; else their cached pages if they have any; else their
+     * first page
+     */
     changeTags = (tags: string[]) => {
         const key = timelineQueryKey(tags);
         const currentKey = timelineQueryKey(this.state.tags);
-        if (key === currentKey) {
+        if (key !== currentKey) {
+            this.abort();
+            const pages = this.cachedPages.swap(
+                currentKey,
+                this.state.pages,
+                key
+            );
+            this.scrollPosition = null;
+            this.update({ tags, pages, loading: false, error: null });
+        } else if (JSON.stringify(tags) !== JSON.stringify(this.state.tags)) {
+            // The same files, e.g. a tag in other case
             this.update({ tags });
-            return;
         }
-        this.abort();
-        const pages = this.cachedPages.swap(currentKey, this.state.pages, key);
-        this.scrollPosition = null;
-        this.update({ tags, pages, loading: false, error: null });
-        if (pages.length === 0) this.loadMore();
+        if (this.state.pages.length === 0) this.loadMore();
     };
 
     /** Fetches the next page, unless one is on its way, none is left or the last attempt failed */
