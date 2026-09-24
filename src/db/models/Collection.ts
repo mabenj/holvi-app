@@ -59,6 +59,9 @@ export class Collection extends Model<
             },
             {
                 sequelize,
+                // Named explicitly: the production build minifies class names
+                modelName: "Collection",
+                tableName: "Collections",
                 indexes: [
                     // Browsing reads one user's collections
                     { fields: ["UserId"] },

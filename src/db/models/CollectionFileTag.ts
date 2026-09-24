@@ -37,7 +37,12 @@ export class CollectionFileTag extends Model<
                     }
                 }
             },
-            { sequelize }
+            {
+                sequelize,
+                // Named explicitly: the production build minifies class names
+                modelName: "CollectionFileTag",
+                tableName: "CollectionFileTags"
+            }
         );
     }
 }
