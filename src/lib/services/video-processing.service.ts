@@ -11,22 +11,20 @@ import Log, { LogColor } from "../common/log";
 import { UserFileSystem } from "../common/user-file-system";
 import { getErrorMessage } from "../common/utilities";
 import { planRendition, VideoHelper } from "../common/video-helper";
-import { VideoProcessingStatus } from "../types/video-processing-status";
+import {
+    FailedVideo,
+    VideoProcessingStatus
+} from "../types/video-processing-status";
 
-export type { VideoProcessingStatus } from "../types/video-processing-status";
+export type {
+    FailedVideo,
+    VideoProcessingStatus
+} from "../types/video-processing-status";
 
 export interface VideoFileRef {
     userId: string;
     collectionId: string;
     fileId: string;
-}
-
-/** A video whose processing failed; it still plays from its original */
-export interface FailedVideo {
-    id: string;
-    collectionId: string;
-    name: string;
-    error: string | null;
 }
 
 /** Opens a video's whole decrypted original. Failures must be emitted as stream errors. */

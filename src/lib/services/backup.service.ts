@@ -166,6 +166,15 @@ export class BackupService {
         return jobs.map((job) => job.toDto());
     }
 
+    /** The user's queued or running backup job, if any; a user has at most one */
+    async getActiveJob(): Promise<BackupJobDto | null> {
+        const db = await Database.getInstance();
+        const job = await db.models.BackupJob.findOne({
+            where: { UserId: this.userId, status: ["queued", "running"] }
+        });
+        return job?.toDto() ?? null;
+    }
+
     async getJob(jobId: string): Promise<BackupJobDto> {
         const job = await this.findUserJob(jobId);
         return job.toDto();

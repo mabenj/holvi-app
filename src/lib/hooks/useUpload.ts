@@ -1,6 +1,7 @@
 import { useCallback, useSyncExternalStore } from "react";
 import { fetchCollection, uploadFiles } from "../client/collections";
 import { getErrorMessage } from "../common/utilities";
+import { refreshActivity } from "./useActivity";
 import { featureCollection } from "./useCollectionsBrowse";
 
 /** One upload of files into a collection */
@@ -84,6 +85,8 @@ export async function startUpload(
             sequence: ++finished
         });
         if (added > 0) {
+            // New videos are pending, which the Settings tab badge shows
+            void refreshActivity();
             fetchCollection(collectionId)
                 .then((collection) => featureCollection(userId, collection))
                 .catch(() => undefined);

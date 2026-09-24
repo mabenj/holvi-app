@@ -5,6 +5,7 @@ import {
     startBackup
 } from "@/lib/client/backups";
 import { formatBytes, getErrorMessage } from "@/lib/common/utilities";
+import { refreshActivity } from "@/lib/hooks/useActivity";
 import { useBackupJobs } from "@/lib/hooks/useBackupJobs";
 import {
     BackupJobDto,
@@ -75,7 +76,7 @@ export default function Backups() {
         } catch (error) {
             setActionError(getErrorMessage(error));
         } finally {
-            await refresh();
+            await Promise.all([refresh(), refreshActivity()]);
             setBusy(undefined);
         }
     };

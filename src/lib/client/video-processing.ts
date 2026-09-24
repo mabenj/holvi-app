@@ -1,4 +1,7 @@
-import { VideoProcessingStatus } from "../types/video-processing-status";
+import {
+    FailedVideo,
+    VideoProcessingStatus
+} from "../types/video-processing-status";
 
 export const VIDEO_PROCESSING_URL = "/api/video-processing";
 
@@ -20,4 +23,16 @@ export function getVideoProcessingStatus() {
 /** Queues the user's videos that were never processed or failed */
 export function processVideos() {
     return request("POST", "Could not start video processing");
+}
+
+export const FAILED_VIDEOS_URL = `${VIDEO_PROCESSING_URL}/failed`;
+
+/** The user's videos whose processing failed, with the error each failed with */
+export async function getFailedVideos() {
+    const res = await fetch(FAILED_VIDEOS_URL);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.status !== "ok") {
+        throw new Error(data.error || "Could not load the failed videos");
+    }
+    return data.videos as FailedVideo[];
 }

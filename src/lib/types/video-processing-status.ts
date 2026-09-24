@@ -7,3 +7,11 @@ export interface VideoProcessingStatus {
     /** The user's video the worker is processing now, if any */
     currentFile: { id: string; collectionId: string; name: string } | null;
 }
+
+/** A video whose processing failed; it still plays from its original */
+export interface FailedVideo {
+    id: string;
+    collectionId: string;
+    name: string;
+    error: string | null;
+}
