@@ -13,7 +13,7 @@ import { Tag } from "./models/Tag";
 import { User } from "./models/User";
 
 export default class Database {
-  public static readonly version = 5;
+  public static readonly version = 6;
   private static instance: Database;
 
   private readonly sequelize;
@@ -146,7 +146,8 @@ export default class Database {
     }
   }
 
-  private static async ensureUpToDate() {
+  /** Upgrades the database to the current version, step by step. Runs on start. */
+  static async ensureUpToDate() {
     const [dbInfo] = await DatabaseInfo.findCreateFind({
       where: { id: 1 },
     });

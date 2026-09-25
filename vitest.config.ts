@@ -8,7 +8,7 @@ export default defineConfig({
         }
     },
     test: {
-        include: ["src/**/*.test.ts"],
+        include: ["src/**/*.test.ts", "test/**/*.test.ts"],
         setupFiles: ["test/setup-env.ts"],
         // Integration tests share one Postgres database and reset it between tests
         fileParallelism: false,

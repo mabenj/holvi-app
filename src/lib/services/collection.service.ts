@@ -1,21 +1,48 @@
 import Database from "@/db/Database";
-import { Collection } from "@/db/models/Collection";
 import { IncomingMessage } from "http";
-import { Op } from "sequelize";
+import { Op, Transaction } from "sequelize";
 import { Readable } from "stream";
+import { Clock, realClock } from "../common/clock";
 import { HolviError, NotFoundError } from "../common/errors";
 import { UserFileSystem } from "../common/user-file-system";
-import { EMPTY_UUIDV4, caseInsensitiveSorter } from "../common/utilities";
-import { CollectionDto } from "../types/collection-dto";
+import { EMPTY_UUIDV4 } from "../common/utilities";
 import { CollectionFileDto } from "../types/collection-file-dto";
 import { CollectionFileFormData } from "../validators/collection-file.validator";
 import { CollectionFormData } from "../validators/collection.validator";
+import { CollectionDetails } from "../types/collection-details";
+import { SCRUB_PREVIEW_MIME_TYPE } from "../types/scrub-preview";
+import {
+  BrowseCollectionsPage,
+  BrowseCollectionsQuery,
+  browseCollections,
+  recordOpen,
+  summarizeCollections,
+} from "./collection-browsing";
+import {
+  BrowseFilesPage,
+  BrowseFilesQuery,
+  BrowseTimelineQuery,
+  browseFiles,
+  browseTimeline,
+} from "./file-browsing";
+import { UUID_PATTERN } from "./keyset-paging";
+import { throwIfNotUserCollection } from "./user-collections";
+import { VideoProcessingService } from "./video-processing.service";
 
-interface CreateResult {
-  collection?: CollectionDto;
-  nameError?: string;
-  errors?: string[];
-}
+export type {
+  BrowseCollectionsPage,
+  BrowseCollectionsQuery,
+} from "./collection-browsing";
+export type { CollectionFileType } from "../types/collection-file-type";
+export type {
+  BrowseFilesPage,
+  BrowseFilesQuery,
+  BrowseTimelineQuery,
+  FileSort,
+} from "./file-browsing";
+
+/** A saved collection's id, or why its name was rejected */
+type SaveResult = { id: string; nameError?: never } | { id?: never; nameError: string };
 
 interface GetBufferResult {
   file: Buffer;
@@ -31,30 +58,96 @@ interface GetStreamResult {
   filename: string;
 }
 
-export class CollectionService {
-  constructor(private readonly userId: string) {}
+interface CollectionServiceOptions {
+  /** Tells the time for the Shuffle period, whether an Open extends the previous one, and which collections are Forgotten collections */
+  clock?: Clock;
+}
 
-  async getAllFiles(): Promise<CollectionFileDto[]> {
-    const db = await Database.getInstance();
-    const files = await db.models.CollectionFile.findAll({
-      include: {
-        model: db.models.Collection,
-        required: true,
-        where: {
-          UserId: this.userId,
-        },
-      },
-    });
-    return files.map((file) => file.toDto());
+export class CollectionService {
+  private readonly clock: Clock;
+
+  constructor(
+    private readonly userId: string,
+    options: CollectionServiceOptions = {}
+  ) {
+    this.clock = options.clock ?? realClock;
   }
 
-  async updateFile(
+  /**
+   * One page of the user's collections as summaries, in the query's sort:
+   * random for the seed or the current Shuffle period by default
+   */
+  async browseCollections(
+    query: BrowseCollectionsQuery = {}
+  ): Promise<BrowseCollectionsPage> {
+    return browseCollections(this.userId, this.clock(), query);
+  }
+
+  /**
+   * Records a visit to one of the user's collections: another Open, unless it
+   * comes less than 30 minutes after the previous visit
+   */
+  async recordOpen(collectionId: string) {
+    const recorded =
+      UUID_PATTERN.test(collectionId) &&
+      (await recordOpen(this.userId, collectionId, this.clock()));
+    if (!recorded) {
+      throw new NotFoundError(`Collection not found '${collectionId}'`);
+    }
+  }
+
+  /**
+   * Makes one of the collection's files, a photo or a video, its Cover; null
+   * goes back to the automatic Cover. A file of any other collection is not
+   * found.
+   */
+  async setCover(collectionId: string, fileId: string | null) {
+    await this.throwIfNotUserCollection(collectionId);
+    const db = await Database.getInstance();
+    if (fileId !== null) {
+      const file =
+        UUID_PATTERN.test(fileId) &&
+        (await db.models.CollectionFile.findOne({
+          where: { id: fileId, CollectionId: collectionId },
+          attributes: ["id"],
+          raw: true,
+        }));
+      if (!file) {
+        throw new NotFoundError(
+          `File '${fileId}' not found in collection '${collectionId}'`
+        );
+      }
+    }
+    await db.models.Collection.update(
+      { coverFileId: fileId },
+      { where: { id: collectionId, UserId: this.userId } }
+    );
+  }
+
+  /** One page of the files of one of the user's collections, newest first unless another sort is asked for */
+  async browseFiles(
     collectionId: string,
-    data: CollectionFileFormData
-  ): Promise<CollectionFileDto> {
+    query: BrowseFilesQuery = {}
+  ): Promise<BrowseFilesPage> {
+    await this.throwIfNotUserCollection(collectionId);
+    return browseFiles(collectionId, query);
+  }
+
+  /** One page of the Timeline: every file the user owns, across their collections, newest first */
+  async browseTimeline(
+    query: BrowseTimelineQuery = {}
+  ): Promise<BrowseFilesPage> {
+    return browseTimeline(this.userId, query);
+  }
+
+  /** Renames and retags one of the files of one of the user's collections */
+  async updateFile(collectionId: string, data: CollectionFileFormData) {
     const db = await Database.getInstance();
     await this.throwIfNotUserCollection(collectionId);
-    const fileInDb = await db.models.CollectionFile.findByPk(data.id);
+    // Only a file of that collection, which the check above made sure is the user's
+    const fileInDb = await db.models.CollectionFile.findOne({
+      where: { id: data.id, CollectionId: collectionId },
+    });
     if (!fileInDb) {
       throw new NotFoundError(`File '${data.id}' not found`);
     }
@@ -98,34 +191,25 @@ export class CollectionService {
       );
 
       await transaction.commit();
-
-      // fetch tags from junction table
-      const fileTags = await db.models.CollectionFileTag.findAll({
-        where: {
-          CollectionFileId: fileInDb.id,
-        },
-      });
-
-      return {
-        ...fileInDb.toDto(),
-        tags: fileTags.map((tag) => tag.TagName),
-      };
     } catch (error) {
-      transaction.rollback();
+      await transaction.rollback().catch(() => undefined);
       throw new HolviError(`Error updating file '${data.id}'`, error);
     }
   }
 
-  async getCollection(collectionId: string): Promise<CollectionDto> {
+  /** One of the user's collections as its page shows it: its summary and description */
+  async getCollection(collectionId: string): Promise<CollectionDetails> {
     const db = await Database.getInstance();
     await this.throwIfNotUserCollection(collectionId);
     const collection = await db.models.Collection.findByPk(collectionId, {
-      include: db.models.Tag,
+      attributes: ["id", "name", "description", "createdAt"],
+      raw: true,
     });
     if (!collection) {
-      throw new NotFoundError(`Collection '${collectionId}' not found`);
+      throw new NotFoundError(`Collection not found '${collectionId}'`);
     }
-    return collection.toDto();
+    const [summary] = await summarizeCollections([collection]);
+    return { ...summary, description: collection.description ?? "" };
   }
 
   async multiDelete(idsToDelete: string[]) {
@@ -178,63 +262,62 @@ export class CollectionService {
     }
   }
 
-  async deleteFile(collectionId: string, fileId: string) {
-    const db = await Database.getInstance();
-    const transaction = await db.transaction();
-    await this.throwIfNotUserCollection(collectionId);
-
-    try {
-      const collectionFile = await db.models.CollectionFile.findByPk(fileId);
-      if (!collectionFile) {
-        throw new NotFoundError(`File not found '${fileId}'`);
-      }
-      collectionFile.destroy({ transaction });
-
-      const fileSystem = new UserFileSystem(this.userId);
-      await fileSystem.deleteFileAndThumbnail(collectionId, collectionFile.id);
-
-      await transaction.commit();
-    } catch (error) {
-      await transaction.rollback();
-      throw new HolviError(`Error deleting file '${fileId}'`, error);
-    }
-  }
-
-  async getFiles(collectionId: string): Promise<CollectionFileDto[]> {
-    const db = await Database.getInstance();
-    await this.throwIfNotUserCollection(collectionId);
-    const collectionFiles = await db.models.CollectionFile.findAll({
-      where: {
-        CollectionId: collectionId,
-      },
-      include: db.models.Tag,
-    });
-    return collectionFiles?.map((file) => file.toDto()) || [];
-  }
-
+  /** Streams a chunk of a video's original, or of its Rendition if it has one */
   async getVideoStream(
     collectionId: string,
     videoId: string,
-    offset: number
+    offset: number,
+    { rendition = false }: { rendition?: boolean } = {}
   ): Promise<GetStreamResult> {
     const fileInfo = await this.getCollectionFileInfo(collectionId, videoId);
     if (!fileInfo) {
       throw new NotFoundError(`File not found '${videoId}'`);
     }
+    if (rendition && !fileInfo.hasRendition) {
+      throw new NotFoundError(`Video '${videoId}' has no Rendition`);
+    }
 
     const fileSystem = new UserFileSystem(this.userId);
     const { stream, totalLengthBytes, chunkStartEnd } =
-      await fileSystem.getFileStream(collectionId, fileInfo.id, offset);
+      await fileSystem.getFileStream(collectionId, fileInfo.id, offset, {
+        rendition,
+      });
     if (!stream) {
       throw new HolviError(`Could not get file stream for file '${videoId}'`);
     }
 
     return {
       stream,
-      filename: fileInfo.label,
-      mimeType: fileInfo.mimeType,
+      // A Rendition is always an MP4, whatever the original was
+      filename: rendition
+        ? `${fileInfo.label.replace(/\.[^.]*$/, "")}.mp4`
+        : fileInfo.label,
+      mimeType: rendition ? "video/mp4" : fileInfo.mimeType,
       chunkStartEnd,
       totalLengthBytes,
+    };
+  }
+
+  /** A video's Scrub preview, a JPEG image */
+  async getScrubPreview(
+    collectionId: string,
+    videoId: string
+  ): Promise<GetBufferResult> {
+    const fileInfo = await this.getCollectionFileInfo(collectionId, videoId);
+    if (!fileInfo) {
+      throw new NotFoundError(`File not found '${videoId}'`);
+    }
+    if (!fileInfo.hasScrubPreview) {
+      throw new NotFoundError(`Video '${videoId}' has no Scrub preview`);
+    }
+    const file = await new UserFileSystem(this.userId).readScrubPreview(
+      collectionId,
+      fileInfo.id
+    );
+    return {
+      mimeType: SCRUB_PREVIEW_MIME_TYPE,
+      file,
+      filename: `${fileInfo.label.replace(/\.[^.]*$/, "")}_scrub.jpg`,
     };
   }
 
@@ -264,51 +347,18 @@ export class CollectionService {
     };
   }
 
-  async uploadCollection(
-    collectionName: string,
-    req: IncomingMessage
-  ): Promise<CreateResult> {
-    const { collection, nameError } = await this.createCollection(
-      collectionName,
-      []
-    );
-    if (!collection || nameError) {
-      return { nameError };
-    }
-    try {
-      const { files, errors } = await this.uploadFiles(collection.id, req);
-      collection.thumbnails = files
-        .sort(caseInsensitiveSorter("name"))
-        .slice(0, Collection.thumbnailsLimit)
-        .map((file) => file.thumbnailSrc);
-      collection.imageCount = files.filter((file) =>
-        file.mimeType.includes("image")
-      ).length;
-      collection.videoCount = files.filter((file) =>
-        file.mimeType.includes("video")
-      ).length;
-      return {
-        collection,
-        errors,
-      };
-    } catch (error) {
-      await this.deleteCollection(collection.id);
-      throw new HolviError("Error uploading collection", error);
-    }
-  }
-
   async uploadFiles(
     collectionId: string,
     req: IncomingMessage
   ): Promise<{
-    collection: CollectionDto;
     files: CollectionFileDto[];
     errors: string[];
   }> {
     const db = await Database.getInstance();
-    const transaction = await db.transaction();
     await this.throwIfNotUserCollection(collectionId);
     const fileSystem = new UserFileSystem(this.userId);
+    // Opened only once the files have arrived, so a long upload holds no connection
+    let transaction: Transaction | undefined;
     try {
       let { files, errors } = await fileSystem.uploadFilesToTempDir(req);
 
@@ -340,6 +390,7 @@ export class CollectionService {
         );
       }
 
+      transaction = await db.transaction();
       const insertedRows = await db.models.CollectionFile.bulkCreate(
         files.map((file) => ({
           id: file.id,
@@ -357,6 +408,10 @@ export class CollectionService {
           takenAt: file.takenAt,
           durationInSeconds: file.durationInSeconds,
           blurDataUrl: file.blurDataUrl,
+          // Every new video gets video processing, in the background
+          processingStatus: file.mimeType.startsWith("video")
+            ? "pending"
+            : null,
         })),
         {
           transaction,
@@ -364,21 +419,15 @@ export class CollectionService {
       );
       await fileSystem.mergeTempDirToCollectionDir(collectionId);
       await transaction.commit();
-
-      const collection = await db.models.Collection.findByPk(collectionId, {
-        include: [db.models.CollectionFile, db.models.Tag],
-      });
-      if (!collection) {
-        throw new NotFoundError(`Collection '${collectionId}' not found`);
-      }
+      // Not awaited: the upload finishes without waiting for video processing
+      VideoProcessingService.kick();
 
       return {
-        collection: collection.toDto(),
         files: insertedRows.map((row) => row.toDto()),
         errors: errors,
       };
     } catch (error) {
-      transaction.rollback();
+      await transaction?.rollback().catch(() => undefined);
       throw new HolviError(
         `Error uploading files to collection '${collectionId}'`,
         error
@@ -388,21 +437,23 @@ export class CollectionService {
     }
   }
 
+  /** Changes one of the user's collections' name, description and tags, unless another of their collections has the name */
   async updateCollection(
     collectionId: string,
     collectionData: CollectionFormData
-  ): Promise<CreateResult> {
+  ): Promise<SaveResult> {
     const db = await Database.getInstance();
-    const transaction = await db.transaction();
     await this.throwIfNotUserCollection(collectionId);
 
     if (await this.nameTaken(collectionData.name, collectionId)) {
       return { nameError: "Collection name already exists" };
     }
 
+    // Opened only after the checks, so a rejection never holds a connection
+    const transaction = await db.transaction();
     try {
       const collectionInDb = await db.models.Collection.findByPk(collectionId, {
-        include: db.models.CollectionFile,
+        transaction,
       });
       if (!collectionInDb) {
         throw new NotFoundError(`Collection not found '${collectionId}'`);
@@ -430,6 +481,7 @@ export class CollectionService {
             [Op.notIn]: collectionData.tags,
           },
         },
+        transaction,
       });
       await db.models.CollectionTag.bulkCreate(
         collectionData.tags.map((tag) => ({
@@ -444,22 +496,9 @@ export class CollectionService {
       );
 
       await transaction.commit();
-
-      // fetch tags from junction table
-      const collectionTags = await db.models.CollectionTag.findAll({
-        where: {
-          CollectionId: collectionInDb.id,
-        },
-      });
-
-      return {
-        collection: {
-          ...collectionInDb.toDto(),
-          tags: collectionTags.map((tag) => tag.TagName),
-        },
-      };
+      return { id: collectionId };
     } catch (error) {
-      transaction.rollback();
+      await transaction.rollback().catch(() => undefined);
       throw new HolviError(
         `Error updating collection '${collectionData.name}'`,
         error
@@ -469,9 +508,9 @@ export class CollectionService {
 
   async deleteCollection(collectionId: string) {
     const db = await Database.getInstance();
-    const transaction = await db.transaction();
     await this.throwIfNotUserCollection(collectionId);
 
+    const transaction = await db.transaction();
     try {
       await db.models.Collection.destroy({
         where: {
@@ -483,7 +522,7 @@ export class CollectionService {
       await fileSystem.deleteCollectionDir(collectionId);
       await transaction.commit();
     } catch (error) {
-      transaction.rollback();
+      await transaction.rollback().catch(() => undefined);
       throw new HolviError(
         `Error deleting collection '${collectionId}'`,
         error
@@ -491,11 +530,12 @@ export class CollectionService {
     }
   }
 
+  /** Creates a collection for the user, unless another of their collections has the name */
   async createCollection(
     name: string,
     tags: string[],
     description?: string
-  ): Promise<CreateResult> {
+  ): Promise<SaveResult> {
     if (await this.nameTaken(name)) {
       return { nameError: "Collection name already exists" };
     }
@@ -518,7 +558,7 @@ export class CollectionService {
           transaction,
         }
       );
-      const collectionTags = await db.models.CollectionTag.bulkCreate(
+      await db.models.CollectionTag.bulkCreate(
         tags.map((tag) => ({
           TagName: tag,
           CollectionId: collection.id,
@@ -527,37 +567,30 @@ export class CollectionService {
       );
 
       await transaction.commit();
-      return {
-        collection: {
-          ...collection.toDto(),
-          tags: collectionTags.map((tag) => tag.TagName),
-        },
-      };
+      return { id: collection.id };
     } catch (error) {
-      transaction.rollback();
+      await transaction.rollback().catch(() => undefined);
       throw new HolviError("Error creating collection", error);
     }
   }
 
-  async getAllCollections(): Promise<CollectionDto[]> {
-    const db = await Database.getInstance();
-    const collections = await db.models.Collection.findAll({
-      where: {
-        UserId: this.userId,
-      },
-      include: [db.models.Tag, db.models.CollectionFile],
-    });
-    return collections.map((collection) => collection.toDto());
-  }
-
   private async getCollectionFileInfo(collectionId: string, fileId: string) {
+    if (!UUID_PATTERN.test(collectionId) || !UUID_PATTERN.test(fileId)) {
+      return null;
+    }
     const db = await Database.getInstance();
     const collectionFile = await db.models.CollectionFile.findOne({
       where: {
         CollectionId: collectionId,
         id: fileId,
       },
-      attributes: ["mimeType", "id", "name"],
+      attributes: [
+        "mimeType",
+        "id",
+        "name",
+        "hasRendition",
+        "scrubPreviewLayout",
+      ],
       include: {
         model: db.models.Collection,
         required: true,
@@ -574,18 +607,13 @@ export class CollectionService {
       id: collectionFile.id,
       label: collectionFile.name,
       mimeType: collectionFile.mimeType,
+      hasRendition: collectionFile.hasRendition,
+      hasScrubPreview: collectionFile.scrubPreviewLayout !== null,
     };
   }
 
-  private async throwIfNotUserCollection(collectionId: string) {
-    const db = await Database.getInstance();
-    const collection = await db.models.Collection.findByPk(collectionId, {
-      attributes: ["UserId"],
-      raw: true,
-    });
-    if (!collection || collection.UserId !== this.userId) {
-      throw new NotFoundError(`Collection not found '${collectionId}'`);
-    }
+  private throwIfNotUserCollection(collectionId: string) {
+    return throwIfNotUserCollection(this.userId, collectionId);
   }
 
   private async nameTaken(name: string, collectionId?: string) {

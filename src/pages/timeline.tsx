@@ -1,0 +1,261 @@
+import {
+    collectionUrl,
+    fetchCollection,
+    timelineQueryKey
+} from "@/lib/client/collections";
+import {
+    SignedInPageProps,
+    signedInPageProps
+} from "@/lib/common/signed-in-page";
+import AppShell from "@/lib/components/app-shell/AppShell";
+import FileGrid from "@/lib/components/collection-page/FileGrid";
+import FileSelectionBar from "@/lib/components/files/FileSelectionBar";
+import { showSelectionChanges } from "@/lib/components/files/selection-changes";
+import FileLightbox from "@/lib/components/lightbox/FileLightbox";
+import GoToCollection from "@/lib/components/lightbox/GoToCollection";
+import TimelineGrid from "@/lib/components/timeline/TimelineGrid";
+import {
+    ActiveTagFilters,
+    TimelineFilterButton
+} from "@/lib/components/timeline/TimelineTagFilter";
+import { replaceCollection } from "@/lib/hooks/useCollectionsBrowse";
+import { useTimelineQuery } from "@/lib/hooks/useBrowseQuery";
+import { useLightboxHistory } from "@/lib/hooks/useLightboxHistory";
+import { useNextPageSentinel } from "@/lib/hooks/useNextPageSentinel";
+import { useSelection } from "@/lib/hooks/useSelection";
+import { useTimelineFiles } from "@/lib/hooks/useTimelineFiles";
+import type { FileSummary } from "@/lib/types/file-summary";
+import { Box, Button, EmptyState, Text, VStack } from "@chakra-ui/react";
+import { mdiTagOffOutline, mdiTimelineClockOutline } from "@mdi/js";
+import Icon from "@mdi/react";
+import { useRouter } from "next/router";
+import {
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState
+} from "react";
+import { mutate } from "swr";
+
+export const getServerSideProps = signedInPageProps;
+
+/** Skeleton tiles while the first page of the Timeline loads */
+const FIRST_PAGE_SKELETONS = 12;
+/** No files, the same array every render, while other tags' files are on their way */
+const NO_FILES: FileSummary[] = [];
+
+/**
+ * Every file the user owns, newest first, under sticky month headers, with no
+ * floating action button. It can be filtered by tag, on a file or its
+ * collection, and its files selected for bulk actions as on a collection page.
+ * Tapping a file opens the lightbox, which swipes through the whole
+ * (filtered) Timeline. Coming back from a collection or another tab shows the
+ * same tags, files and place in the grid.
+ */
+export default function TimelineTab({ user }: SignedInPageProps) {
+    // The tags come from the URL; the Timeline's store shows their files
+    const { tags, changeTags } = useTimelineQuery();
+    const timeline = useTimelineFiles(user.id);
+    const {
+        loading,
+        error,
+        hasMore,
+        startVisit,
+        changeTags: showTags,
+        loadMore,
+        reload,
+        changeFiles,
+        remove,
+        saveScrollPosition,
+        takeScrollPosition,
+        retry
+    } = timeline;
+    const router = useRouter();
+    const selection = useSelection();
+    const lightbox = useLightboxHistory();
+    // Other tags show their own files from the top, so a selection ends
+    const setTags = (tags: string[]) => {
+        window.scrollTo({ top: 0 });
+        selection.exit();
+        changeTags(tags);
+    };
+
+    // The first visit in this app session fetches the first page; coming
+    // back from another screen keeps the pages already loaded. Tags changed
+    // in the URL show their own files. Before the Timeline paints, so it
+    // never shows other tags' files.
+    const visited = useRef(false);
+    useLayoutEffect(() => {
+        if (visited.current) {
+            showTags(tags);
+        } else {
+            visited.current = true;
+            startVisit(tags);
+        }
+    }, [tags, startVisit, showTags]);
+    const showing = timelineQueryKey(tags) === timelineQueryKey(timeline.tags);
+    const pages = showing ? timeline.pages : [];
+    const files = showing ? timeline.files : NO_FILES;
+    const selectionChanges = showSelectionChanges(
+        { reload, changeFiles },
+        tags.length > 0
+    );
+    // Deleted files leave every tag filter's loaded pages
+    const removeFiles = (fileIds: string[]) =>
+        remove((file) => fileIds.includes(file.id));
+
+    // Deleting or renaming files can change their collections' counts and
+    // Covers, on the Collections tab and the collection pages
+    const refreshCollections = (collectionIds: string[]) => {
+        for (const id of Array.from(new Set(collectionIds))) {
+            mutate(collectionUrl(id), fetchCollection(id))
+                .then((updated) => {
+                    if (updated) replaceCollection(user.id, updated);
+                })
+                .catch(() => {
+                    // The collection shows its new counts when it is next loaded
+                });
+        }
+    };
+    const collectionsOf = (fileIds: string[]) =>
+        files
+            .filter((file) => fileIds.includes(file.id))
+            .map((file) => file.collectionId);
+
+    // Leaving the Timeline remembers the place in the grid...
+    useEffect(() => {
+        const leave = (_url: string, { shallow }: { shallow: boolean }) => {
+            // Shallow changes stay on the Timeline, e.g. the lightbox's query
+            if (shallow) return;
+            saveScrollPosition(window.scrollY);
+        };
+        router.events.on("routeChangeStart", leave);
+        return () => router.events.off("routeChangeStart", leave);
+    }, [router.events, saveScrollPosition]);
+
+    // ...and coming back scrolls there once every cached page is in the grid.
+    // Until then, the next page must not load: the grid's end is still in view.
+    const [restored, setRestored] = useState(false);
+    const restoreScrollPosition = useCallback(() => {
+        const position = takeScrollPosition();
+        if (position !== null) window.scrollTo({ top: position });
+        setRestored(true);
+    }, [takeScrollPosition]);
+
+    const sentinel = useNextPageSentinel(
+        restored && pages.length > 0 && hasMore && !error
+            ? loadMore
+            : undefined,
+        pages.length
+    );
+
+    const isEmpty = pages.length > 0 && files.length === 0;
+
+    return (
+        <AppShell
+            title="Timeline"
+            headerAction={
+                <TimelineFilterButton value={tags} onChange={setTags} />
+            }
+            contextualBar={
+                selection.selecting ? (
+                    <FileSelectionBar
+                        selection={selection}
+                        selected={files.filter((file) =>
+                            selection.isSelected(file.id)
+                        )}
+                        onDeleted={(ids) => {
+                            refreshCollections(collectionsOf(ids));
+                            removeFiles(ids);
+                        }}
+                        onEdited={(id, fields) => {
+                            refreshCollections(collectionsOf([id]));
+                            selectionChanges.onEdited(id, fields);
+                        }}
+                        onTagged={selectionChanges.onTagged}
+                    />
+                ) : undefined
+            }>
+            <ActiveTagFilters value={tags} onChange={setTags} />
+            {pages.length === 0 && !error ? (
+                <FileGrid files={[]} skeletons={FIRST_PAGE_SKELETONS} />
+            ) : isEmpty && tags.length > 0 ? (
+                <NoTaggedFiles onClear={() => setTags([])} />
+            ) : isEmpty ? (
+                <NoFilesYet />
+            ) : (
+                <TimelineGrid
+                    files={files}
+                    loadingMore={loading}
+                    selection={selection}
+                    onOpen={lightbox.open}
+                    activeFileId={lightbox.photoId}
+                    onLaidOut={restoreScrollPosition}
+                />
+            )}
+            {error && (
+                <VStack py="8" px="4" gap="3" textAlign="center">
+                    <Text color="fg.muted">{error}</Text>
+                    <Button variant="outline" size="sm" onClick={retry}>
+                        Try again
+                    </Button>
+                </VStack>
+            )}
+            <Box ref={sentinel} h="1px" />
+            {/* Swiping on past the loaded files loads the next page */}
+            <FileLightbox
+                files={files}
+                onNearEnd={hasMore && !error ? loadMore : undefined}
+                actions={(file) => (
+                    <GoToCollection collectionId={file.collectionId} />
+                )}
+            />
+        </AppShell>
+    );
+}
+
+function NoFilesYet() {
+    return (
+        <EmptyState.Root>
+            <EmptyState.Content>
+                <EmptyState.Indicator>
+                    <Icon
+                        path={mdiTimelineClockOutline}
+                        size="48px"
+                        aria-hidden
+                    />
+                </EmptyState.Indicator>
+                <VStack textAlign="center">
+                    <EmptyState.Title>No files yet</EmptyState.Title>
+                    <EmptyState.Description>
+                        Photos and videos you add to your collections show up
+                        here, newest first.
+                    </EmptyState.Description>
+                </VStack>
+            </EmptyState.Content>
+        </EmptyState.Root>
+    );
+}
+
+function NoTaggedFiles({ onClear }: { onClear: () => void }) {
+    return (
+        <EmptyState.Root>
+            <EmptyState.Content>
+                <EmptyState.Indicator>
+                    <Icon path={mdiTagOffOutline} size="48px" aria-hidden />
+                </EmptyState.Indicator>
+                <VStack textAlign="center">
+                    <EmptyState.Title>No matching files</EmptyState.Title>
+                    <EmptyState.Description>
+                        No file has every selected tag, on the file or on its
+                        collection.
+                    </EmptyState.Description>
+                </VStack>
+                <Button variant="outline" size="sm" onClick={onClear}>
+                    Clear tags
+                </Button>
+            </EmptyState.Content>
+        </EmptyState.Root>
+    );
+}

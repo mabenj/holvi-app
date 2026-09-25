@@ -1,6 +1,12 @@
 {
+    "id": "/",
     "name": "Holvi",
     "short_name": "Holvi",
+    "description": "Your private photo and video vault",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "any",
     "icons": [
         {
             "src": "/android-chrome-192x192.png",
@@ -13,7 +19,6 @@
             "type": "image/png"
         }
     ],
-    "theme_color": "#000000",
-    "background_color": "#000000",
-    "display": "standalone"
+    "theme_color": "#0a0a0b",
+    "background_color": "#0a0a0b"
 }

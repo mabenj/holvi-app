@@ -1,5 +1,5 @@
 import formidable from "formidable";
-import { unlink } from "fs/promises";
+import { rm, unlink } from "fs/promises";
 import { IncomingMessage } from "http";
 import path from "path";
 import appConfig from "./app-config";
@@ -55,8 +55,34 @@ export class UserFileSystem {
     this.logger = new Log("FS", LogColor.YELLOW);
   }
 
+  /** Where a video's encrypted Rendition is stored: next to its original */
+  getRenditionPath(collectionId: string, fileId: string) {
+    return path.join(this.rootDir, collectionId, "rendition", fileId);
+  }
+
+  /** Where a video's encrypted Scrub preview is stored: next to its original */
+  getScrubPreviewPath(collectionId: string, fileId: string) {
+    return path.join(this.rootDir, collectionId, "scrub", fileId);
+  }
+
+  /** Reads and decrypts a video's Scrub preview */
+  async readScrubPreview(collectionId: string, fileId: string) {
+    const file = await tryReadFile(
+      this.getScrubPreviewPath(collectionId, fileId)
+    );
+    if (!file) {
+      throw new HolviError(`Could not read the Scrub preview of '${fileId}'`);
+    }
+    return Cryptography.decrypt(file);
+  }
+
+  /** Deletes a file with its thumbnail and, for a video, its Rendition and Scrub preview */
   async deleteFileAndThumbnail(collectionId: string, fileId: string) {
     try {
+      // A Rendition and a Scrub preview can be made again from the original,
+      // so they go first
+      await rm(this.getRenditionPath(collectionId, fileId), { force: true });
+      await rm(this.getScrubPreviewPath(collectionId, fileId), { force: true });
       await unlink(path.join(this.rootDir, collectionId, "tn", fileId));
       await unlink(path.join(this.rootDir, collectionId, fileId));
     } catch (error) {
@@ -80,14 +106,17 @@ export class UserFileSystem {
     }
   }
 
+  /** Streams a chunk of a file's original, or of its Rendition */
   async getFileStream(
     collectionId: string,
     fileId: string,
     offset: number,
-    chunkSize?: number
+    { rendition = false, chunkSize }: { rendition?: boolean; chunkSize?: number } = {}
   ) {
     try {
-      const filePath = path.join(this.rootDir, collectionId, fileId);
+      const filePath = rendition
+        ? this.getRenditionPath(collectionId, fileId)
+        : path.join(this.rootDir, collectionId, fileId);
       const { stream, start, end, totalSize } =
         await Cryptography.getDecryptedStreamChunk(filePath, offset, chunkSize);
 
@@ -243,6 +272,7 @@ export class UserFileSystem {
           thumbnailWidth,
           thumbnailHeight,
           durationInSeconds,
+          captureDate,
         } = await this.processVideo(filepath, thumbnailPath);
         processed = {
           ...processed,
@@ -250,7 +280,8 @@ export class UserFileSystem {
           height,
           thumbnailWidth,
           thumbnailHeight,
-          takenAt: file.lastModified || undefined,
+          // When it was shot, so it lands in the right place on the Timeline straight away
+          takenAt: captureDate || file.lastModified || undefined,
           durationInSeconds,
         };
       } else {
@@ -284,9 +315,8 @@ export class UserFileSystem {
 
   private async processVideo(videoPath: string, thumbnailPath: string) {
     const UNSUPPORTED_FORMATS = ["avi"];
-    const { durationInSeconds, format } = await VideoHelper.getVideoMetadata(
-      videoPath
-    );
+    const { durationInSeconds, format, captureDate } =
+      await VideoHelper.getVideoMetadata(videoPath);
 
     if (format && UNSUPPORTED_FORMATS.includes(format)) {
       await VideoHelper.convertToMov(videoPath);
@@ -301,6 +331,7 @@ export class UserFileSystem {
       thumbnailWidth,
       thumbnailHeight,
       durationInSeconds,
+      captureDate,
     };
   }
 

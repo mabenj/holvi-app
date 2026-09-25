@@ -12,24 +12,26 @@ import path from "path";
 import { Readable } from "stream";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+    createHoldingOpener,
+    extractZip,
+    hasZip64EndOfCentralDirectory,
+    listUserBackupDir,
+    readZip,
+    releaseHoldingOpeners
+} from "../../../test/backup-fixtures";
+import {
     addFile,
     addThumbnail,
     createCollection,
-    createHoldingOpener,
     createUser,
     encryptedFilePath,
-    extractZip,
-    hasZip64EndOfCentralDirectory,
     listFiles,
-    listUserBackupDir,
-    readZip,
-    releaseHoldingOpeners,
     setCollectionTags,
     setFileTags,
     TEST_PASSWORD_HASH,
     TEST_PASSWORD_SALT,
     waitFor
-} from "../../../test/backup-fixtures";
+} from "../../../test/fixtures";
 import { getTestDatabase, resetDatabase } from "../../../test/database";
 import appConfig from "../common/app-config";
 import { ByteRange, parseByteRange } from "../common/byte-range";
@@ -113,7 +115,7 @@ describe("BackupService (integration)", () => {
         const isoUtc = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
         expect(manifest).toEqual({
             formatVersion: 1,
-            schemaVersion: 5,
+            schemaVersion: 6,
             snapshotAt: expect.stringMatching(isoUtc),
             startedAt: new Date(job.startedAt!).toISOString(),
             finishedAt: new Date(job.finishedAt!).toISOString(),

@@ -41,6 +41,18 @@ const appConfig = {
         3 * MEGABYTE
     ),
     geoApiKey: getEnvVariable("HOLVI_GEO_API_KEY"),
+    /** How long the random order of a user's collections stays the same */
+    shufflePeriodMinutes: getEnvVariable(
+        "HOLVI_SHUFFLE_PERIOD_MINUTES",
+        "number",
+        60
+    ),
+    /** The highest bitrate video processing gives a Rendition it re-encodes */
+    renditionMaxBitrateKbps: getEnvVariable(
+        "HOLVI_RENDITION_MAX_BITRATE_KBPS",
+        "number",
+        10_000
+    ),
     thumbnailMaxWidth: 600,
     thumbnailMaxHeight: 600,
     encryptionKey: getEnvVariable("HOLVI_ENCRYPTION_KEY")

@@ -1,19 +1,11 @@
-import { Center, Container, Heading } from "@chakra-ui/react";
-import Head from "next/head";
+import ErrorScreen from "@/lib/components/app-shell/ErrorScreen";
 
-export default function Custom404() {
+export default function NotFound() {
     return (
-        <>
-            <Head>
-                <title>Not found</title>
-            </Head>
-            <main>
-                <Container maxW="lg">
-                    <Center w="100%" h="100dvh">
-                        <Heading>404 - Not found 🤷‍♀️</Heading>
-                    </Center>
-                </Container>
-            </main>
-        </>
+        <ErrorScreen
+            code={404}
+            title="Nothing here"
+            description="This page doesn't exist, or it was moved or deleted."
+        />
     );
 }

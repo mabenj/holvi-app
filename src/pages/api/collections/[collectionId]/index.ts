@@ -1,6 +1,6 @@
 import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
 import { CollectionService } from "@/lib/services/collection.service";
-import { CollectionDto } from "@/lib/types/collection-dto";
+import { CollectionDetails } from "@/lib/types/collection-details";
 import {
     CollectionFormData,
     CollectionValidator
@@ -9,7 +9,7 @@ import {
 async function getCollection(
     req: ApiRequest,
     res: ApiResponse<{
-        collection?: CollectionDto;
+        collection?: CollectionDetails;
     }>
 ) {
     const { collectionId } = req.query as { collectionId: string };
@@ -27,16 +27,19 @@ async function deleteCollection(req: ApiRequest, res: ApiResponse) {
 
 async function updateCollection(
     req: ApiRequest<CollectionFormData>,
-    res: ApiResponse<{ collection?: CollectionDto; nameError?: string }>
+    res: ApiResponse<{ nameError?: string }>
 ) {
     const { collectionId } = req.query as { collectionId: string };
     const collectionService = new CollectionService(req.session.user.id);
-    const { collection: updated, nameError } =
-        await collectionService.updateCollection(collectionId, req.body);
-    if (nameError) {
+    const { nameError } = await collectionService.updateCollection(
+        collectionId,
+        req.body
+    );
+    if (nameError !== undefined) {
         res.status(400).json({ status: "error", error: nameError, nameError });
+        return;
     }
-    res.status(200).json({ status: "ok", collection: updated });
+    res.status(200).json({ status: "ok" });
 }
 
 export default ApiRoute.create({

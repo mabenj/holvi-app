@@ -40,6 +40,14 @@ A backup is a zip holding decrypted copies of every file, so point `HOLVI_BACKUP
 
 `HOLVI_ENCRYPTION_KEY=<32 character long encryption key>`
 
+`HOLVI_SHUFFLE_PERIOD_MINUTES=<minutes the random order of each user's collections stays the same (optional, defaults to 60)>`
+
+`HOLVI_RENDITION_MAX_BITRATE_KBPS=<highest bitrate, in kbit/s, of the web-playable Rendition made for a video the browser may not play, such as HEVC (optional, defaults to 10000)>`
+
+Video processing gives every video whose original is not web-safe (H.264 with AAC or no audio, in MP4) an encrypted Rendition stored next to the original, which is never modified. It runs in the background, one video at a time: new uploads are processed automatically, and existing videos when their user chooses "Process videos" in Settings. Backups contain originals only.
+
+The Collections tab opens in random order. Within one Shuffle period a refresh gives the same order; when the next period starts, the order changes by itself.
+
 ### Install dependencies
 
 ```bash

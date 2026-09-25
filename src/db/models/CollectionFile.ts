@@ -1,17 +1,33 @@
 import { getFileSrc } from "@/lib/common/utilities";
 import { CollectionFileDto } from "@/lib/types/collection-file-dto";
+import { ScrubPreviewLayout } from "@/lib/types/scrub-preview";
 import {
     CreationOptional,
     DataTypes,
     ForeignKey,
     InferAttributes,
     InferCreationAttributes,
+    literal,
     Model,
     NonAttribute,
     Sequelize
 } from "sequelize";
 import { Collection } from "./Collection";
 import { Tag } from "./Tag";
+
+/** Where a video is in video processing; null for a video never processed, and for images */
+export type VideoProcessingStatusValue =
+    | "pending"
+    | "processing"
+    | "done"
+    | "failed";
+
+export const VIDEO_PROCESSING_STATUSES: VideoProcessingStatusValue[] = [
+    "pending",
+    "processing",
+    "done",
+    "failed"
+];
 
 export class CollectionFile extends Model<
     InferAttributes<CollectionFile>,
@@ -31,6 +47,13 @@ export class CollectionFile extends Model<
     declare takenAt: CreationOptional<Date | null>;
     declare durationInSeconds: CreationOptional<number | null>;
     declare blurDataUrl: CreationOptional<string | null>;
+    declare processingStatus: CreationOptional<VideoProcessingStatusValue | null>;
+    /** Why video processing last failed */
+    declare processingError: CreationOptional<string | null>;
+    /** Whether video processing stored a Rendition next to the original */
+    declare hasRendition: CreationOptional<boolean>;
+    /** How the video's Scrub preview is tiled; null while it has none */
+    declare scrubPreviewLayout: CreationOptional<ScrubPreviewLayout | null>;
 
     declare createdAt: CreationOptional<Date>;
     declare updatedAt: CreationOptional<Date>;
@@ -68,10 +91,53 @@ export class CollectionFile extends Model<
                 gpsLabel: DataTypes.STRING,
                 createdAt: DataTypes.DATE,
                 updatedAt: DataTypes.DATE,
-                blurDataUrl: DataTypes.TEXT
+                blurDataUrl: DataTypes.TEXT,
+                processingStatus: {
+                    type: DataTypes.STRING,
+                    allowNull: true,
+                    validate: { isIn: [VIDEO_PROCESSING_STATUSES] }
+                },
+                processingError: DataTypes.TEXT,
+                hasRendition: {
+                    type: DataTypes.BOOLEAN,
+                    allowNull: false,
+                    defaultValue: false
+                },
+                scrubPreviewLayout: DataTypes.JSONB
             },
             {
-                sequelize
+                sequelize,
+                // Named explicitly: the production build minifies class names
+                modelName: "CollectionFile",
+                tableName: "CollectionFiles",
+                indexes: [
+                    // Collection summaries read each collection's first files
+                    // by name, and a collection page pages through them by name
+                    { fields: ["CollectionId", "name", "id"] },
+                    // A collection page pages through its files by date: the
+                    // taken-at time, or else the creation time
+                    {
+                        name: "collection_files_collection_id_date_id",
+                        fields: [
+                            "CollectionId",
+                            literal(`COALESCE("takenAt", "createdAt")`),
+                            "id"
+                        ]
+                    },
+                    // The Timeline pages through every file by date, newest first
+                    {
+                        name: "collection_files_date_id",
+                        fields: [
+                            literal(`COALESCE("takenAt", "createdAt")`),
+                            "id"
+                        ]
+                    },
+                    // Last added to is the creation time of a collection's
+                    // newest file, which most collection sorts order by
+                    { fields: ["CollectionId", "createdAt"] },
+                    // The video processing worker takes the oldest pending video
+                    { fields: ["processingStatus", "createdAt", "id"] }
+                ]
             }
         );
     }
