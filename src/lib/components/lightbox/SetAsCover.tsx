@@ -11,17 +11,23 @@ import LightboxBarButton from "./LightboxBarButton";
 
 interface SetAsCoverProps {
     file: FileSummary;
-    /** Whether the file is the collection's Cover already, chosen or automatic */
-    isCover: boolean;
-    /** Called once the file is the Cover, to show it on the hero and the card */
-    onSet: () => Promise<unknown> | void;
+    /** Whether the file is the collection's Chosen cover; not so for its Rotating cover */
+    isChosenCover: boolean;
+    /** Called once the Cover is chosen or un-chosen, to show it on the hero and the card */
+    onChange: () => Promise<unknown> | void;
 }
 
 /**
- * A lightbox action on a collection page: makes the active file, a photo or
- * a video, the collection's Cover. Filled while the file is the Cover.
+ * A lightbox action on a collection page: a toggle that makes the active
+ * file, a photo or a video, the collection's Chosen cover. Pressed, and
+ * filled, only on the Chosen cover; pressing it then un-chooses it, so the
+ * collection's Cover rotates again.
  */
-export default function SetAsCover({ file, isCover, onSet }: SetAsCoverProps) {
+export default function SetAsCover({
+    file,
+    isChosenCover,
+    onChange
+}: SetAsCoverProps) {
     const [saving, setSaving] = useState(false);
     // The failure of the file it happened to; another file starts afresh
     const [failure, setFailure] = useState<{
@@ -30,12 +36,12 @@ export default function SetAsCover({ file, isCover, onSet }: SetAsCoverProps) {
     }>();
     const failed = failure?.fileId === file.id ? failure.message : null;
 
-    const choose = async () => {
+    const toggle = async () => {
         setSaving(true);
         setFailure(undefined);
         try {
-            await setCover(file.collectionId, file.id);
-            await onSet();
+            await setCover(file.collectionId, isChosenCover ? null : file.id);
+            await onChange();
         } catch (error) {
             setFailure({ fileId: file.id, message: getErrorMessage(error) });
         } finally {
@@ -43,30 +49,29 @@ export default function SetAsCover({ file, isCover, onSet }: SetAsCoverProps) {
         }
     };
 
+    const description = failed
+        ? isChosenCover
+            ? `Could not let the cover rotate: ${failed}`
+            : `Could not set as cover: ${failed}`
+        : isChosenCover
+          ? "The chosen cover of this collection. Press to let the cover rotate"
+          : "Set as cover";
+
     return (
         <LightboxBarButton
-            label={
-                failed ? `Could not set as cover: ${failed}` : "Set as cover"
-            }
-            // Pressed, and filled, while the file is the Cover
-            aria-pressed={isCover}
-            title={
-                failed
-                    ? `Could not set as cover: ${failed}`
-                    : isCover
-                      ? "The cover of this collection"
-                      : "Set as cover"
-            }
+            label={description}
+            aria-pressed={isChosenCover}
+            title={description}
             icon={
                 failed
                     ? mdiAlertCircleOutline
-                    : isCover
+                    : isChosenCover
                       ? mdiImageCheck
                       : mdiImageCheckOutline
             }
             disabled={saving}
             opacity={saving ? 0.5 : undefined}
-            onClick={() => void choose()}
+            onClick={() => void toggle()}
         />
     );
 }

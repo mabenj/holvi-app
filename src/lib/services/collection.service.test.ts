@@ -46,10 +46,10 @@ describe("CollectionService (integration)", () => {
             { blurDataUrl: "data:image/png;base64,aaa" }
         );
         await addFile(user.id, holiday.id, "b.jpg", Buffer.from("b"));
+        const service = new CollectionService(user.id);
+        await service.setCover(holiday.id, cover.id);
 
-        const collection = await new CollectionService(user.id).getCollection(
-            holiday.id
-        );
+        const collection = await service.getCollection(holiday.id);
 
         expect(collection).toMatchObject({
             id: holiday.id,
@@ -60,7 +60,8 @@ describe("CollectionService (integration)", () => {
             videoCount: 0,
             cover: {
                 thumbnailSrc: `/api/collections/${holiday.id}/files?thumbnail=${cover.id}`,
-                blurDataUrl: "data:image/png;base64,aaa"
+                blurDataUrl: "data:image/png;base64,aaa",
+                chosen: true
             }
         });
     });
@@ -239,9 +240,10 @@ describe("Browsing collections (integration)", () => {
         const thumbnail = (name: string) =>
             `/api/collections/${trip.id}/files?thumbnail=${fileIds[name]}`;
 
-        const { collections } = await new CollectionService(
-            user.id
-        ).browseCollections();
+        const service = new CollectionService(user.id);
+        await service.setCover(trip.id, fileIds["photo-05.jpg"]);
+
+        const { collections } = await service.browseCollections();
         const summaries = Object.fromEntries(
             collections.map((summary) => [summary.name, summary])
         );
@@ -252,8 +254,9 @@ describe("Browsing collections (integration)", () => {
             tags: ["family", "travel"],
             imageCount: 12,
             videoCount: 2,
-            // By name, ignoring case: clip-a is the Cover, then Clip-b, then the photos
+            // The Cover, then the others by name ignoring case: clip-a, Clip-b, then the photos
             thumbnails: [
+                "photo-05.jpg",
                 "clip-a.mp4",
                 "Clip-b.mov",
                 "photo-00.jpg",
@@ -261,11 +264,14 @@ describe("Browsing collections (integration)", () => {
                 "photo-02.jpg",
                 "photo-03.jpg",
                 "photo-04.jpg",
-                "photo-05.jpg",
                 "photo-06.jpg",
                 "photo-07.jpg"
             ].map(thumbnail),
-            cover: { thumbnailSrc: thumbnail("clip-a.mp4"), blurDataUrl: null },
+            cover: {
+                thumbnailSrc: thumbnail("photo-05.jpg"),
+                blurDataUrl: null,
+                chosen: true
+            },
             // The newest file, photo-11, was created on 21 February
             lastAddedTo: Date.UTC(2021, 1, 21)
         });
@@ -284,19 +290,25 @@ describe("Browsing collections (integration)", () => {
     it("includes only the Cover's blur placeholder", async () => {
         const user = await createUser("alice");
         const trip = await createCollection(user.id, "Trip");
-        await addFile(user.id, trip.id, "b.jpg", Buffer.from("b"), {
-            blurDataUrl: "data:image/png;base64,bbb"
-        });
-        await addFile(user.id, trip.id, "A.jpg", Buffer.from("a"), {
-            blurDataUrl: "data:image/png;base64,aaa"
-        });
+        const blurs: Record<string, string> = {};
+        for (const name of ["b.jpg", "A.jpg"]) {
+            const blurDataUrl = `data:image/png;base64,${name}`;
+            const file = await addFile(
+                user.id,
+                trip.id,
+                name,
+                Buffer.from(name),
+                { blurDataUrl }
+            );
+            blurs[file.id] = blurDataUrl;
+        }
 
-        const {
-            collections: [summary]
-        } = await new CollectionService(user.id).browseCollections();
+        const summary = await browseOnly(new CollectionService(user.id));
 
-        expect(summary.cover?.blurDataUrl).toBe("data:image/png;base64,aaa");
-        expect(JSON.stringify(summary)).not.toContain("bbb");
+        const coverId = fileIdOf(summary.cover!.thumbnailSrc);
+        const [otherId] = Object.keys(blurs).filter((id) => id !== coverId);
+        expect(summary.cover?.blurDataUrl).toBe(blurs[coverId]);
+        expect(JSON.stringify(summary)).not.toContain(blurs[otherId]);
     });
 
     it("browses only the requesting user's collections", async () => {
@@ -1275,18 +1287,88 @@ describe("Covers (integration)", () => {
         await resetDatabase();
     });
 
-    it("setting a Cover shows it on the summary and the collection page, and clearing it restores the automatic Cover", async () => {
+    it("rotates the Cover of a collection without a Chosen cover among its files, the same all Shuffle period on its card and its page", async () => {
         const user = await createUser("alice");
         const trip = await createCollection(user.id, "Trip");
-        const first = await addFile(
-            user.id,
-            trip.id,
-            "a.jpg",
-            Buffer.from("a"),
-            {
-                blurDataUrl: "data:image/png;base64,aaa"
-            }
-        );
+        const blurs: Record<string, string> = {};
+        for (const name of ["a.jpg", "b.jpg", "c.jpg"]) {
+            const blurDataUrl = `data:image/png;base64,${name}`;
+            const file = await addFile(
+                user.id,
+                trip.id,
+                name,
+                Buffer.from(name),
+                { blurDataUrl }
+            );
+            blurs[file.id] = blurDataUrl;
+        }
+        const time = shufflePeriods(new Date("2026-03-01T10:05:00Z"));
+        const service = new CollectionService(user.id, { clock: time.clock });
+
+        const early = await browseOnly(service);
+        time.laterInPeriod();
+        const late = await browseOnly(service);
+        const page = await service.getCollection(trip.id);
+
+        const coverId = fileIdOf(early.cover!.thumbnailSrc);
+        expect(Object.keys(blurs)).toContain(coverId);
+        expect(early.cover).toEqual({
+            thumbnailSrc: `/api/collections/${trip.id}/files?thumbnail=${coverId}`,
+            blurDataUrl: blurs[coverId],
+            chosen: false
+        });
+        expect(late.cover).toEqual(early.cover);
+        expect(page.cover).toEqual(early.cover);
+    });
+
+    it("gives every file, photo or video, one turn as the Rotating cover before any repeats", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const ids: string[] = [];
+        for (const [name, mimeType] of [
+            ["a.jpg", "image/jpeg"],
+            ["b.mp4", "video/mp4"],
+            ["c.jpg", "image/jpeg"],
+            ["d.mov", "video/quicktime"],
+            ["e.jpg", "image/jpeg"]
+        ]) {
+            const file = await addFile(
+                user.id,
+                trip.id,
+                name,
+                Buffer.from(name),
+                { mimeType }
+            );
+            ids.push(file.id);
+        }
+        const time = shufflePeriods(new Date("2026-03-01T10:05:00Z"));
+        const service = new CollectionService(user.id, { clock: time.clock });
+
+        const covers: string[] = [];
+        for (let period = 0; period < ids.length; period++) {
+            const browsed = await browseOnly(service);
+            const opened = await service.getCollection(trip.id);
+            expect(opened.cover).toEqual(browsed.cover);
+            covers.push(fileIdOf(browsed.cover!.thumbnailSrc));
+            time.nextPeriod();
+        }
+
+        expect([...covers].sort()).toEqual([...ids].sort());
+    });
+
+    it("keeps a Chosen cover in every Shuffle period, and rotates again once it is un-chosen", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const ids: string[] = [];
+        for (const name of ["a.jpg", "b.jpg"]) {
+            const file = await addFile(
+                user.id,
+                trip.id,
+                name,
+                Buffer.from(name)
+            );
+            ids.push(file.id);
+        }
         const chosen = await addFile(
             user.id,
             trip.id,
@@ -1297,69 +1379,39 @@ describe("Covers (integration)", () => {
                 blurDataUrl: "data:image/png;base64,ccc"
             }
         );
-        const service = new CollectionService(user.id);
-        const thumbnail = (fileId: string) =>
-            `/api/collections/${trip.id}/files?thumbnail=${fileId}`;
+        ids.push(chosen.id);
+        const time = shufflePeriods(new Date("2026-03-01T10:05:00Z"));
+        const service = new CollectionService(user.id, { clock: time.clock });
 
         await service.setCover(trip.id, chosen.id);
 
         const chosenCover = {
-            thumbnailSrc: thumbnail(chosen.id),
-            blurDataUrl: "data:image/png;base64,ccc"
+            thumbnailSrc: `/api/collections/${trip.id}/files?thumbnail=${chosen.id}`,
+            blurDataUrl: "data:image/png;base64,ccc",
+            chosen: true
         };
-        expect((await browseOnly(service)).cover).toEqual(chosenCover);
-        expect((await service.getCollection(trip.id)).cover).toEqual(
-            chosenCover
-        );
+        for (let period = 0; period < ids.length; period++) {
+            expect((await browseOnly(service)).cover).toEqual(chosenCover);
+            expect((await service.getCollection(trip.id)).cover).toEqual(
+                chosenCover
+            );
+            time.nextPeriod();
+        }
 
         await service.setCover(trip.id, null);
 
-        const automaticCover = {
-            thumbnailSrc: thumbnail(first.id),
-            blurDataUrl: "data:image/png;base64,aaa"
-        };
-        expect((await browseOnly(service)).cover).toEqual(automaticCover);
-        expect((await service.getCollection(trip.id)).cover).toEqual(
-            automaticCover
-        );
-    });
-
-    it("starts the thumbnails with the chosen Cover, then the other files by name", async () => {
-        const user = await createUser("alice");
-        const trip = await createCollection(user.id, "Trip");
-        const ids: Record<string, string> = {};
-        for (let i = 0; i < 12; i++) {
-            const name = `photo-${String(i).padStart(2, "0")}.jpg`;
-            ids[name] = (
-                await addFile(user.id, trip.id, name, Buffer.from(name))
-            ).id;
+        const covers: string[] = [];
+        for (let period = 0; period < ids.length; period++) {
+            const { cover } = await service.getCollection(trip.id);
+            expect(cover?.chosen).toBe(false);
+            expect((await browseOnly(service)).cover).toEqual(cover);
+            covers.push(fileIdOf(cover!.thumbnailSrc));
+            time.nextPeriod();
         }
-        const service = new CollectionService(user.id);
-
-        // Past the first ten by name
-        await service.setCover(trip.id, ids["photo-11.jpg"]);
-
-        const { thumbnails } = await browseOnly(service);
-        expect(thumbnails).toEqual(
-            [
-                "photo-11.jpg",
-                "photo-00.jpg",
-                "photo-01.jpg",
-                "photo-02.jpg",
-                "photo-03.jpg",
-                "photo-04.jpg",
-                "photo-05.jpg",
-                "photo-06.jpg",
-                "photo-07.jpg",
-                "photo-08.jpg"
-            ].map(
-                (name) =>
-                    `/api/collections/${trip.id}/files?thumbnail=${ids[name]}`
-            )
-        );
+        expect([...covers].sort()).toEqual([...ids].sort());
     });
 
-    it("falls back to the automatic Cover once the Cover file is deleted", async () => {
+    it("rotates among the files left once the Chosen cover is deleted", async () => {
         const user = await createUser("alice");
         const trip = await createCollection(user.id, "Trip");
         const first = await addFile(
@@ -1395,28 +1447,78 @@ describe("Covers (integration)", () => {
         );
         await addThumbnail(user.id, trip.id, chosen.id, Buffer.from("c"));
         await addThumbnail(user.id, other.id, otherChosen.id, Buffer.from("z"));
-        const service = new CollectionService(user.id);
+        const time = shufflePeriods(new Date("2026-03-01T10:05:00Z"));
+        const service = new CollectionService(user.id, { clock: time.clock });
         await service.setCover(trip.id, chosen.id);
         await service.setCover(other.id, otherChosen.id);
 
         await service.multiDelete([chosen.id, otherChosen.id]);
 
-        const trips = await service.getCollection(trip.id);
-        expect(trips.cover?.thumbnailSrc).toBe(
-            `/api/collections/${trip.id}/files?thumbnail=${first.id}`
-        );
-        expect(trips.thumbnails).toEqual(
-            [first.id, second.id].map(
-                (id) => `/api/collections/${trip.id}/files?thumbnail=${id}`
-            )
-        );
-        // Every Cover deleted in the selection falls back
-        expect(
-            (await service.getCollection(other.id)).cover?.thumbnailSrc
-        ).toBe(`/api/collections/${other.id}/files?thumbnail=${otherLeft.id}`);
+        const covers: string[] = [];
+        for (let period = 0; period < 2; period++) {
+            const trips = await service.getCollection(trip.id);
+            expect(trips.cover?.chosen).toBe(false);
+            const coverId = fileIdOf(trips.cover!.thumbnailSrc);
+            covers.push(coverId);
+            const others = [first.id, second.id].filter((id) => id !== coverId);
+            expect(trips.thumbnails).toEqual(
+                [coverId, ...others].map(
+                    (id) => `/api/collections/${trip.id}/files?thumbnail=${id}`
+                )
+            );
+            time.nextPeriod();
+        }
+        expect([...covers].sort()).toEqual([first.id, second.id].sort());
+        // Every Chosen cover deleted in the selection lets its collection rotate
+        expect((await service.getCollection(other.id)).cover).toMatchObject({
+            thumbnailSrc: `/api/collections/${other.id}/files?thumbnail=${otherLeft.id}`,
+            chosen: false
+        });
     });
 
-    it("leaves collections without a chosen Cover with the automatic one", async () => {
+    it("starts the thumbnails with the Cover, chosen or rotating, then the other files by name, up to ten", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const names: string[] = [];
+        const ids: Record<string, string> = {};
+        for (let i = 0; i < 12; i++) {
+            const name = `photo-${String(i).padStart(2, "0")}.jpg`;
+            names.push(name);
+            const file = await addFile(
+                user.id,
+                trip.id,
+                name,
+                Buffer.from(name)
+            );
+            ids[name] = file.id;
+        }
+        const thumbnail = (name: string) =>
+            `/api/collections/${trip.id}/files?thumbnail=${ids[name]}`;
+        const expectedThumbnails = (cover: string) =>
+            [cover, ...names.filter((name) => name !== cover)]
+                .slice(0, 10)
+                .map(thumbnail);
+        const time = shufflePeriods(new Date("2026-03-01T10:05:00Z"));
+        const service = new CollectionService(user.id, { clock: time.clock });
+
+        // Every file takes its turn, including those past the first ten by name
+        for (let period = 0; period < names.length; period++) {
+            const summary = await browseOnly(service);
+            const cover = names.find(
+                (name) => thumbnail(name) === summary.cover!.thumbnailSrc
+            )!;
+            expect(summary.thumbnails).toEqual(expectedThumbnails(cover));
+            time.nextPeriod();
+        }
+
+        await service.setCover(trip.id, ids["photo-11.jpg"]);
+
+        expect((await browseOnly(service)).thumbnails).toEqual(
+            expectedThumbnails("photo-11.jpg")
+        );
+    });
+
+    it("rotates Covers alike in every sort, next to collections with a Chosen cover", async () => {
         const user = await createUser("alice");
         const trip = await createCollection(user.id, "Trip");
         await addFile(user.id, trip.id, "b.jpg", Buffer.from("b"));
@@ -1427,38 +1529,34 @@ describe("Covers (integration)", () => {
             Buffer.from("c")
         );
         const home = await createCollection(user.id, "Home");
-        const homeFirst = await addFile(
-            user.id,
-            home.id,
-            "a.jpg",
-            Buffer.from("a"),
-            {
-                blurDataUrl: "data:image/png;base64,aaa"
-            }
-        );
-        const homeSecond = await addFile(
-            user.id,
-            home.id,
-            "b.jpg",
-            Buffer.from("b")
-        );
-        const service = new CollectionService(user.id);
-
+        for (const name of ["a.jpg", "b.jpg", "c.jpg", "d.jpg"]) {
+            await addFile(user.id, home.id, name, Buffer.from(name));
+        }
+        const empty = await createCollection(user.id, "Empty");
+        const time = shufflePeriods(new Date("2026-03-01T10:05:00Z"));
+        const service = new CollectionService(user.id, { clock: time.clock });
         await service.setCover(trip.id, chosen.id);
 
-        const { collections } = await service.browseCollections({
-            sort: "name"
-        });
-        expect(collections.map((c) => c.name)).toEqual(["Home", "Trip"]);
-        expect(collections[0]).toMatchObject({
-            thumbnails: [homeFirst.id, homeSecond.id].map(
-                (id) => `/api/collections/${home.id}/files?thumbnail=${id}`
-            ),
-            cover: {
-                thumbnailSrc: `/api/collections/${home.id}/files?thumbnail=${homeFirst.id}`,
-                blurDataUrl: "data:image/png;base64,aaa"
+        expect((await service.getCollection(empty.id)).cover).toBeNull();
+        for (let period = 0; period < 2; period++) {
+            const homeCover = (await service.getCollection(home.id)).cover;
+            expect(homeCover?.chosen).toBe(false);
+            for (const sort of COLLECTION_SORTS) {
+                const { collections } = await service.browseCollections({
+                    sort
+                });
+                const covers = Object.fromEntries(
+                    collections.map((c) => [c.id, c.cover])
+                );
+                expect(covers[home.id]).toEqual(homeCover);
+                expect(covers[trip.id]).toMatchObject({
+                    thumbnailSrc: `/api/collections/${trip.id}/files?thumbnail=${chosen.id}`,
+                    chosen: true
+                });
+                expect(covers[empty.id]).toBeNull();
             }
-        });
+            time.nextPeriod();
+        }
     });
 
     it("rejects a file of another collection, or of another user's collection", async () => {
@@ -1496,7 +1594,7 @@ describe("Covers (integration)", () => {
         await expect(service.setCover(trip.id, "not-a-uuid")).rejects.toThrow(
             NotFoundError
         );
-        // Nor may Alice choose, or clear, the Cover of Bob's collection
+        // Nor may Alice choose, or un-choose, the Cover of Bob's collection
         await expect(service.setCover(bobs.id, bobsFile.id)).rejects.toThrow(
             NotFoundError
         );
@@ -1504,9 +1602,10 @@ describe("Covers (integration)", () => {
             NotFoundError
         );
 
-        expect((await service.getCollection(trip.id)).cover?.thumbnailSrc).toBe(
-            `/api/collections/${trip.id}/files?thumbnail=${first.id}`
-        );
+        expect((await service.getCollection(trip.id)).cover).toMatchObject({
+            thumbnailSrc: `/api/collections/${trip.id}/files?thumbnail=${first.id}`,
+            chosen: false
+        });
     });
 });
 
@@ -2001,6 +2100,28 @@ async function browseOnly(service: CollectionService) {
     const { collections } = await service.browseCollections();
     expect(collections).toHaveLength(1);
     return collections[0];
+}
+
+/** The id of the file a thumbnail source shows */
+function fileIdOf(thumbnailSrc: string) {
+    return new URL(thumbnailSrc, "http://holvi").searchParams.get("thumbnail")!;
+}
+
+/** A clock that starts at `start`, then moves on within its Shuffle period or to the next */
+function shufflePeriods(start: Date) {
+    const periodMs = appConfig.shufflePeriodMinutes * 60_000;
+    let now = start.getTime();
+    return {
+        clock: () => new Date(now),
+        /** Moves to the last moment of the current period */
+        laterInPeriod: () => {
+            now = (Math.floor(now / periodMs) + 1) * periodMs - 1;
+        },
+        /** Moves on by one whole period */
+        nextPeriod: () => {
+            now += periodMs;
+        }
+    };
 }
 
 /** Names of every collection a browse returns, in order, across all pages */

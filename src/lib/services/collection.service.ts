@@ -97,9 +97,9 @@ export class CollectionService {
   }
 
   /**
-   * Makes one of the collection's files, a photo or a video, its Cover; null
-   * goes back to the automatic Cover. A file of any other collection is not
-   * found.
+   * Makes one of the collection's files, a photo or a video, its Chosen
+   * cover; null un-chooses it, so its Cover rotates again. A file of any other
+   * collection is not found.
    */
   async setCover(collectionId: string, fileId: string | null) {
     await this.throwIfNotUserCollection(collectionId);
@@ -208,7 +208,7 @@ export class CollectionService {
     if (!collection) {
       throw new NotFoundError(`Collection not found '${collectionId}'`);
     }
-    const [summary] = await summarizeCollections([collection]);
+    const [summary] = await summarizeCollections([collection], this.clock());
     return { ...summary, description: collection.description ?? "" };
   }
 

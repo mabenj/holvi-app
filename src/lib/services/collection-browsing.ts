@@ -221,11 +221,26 @@ export async function browseCollections(
             : null;
 
     return {
-        collections: await summarizeCollections(pageRows),
+        collections: await summarizeCollections(pageRows, now),
         nextCursor,
         ...(seed !== undefined ? { seed } : {})
     };
 }
+
+/**
+ * The Rotating cover of the collection `c` in the Shuffle period
+ * `:periodIndex`. Each collection tours its files in the order of a hash of
+ * its id and theirs, one file a period, so every file gets a turn before any
+ * repeats. Adding or removing files moves the tour on.
+ */
+const ROTATING_COVER = `(SELECT r.id FROM (
+        SELECT f.id,
+            row_number() OVER (ORDER BY md5(c.id::text || f.id::text) COLLATE "C", f.id) - 1 AS position,
+            count(*) OVER () AS size
+        FROM "CollectionFiles" f
+        WHERE f."CollectionId" = c.id
+    ) r
+    WHERE r.position = mod(CAST(:periodIndex AS bigint), r.size))`;
 
 /** A visit this soon after the previous one extends its Open instead of counting again */
 const OPEN_WINDOW = `interval '30 minutes'`;
@@ -272,17 +287,25 @@ function isCursorOf(sort: CollectionSort, keys: SortKey[], parts: string[]) {
  * the same for the whole period, and different for every user and every period.
  */
 export function deriveShuffleSeed(userId: string, now: Date) {
-    const periodMs = Math.max(1, appConfig.shufflePeriodMinutes) * 60_000;
-    const periodIndex = Math.floor(now.getTime() / periodMs);
     return createHash("sha256")
-        .update(`${userId}:${periodIndex}`)
+        .update(`${userId}:${shufflePeriodIndex(now)}`)
         .digest("hex")
         .slice(0, 16);
 }
 
-/** Summaries of the given collections, in the same order */
+/** Which Shuffle period `now` falls in, counting from the epoch */
+function shufflePeriodIndex(now: Date) {
+    const periodMs = Math.max(1, appConfig.shufflePeriodMinutes) * 60_000;
+    return Math.floor(now.getTime() / periodMs);
+}
+
+/**
+ * Summaries of the given collections, in the same order, with the Rotating
+ * covers of the Shuffle period that `now` falls in
+ */
 export async function summarizeCollections(
-    collections: { id: string; name: string; createdAt: Date }[]
+    collections: { id: string; name: string; createdAt: Date }[],
+    now: Date
 ): Promise<CollectionSummary[]> {
     if (collections.length === 0) {
         return [];
@@ -309,39 +332,52 @@ export async function summarizeCollections(
             }[]
         >,
         // The Cover leads the thumbnails, then the other files by name. The
-        // chosen Cover if it is still in the collection, otherwise the first
-        // file by name. Two queries, so each one reads an index.
+        // Chosen cover if it is still in the collection, otherwise the
+        // Rotating cover. Two queries, so each one reads an index.
         db.select(
             `SELECT c.id AS "collectionId", t.id, t."mimeType",
-                    CASE WHEN t.position = 1 THEN t."blurDataUrl" END AS "blurDataUrl"
+                    CASE WHEN t.position = 1 THEN t."blurDataUrl" END AS "blurDataUrl",
+                    t.id IS NOT DISTINCT FROM c."coverFileId" AS chosen
                 FROM "Collections" c
                 CROSS JOIN LATERAL (
+                    SELECT COALESCE(
+                        (SELECT f.id FROM "CollectionFiles" f
+                            WHERE f."CollectionId" = c.id AND f.id = c."coverFileId"),
+                        ${ROTATING_COVER}
+                    ) AS id
+                ) cover
+                CROSS JOIN LATERAL (
                     SELECT u.id, u."mimeType", u."blurDataUrl",
-                           row_number() OVER (ORDER BY u.chosen DESC, u.name, u.id) AS position
+                           row_number() OVER (ORDER BY u."isCover" DESC, u.name, u.id) AS position
                         FROM (
-                            (SELECT f.id, f."mimeType", f."blurDataUrl", f.name, true AS chosen
+                            (SELECT f.id, f."mimeType", f."blurDataUrl", f.name, true AS "isCover"
                                 FROM "CollectionFiles" f
-                                WHERE f."CollectionId" = c.id AND f.id = c."coverFileId")
+                                WHERE f.id = cover.id)
                             UNION ALL
-                            (SELECT f.id, f."mimeType", f."blurDataUrl", f.name, false AS chosen
+                            (SELECT f.id, f."mimeType", f."blurDataUrl", f.name, false AS "isCover"
                                 FROM "CollectionFiles" f
                                 WHERE f."CollectionId" = c.id
-                                    AND f.id IS DISTINCT FROM c."coverFileId"
+                                    AND f.id IS DISTINCT FROM cover.id
                                 ORDER BY f.name, f.id
                                 LIMIT :thumbnailsLimit)
                         ) u
-                        ORDER BY u.chosen DESC, u.name, u.id
+                        ORDER BY u."isCover" DESC, u.name, u.id
                         LIMIT :thumbnailsLimit
                 ) t
                 WHERE c.id IN (:ids)
                 ORDER BY c.id, t.position`,
-            { ids, thumbnailsLimit: Collection.thumbnailsLimit }
+            {
+                ids,
+                thumbnailsLimit: Collection.thumbnailsLimit,
+                periodIndex: shufflePeriodIndex(now)
+            }
         ) as Promise<
             {
                 collectionId: string;
                 id: string;
                 mimeType: string;
                 blurDataUrl: string | null;
+                chosen: boolean;
             }[]
         >,
         db.select(
@@ -381,7 +417,8 @@ export async function summarizeCollections(
                 files.length > 0
                     ? {
                           thumbnailSrc: thumbnailSrcs[0],
-                          blurDataUrl: files[0].blurDataUrl
+                          blurDataUrl: files[0].blurDataUrl,
+                          chosen: files[0].chosen
                       }
                     : null,
             lastAddedTo: new Date(

@@ -305,11 +305,12 @@ function CollectionScreen({
                         actions={(file) => (
                             <SetAsCover
                                 file={file}
-                                isCover={
-                                    collection?.cover?.thumbnailSrc ===
-                                    file.thumbnailSrc
+                                isChosenCover={
+                                    !!collection?.cover?.chosen &&
+                                    collection.cover.thumbnailSrc ===
+                                        file.thumbnailSrc
                                 }
-                                onSet={refreshCollection}
+                                onChange={refreshCollection}
                             />
                         )}
                     />
