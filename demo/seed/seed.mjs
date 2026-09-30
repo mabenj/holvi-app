@@ -126,51 +126,53 @@ async function seedThroughApi() {
         sessions[user] = await Api.signUp(baseUrl, username, password);
     }
 
-    /**
-     * Each planned collection as created, in plan order: its id and its
-     * files' ids by name
-     * @type {{ id: string, fileIds: Map<string, string> }[]}
-     */
+    /** @type {CreatedCollection[]} */
     const created = [];
     for (const planned of COLLECTIONS) {
         const api = sessions[planned.owner];
         console.log(`Creating ${planned.owner}'s collection '${planned.name}'`);
-        const collection = { id: await api.createCollection(planned), fileIds: new Map() };
+        const id = await api.createCollection(planned);
+        const collection = { planned, api, id, fileIds: new Map() };
         created.push(collection);
-        await uploadFiles(api, collection, planned, "image/");
+        await uploadFiles(collection, "image/");
     }
 
-    for (const [i, planned] of COLLECTIONS.entries()) {
-        await recordOpens(sessions[planned.owner], created[i].id, planned);
+    for (const collection of created) {
+        await recordOpens(collection);
     }
 
     // Videos last: video processing starts on each upload and gets through
     // the sample videos in seconds, so only the last ones uploaded are still
     // in Activity when the checks start
     console.log("Uploading the videos");
-    for (const [i, planned] of COLLECTIONS.entries()) {
-        await uploadFiles(sessions[planned.owner], created[i], planned, "video/");
+    for (const collection of created) {
+        await uploadFiles(collection, "video/");
     }
 
-    for (const [i, planned] of COLLECTIONS.entries()) {
-        await tagFiles(sessions[planned.owner], created[i], planned);
-        if (planned.cover) {
-            console.log(`Choosing '${planned.cover}' as the cover of '${planned.name}'`);
-            await sessions[planned.owner].send(
-                "PUT",
-                `/api/collections/${created[i].id}/cover`,
-                { fileId: fileIdOf(created[i], planned, planned.cover) }
-            );
-        }
+    for (const collection of created) {
+        await tagFiles(collection);
+        await chooseCover(collection);
     }
     return created;
 }
 
 /**
+ * @typedef {{
+ *   planned: import("./plan.mjs").PlannedCollection,
+ *   api: Api,
+ *   id: string,
+ *   fileIds: Map<string, string>
+ * }} CreatedCollection a planned collection as created: its owner's
+ *   session, its id and its uploaded files' ids by name
+ */
+
+/**
  * Puts the planned file tags on the collection's files, each tag on all its
  * files at once, as the UI tags a selection
+ * @param {CreatedCollection} collection
  */
-async function tagFiles(api, collection, planned) {
+async function tagFiles(collection) {
+    const { planned, api } = collection;
     const filesByTag = Map.groupBy(
         planned.files.flatMap((file) => (file.tags ?? []).map((tag) => ({ tag, file }))),
         ({ tag }) => tag
@@ -179,7 +181,7 @@ async function tagFiles(api, collection, planned) {
         console.log(`Tagging ${tagged.length} file(s) in '${planned.name}' with '${tag}'`);
         await api.send("POST", "/api/tags/bulk", {
             target: "files",
-            ids: tagged.map(({ file }) => fileIdOf(collection, planned, fileName(file))),
+            ids: tagged.map(({ file }) => fileIdOf(collection, fileName(file))),
             add: [tag],
             remove: []
         });
@@ -187,12 +189,28 @@ async function tagFiles(api, collection, planned) {
 }
 
 /**
+ * Makes the planned file the collection's Chosen cover, if it has one
+ * @param {CreatedCollection} collection
+ */
+async function chooseCover(collection) {
+    const { planned, api, id } = collection;
+    if (!planned.cover) {
+        return;
+    }
+    console.log(`Choosing '${planned.cover}' as the Chosen cover of '${planned.name}'`);
+    await api.send("PUT", `/api/collections/${id}/cover`, {
+        fileId: fileIdOf(collection, planned.cover)
+    });
+}
+
+/**
  * Records the collection's planned Opens through the API, moving each one
  * back to its planned time before the next. The app keeps only an Open count
  * and Last opened, and counts a visit as another Open only when Last opened
  * is 30 minutes old, so each Open's time is written as soon as it is made.
+ * @param {CreatedCollection} collection
  */
-async function recordOpens(api, collectionId, planned) {
+async function recordOpens({ planned, api, id }) {
     for (const [i, openedAt] of (planned.opens ?? []).entries()) {
         const earliestNext = planned.opens[i + 1] ?? SEEDED_AT;
         if (earliestNext.getTime() - openedAt.getTime() < OPEN_WINDOW_MS) {
@@ -200,9 +218,9 @@ async function recordOpens(api, collectionId, planned) {
                 `'${planned.name}' has an Open less than 30 minutes before its next one or the seed`
             );
         }
-        await api.send("POST", `/api/collections/${collectionId}/opens`);
+        await api.send("POST", `/api/collections/${id}/opens`);
         await db.query(`UPDATE "Collections" SET "lastOpened" = $2 WHERE id = $1`, [
-            collectionId,
+            id,
             openedAt
         ]);
     }
@@ -215,13 +233,13 @@ async function recordOpens(api, collectionId, planned) {
  * Backdating, straight in the database, of the times the API cannot set:
  * when each collection was created, and when its files were (its Last added
  * to). The times of Opens are backdated as they are recorded.
+ * @param {CreatedCollection[]} created
  */
 async function backdate(created) {
     console.log("\nBackdating creation times");
     await db.query("BEGIN");
     try {
-        for (const [i, planned] of COLLECTIONS.entries()) {
-            const { id } = created[i];
+        for (const { planned, id } of created) {
             await db.query(`UPDATE "Collections" SET "createdAt" = $2 WHERE id = $1`, [
                 id,
                 planned.created
@@ -240,10 +258,11 @@ async function backdate(created) {
     }
 }
 
-function fileIdOf(collection, planned, name) {
+/** The id of the collection's uploaded file of that name @param {CreatedCollection} collection */
+function fileIdOf(collection, name) {
     const id = collection.fileIds.get(name);
     if (!id) {
-        throw new Error(`'${planned.name}' has no planned file '${name}'`);
+        throw new Error(`'${collection.planned.name}' has no planned file '${name}'`);
     }
     return id;
 }
@@ -251,8 +270,11 @@ function fileIdOf(collection, planned, name) {
 /**
  * Uploads the planned files of one type, e.g. "video/", as the client does,
  * and notes their ids
+ * @param {CreatedCollection} collection
+ * @param {"image/" | "video/"} mimeTypePrefix
  */
-async function uploadFiles(api, collection, planned, mimeTypePrefix) {
+async function uploadFiles(collection, mimeTypePrefix) {
+    const { planned, api } = collection;
     const files = await Promise.all(
         planned.files
             .filter((file) => sampleOf(file).mimeType.startsWith(mimeTypePrefix))

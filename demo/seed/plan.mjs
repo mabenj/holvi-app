@@ -1,6 +1,6 @@
 // The scenario plan: what an empty demo is seeded with, as data. The seed
 // signs up every User, then creates each collection for its owner, uploads
-// its files, tags them, chooses its cover and records its Opens, and then
+// its files, tags them, picks its Chosen cover and records its Opens, and then
 // backdates the times the API cannot set. Every file names a sample file from
 // samples.mjs. Times are relative to when the seed runs, so a demo seeded
 // later has the same scenarios.
@@ -64,7 +64,7 @@ export const COLLECTIONS = [
         created: daysAgo(330),
         added: daysAgo(20),
         cover: "aegina-harbour-night.jpg",
-        opens: [320, 100, 19, 5, 1].map((days) => daysAgo(days)),
+        opens: [daysAgo(320), daysAgo(100), daysAgo(19), daysAgo(5), daysAgo(1)],
         files: samples("aegina-sunset.jpg", "aegina-harbour-night.jpg")
     },
     {
@@ -76,7 +76,16 @@ export const COLLECTIONS = [
         added: daysAgo(290),
         cover: "loons.mp4",
         // The most opened
-        opens: [289, 150, 60, 14, 7, 4, 2, 1].map((days) => daysAgo(days)),
+        opens: [
+            daysAgo(289),
+            daysAgo(150),
+            daysAgo(60),
+            daysAgo(14),
+            daysAgo(7),
+            daysAgo(4),
+            daysAgo(2),
+            daysAgo(1)
+        ],
         files: samples("loons.mp4", "loons.mov")
     },
     {
@@ -542,9 +551,9 @@ export const COLLECTIONS = [
             ]
         )
     },
-    // Last, and with the newest files: the seed uploads videos last, and
-    // video processing takes the oldest first, so these are still in Activity
-    // when the checks start
+    // Last, and last added to of the collections with videos: the seed
+    // uploads videos last, and video processing takes the oldest first, so
+    // these are still in Activity when the checks start
     {
         owner: "demo",
         name: "Clips to sort",

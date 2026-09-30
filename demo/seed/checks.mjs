@@ -14,6 +14,11 @@ function expect(condition, detail) {
     }
 }
 
+/** How many files a collection's card counts */
+function fileCount(collection) {
+    return collection.imageCount + collection.videoCount;
+}
+
 function names(collectionsOrFiles) {
     return collectionsOrFiles.map(({ name }) => name);
 }
@@ -93,8 +98,7 @@ function filesCheck(user) {
                 const seen = names(files);
                 const expected = planned.files.map(fileName);
                 expectSameNames(seen, expected, `'${planned.name}' holds`);
-                const counted =
-                    collection.imageCount + collection.videoCount;
+                const counted = fileCount(collection);
                 expect(
                     counted === expected.length,
                     `the card of '${planned.name}' counts ${counted} file(s), planned ${expected.length}`
@@ -234,13 +238,15 @@ const activityCheck = {
     }
 };
 
-/** Whether the file is the broken sample video, under whatever name the plan gave it */
+/** The names the plan uploads the broken sample video under */
+const BROKEN_VIDEO_NAMES = new Set(
+    COLLECTIONS.flatMap((planned) => planned.files)
+        .filter((file) => file.sample === BROKEN_VIDEO)
+        .map(fileName)
+);
+
 function isBrokenVideo(file) {
-    return COLLECTIONS.some((planned) =>
-        planned.files.some(
-            (f) => f.sample === BROKEN_VIDEO && fileName(f) === file.name
-        )
-    );
+    return BROKEN_VIDEO_NAMES.has(file.name);
 }
 
 /** The scenarios the demo exists for, as demo and other see them @type {Check[]} */
@@ -255,7 +261,7 @@ const scenarioChecks = [
         scenario: `demo has a collection of more than ${PAGE_SIZE} files, and the cursor leads to its next page`,
         run: async ({ demo }) => {
             const big = (await allCollections(demo)).find(
-                (c) => c.imageCount + c.videoCount > PAGE_SIZE
+                (c) => fileCount(c) > PAGE_SIZE
             );
             expect(big, `no collection has more than ${PAGE_SIZE} files`);
             const pages = await pageThrough(
@@ -265,8 +271,8 @@ const scenarioChecks = [
             );
             const seen = pages.flat().length;
             expect(
-                seen === big.imageCount + big.videoCount,
-                `paging through '${big.name}' showed ${seen} of its ${big.imageCount + big.videoCount} files`
+                seen === fileCount(big),
+                `paging through '${big.name}' showed ${seen} of its ${fileCount(big)} files`
             );
         }
     },
@@ -274,7 +280,7 @@ const scenarioChecks = [
         scenario: "demo has an empty collection, without a Cover",
         run: async ({ demo }) => {
             const empty = (await allCollections(demo)).find(
-                (c) => c.imageCount + c.videoCount === 0
+                (c) => fileCount(c) === 0
             );
             expect(empty, "every collection has files");
             expect(!empty.cover, `the empty '${empty.name}' has a Cover`);
@@ -409,17 +415,18 @@ const scenarioChecks = [
         }
     },
     {
-        scenario: "demo's Timeline has files taken over several years, some with GPS and some without",
+        scenario: "demo's Timeline has files taken over several years, and photos with GPS and without",
         run: async ({ demo }) => {
             const files = await timeline(demo);
             const years = new Set(
                 files.map((f) => new Date(f.timestamp).getUTCFullYear())
             );
             expect(years.size >= 5, `the Timeline spans only ${[...years].join(", ")}`);
-            const withGps = files.filter((f) => f.gps);
+            const photos = files.filter((f) => f.mimeType.startsWith("image/"));
+            const withGps = photos.filter((f) => f.gps);
             expect(
-                withGps.length > 0 && withGps.length < files.length,
-                `${withGps.length} of the Timeline's ${files.length} files have GPS`
+                withGps.length > 0 && withGps.length < photos.length,
+                `${withGps.length} of the Timeline's ${photos.length} photos have GPS`
             );
         }
     },
