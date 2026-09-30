@@ -1,0 +1,4 @@
+# Demo sample media: never diffed or converted
+demo/media/** binary
+# The sources file next to the media stays text
+demo/media/SOURCES.md text diff merge
