@@ -1,6 +1,7 @@
 // Seeds an empty demo with the scenario plan, then checks every scenario is
 // there. Does nothing when the demo is already seeded, so data made while
-// testing survives. Runs in the demo's seed service once the app is healthy:
+// testing survives, and fails when an earlier seed stopped partway. Runs in
+// the demo's seed service once the app is healthy:
 //
 //   HOLVI_DEMO_URL=http://app:3000 \
 //   HOLVI_DEMO_DB_CONNECTION_STRING=postgres://... node demo/seed/seed.mjs
@@ -16,15 +17,29 @@ import { COLLECTIONS, USERS, fileName } from "./plan.mjs";
 const baseUrl = requireEnv("HOLVI_DEMO_URL");
 const connectionString = requireEnv("HOLVI_DEMO_DB_CONNECTION_STRING");
 
+// The plan's last collection of User demo: seeding creates it after every
+// User and every other collection of theirs, so without it the seed failed
+const marker = COLLECTIONS.findLast((collection) => collection.owner === "demo");
+
+let state;
 try {
-    if (await isSeeded()) {
-        console.log(
-            `User '${USERS.demo.username}' exists: the demo is already seeded`
-        );
-        process.exit(0);
-    }
+    state = await seedState();
 } catch (error) {
     fail("Could not tell whether the demo is seeded", error);
+}
+if (state === "seeded") {
+    console.log(
+        `User '${USERS.demo.username}' and their collection '${marker.name}' exist: the demo is already seeded`
+    );
+    process.exit(0);
+}
+if (state === "partial") {
+    fail(
+        `User '${USERS.demo.username}' exists without their collection '${marker.name}', ` +
+            "the last one the seed creates: an earlier seed failed partway, " +
+            "or the collection was renamed or deleted. " +
+            "Run ./demo.sh reset to seed the demo again from scratch."
+    );
 }
 
 try {
@@ -41,8 +56,12 @@ if (failures.length > 0) {
 }
 console.log("\nThe demo is seeded and every check passed");
 
-/** Whether User demo exists, read straight from the database */
-async function isSeeded() {
+/**
+ * Read straight from the database: "empty" without User demo, "seeded" with
+ * User demo and their last planned collection, "partial" with only the User.
+ * The one place that decides whether to seed.
+ */
+async function seedState() {
     const client = new pg.Client({ connectionString });
     await client.connect();
     try {
@@ -50,13 +69,20 @@ async function isSeeded() {
             `SELECT to_regclass('"Users"') IS NOT NULL AS "hasUsers"`
         );
         if (!rows[0].hasUsers) {
-            return false;
+            return "empty";
         }
-        const { rowCount } = await client.query(
-            `SELECT 1 FROM "Users" WHERE username = $1`,
+        const users = await client.query(
+            `SELECT id FROM "Users" WHERE username = $1`,
             [USERS.demo.username]
         );
-        return rowCount > 0;
+        if (users.rowCount === 0) {
+            return "empty";
+        }
+        const collections = await client.query(
+            `SELECT 1 FROM "Collections" WHERE "UserId" = $1 AND name = $2`,
+            [users.rows[0].id, marker.name]
+        );
+        return collections.rowCount > 0 ? "seeded" : "partial";
     } finally {
         await client.end();
     }
