@@ -1,0 +1,85 @@
+# The demo environment: a local, production-built Holvi with its own database
+# and data. Run it through ../demo.sh, which always uses the project name
+# holvi-demo, so nothing here collides with the deploy docker-compose.yml.
+#
+# Every secret below is fixed, committed and non-secret on purpose: the demo
+# holds only seeded sample data and never shares keys with real data.
+services:
+    db:
+        build:
+            context: ../src/db
+        environment:
+            - POSTGRES_USER=holvi
+            - POSTGRES_PASSWORD=holvi-demo
+            - POSTGRES_DB=holvi_demo
+        volumes:
+            - db-data:/var/lib/postgresql/data
+        # Reachable from this machine only, e.g. to inspect the seeded data
+        ports:
+            - 127.0.0.1:5434:5432
+        healthcheck:
+            # Over TCP: during first start-up Postgres runs a temporary
+            # server on its socket only, which would pass a socket check early
+            test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "holvi", "-d", "holvi_demo"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 60s
+            start_interval: 1s
+
+    app:
+        build:
+            context: ..
+        image: holvi-demo-app
+        depends_on:
+            db:
+                condition: service_healthy
+        environment:
+            - HOLVI_DB_CONNECTION_STRING=postgres://holvi:holvi-demo@db:5432/holvi_demo
+            - HOLVI_SESSION_PASSWORD=holvi-demo-session-password-not-a-secret
+            # Exactly 32 characters, as AES-256 needs
+            - HOLVI_ENCRYPTION_KEY=holvi-demo-key-is-not-a-secret!!
+            - HOLVI_DATA_DIR=/app/data
+            - HOLVI_BACKUP_DIR=/app/data/backups
+            # Plain http on localhost, so the session cookie must not be secure-only
+            - HOLVI_USE_HTTPS=false
+            # A real key can go in demo/.env.local, which demo.sh reads when it exists
+            - HOLVI_GEO_API_KEY=${HOLVI_GEO_API_KEY:-no-geocoding-key}
+            # Short, so random order and Rotating covers change during one
+            # test session; override it from the shell running demo.sh
+            - HOLVI_SHUFFLE_PERIOD_MINUTES=${HOLVI_SHUFFLE_PERIOD_MINUTES:-1}
+        volumes:
+            - app-data:/app/data
+        ports:
+            - 7100:3000
+        healthcheck:
+            test:
+                - CMD
+                - node
+                - -e
+                - "fetch('http://127.0.0.1:3000/login').then((res) => process.exit(res.ok ? 0 : 1), () => process.exit(1))"
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 120s
+            start_interval: 2s
+
+    # One-off: demo.sh runs it once the app is healthy. It seeds an empty demo
+    # and checks the seed, and does nothing when the demo is already seeded.
+    seed:
+        image: holvi-demo-app
+        pull_policy: never
+        depends_on:
+            app:
+                condition: service_healthy
+        environment:
+            - HOLVI_DEMO_URL=http://app:3000
+            - HOLVI_DEMO_DB_CONNECTION_STRING=postgres://holvi:holvi-demo@db:5432/holvi_demo
+        command: ["node", "demo/seed/seed.mjs"]
+        restart: "no"
+        profiles:
+            - seed
+
+volumes:
+    db-data:
+    app-data:
