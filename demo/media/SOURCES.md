@@ -2,10 +2,10 @@
 
 The demo environment's sample media. Every file is prepared from an original on
 Wikimedia Commons whose file page licenses it as CC0, the Creative Commons public
-domain dedication (https://creativecommons.org/publicdomain/zero/1.0/). Each row
-links the file page, which is where its licence is stated.
-`demo/prepare-media.mjs` checks the licence on each file page (its licence
-templates and the licence Commons reports for it) before it prepares anything,
+domain dedication (https://creativecommons.org/publicdomain/zero/1.0/), or as public
+domain. Each row gives the licence and links the file page, which is where the
+licence is stated. `demo/prepare-media.mjs` checks the licence on each file page (its
+licence templates and the licence Commons reports for it) before it prepares anything,
 downloads the originals and writes these files. Run it again to reproduce them:
 `node demo/prepare-media.mjs`.
 
@@ -17,9 +17,9 @@ Each original was downscaled once to at most 1600 px on the long edge (after app
 EXIF orientation), converted to sRGB and saved as JPEG at quality 80 (mozjpeg). All of
 the original's metadata was removed. The EXIF written in its place is chosen for the
 demo, not the camera's: the taken date (DateTimeOriginal and DateTimeDigitized, which
-have no time zone; Holvi reads them as UTC) is the date on the file page, with a made-up time of day
-where the page gives none; GPS, on some photos only, is the location on the file
-page unless noted; Artist is the author and Copyright the licence and file page.
+have no time zone; Holvi reads them as UTC) is the date on the file page, with a made-up
+time of day where the page gives none; GPS, on some photos only, is the location on the
+file page unless noted; Artist is the author and Copyright the licence and file page.
 
 | File | Size | Taken date written | GPS written | Source |
 | --- | --- | --- | --- | --- |
@@ -59,10 +59,8 @@ at the original's resolution and frame rate, without the original's metadata. It
 encoded twice, with its creation_time metadata set to the date on the file page and
 a made-up time of day:
 
-- `.mp4`: H.264 (High profile, yuv420p, CRF 26) with AAC stereo audio, moov atom at
-  the front. Web-safe, so video processing makes no Rendition.
-- `.mov`: HEVC (yuv420p, CRF 30, tagged hvc1 like Apple devices) with AAC stereo
-  audio in QuickTime MOV. Not web-safe, so video processing makes a Rendition.
+- `.mp4`: H.264 (High profile, yuv420p, CRF 26) with AAC stereo audio, moov atom at the front. Web-safe, so video processing makes no Rendition.
+- `.mov`: HEVC (yuv420p, CRF 30, tagged hvc1 like Apple devices) with AAC stereo audio in QuickTime MOV. Not web-safe, so video processing makes a Rendition.
 
 | File | Size | Codecs and container | Duration | creation_time | Source |
 | --- | --- | --- | --- | --- | --- |

@@ -2,6 +2,7 @@ import { mkdtemp, readdir, rm } from "fs/promises";
 import os from "os";
 import path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import appConfig from "../src/lib/common/app-config";
 import { ImageHelper } from "../src/lib/common/image-helper";
 import { planRendition, VideoHelper } from "../src/lib/common/video-helper";
 
@@ -47,7 +48,8 @@ describe("demo sample media", () => {
         const withGps = exifs.filter(({ exif }) => exif?.gps);
         expect(withGps.length).toBeGreaterThan(0);
         expect(withGps.length).toBeLessThan(photos.length);
-        expect(withGps.every(({ exif }) => exif!.gps!.label === "Testland")).toBe(true);
+        // Geocoded, so the app shows them a place name
+        expect(withGps.map(({ exif }) => exif!.gps!.label)).toEqual(withGps.map(() => "Testland"));
     });
 
     it("has web-safe H.264 MP4 videos and HEVC MOV videos that need a Rendition, each with a capture date", async () => {
@@ -77,7 +79,13 @@ describe("demo sample media", () => {
         const plan = planRendition(codecs);
         expect(plan).toBe("transcode");
         await expect(
-            VideoHelper.produceRendition(broken, path.join(workDir, "rendition.mp4"), plan!, codecs, 8_000)
+            VideoHelper.produceRendition(
+                broken,
+                path.join(workDir, "rendition.mp4"),
+                plan!,
+                codecs,
+                appConfig.renditionMaxBitrateKbps
+            )
         ).rejects.toThrow("Decoder (codec none) not found");
     });
 });
