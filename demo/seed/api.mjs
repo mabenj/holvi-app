@@ -46,10 +46,7 @@ export class Api {
         if (!res.ok) {
             throw new ApiError("POST", path, res.status, body);
         }
-        const cookie = res.headers
-            .getSetCookie()
-            .map((header) => header.split(";")[0])
-            .join("; ");
+        const cookie = sessionCookie(res.headers.getSetCookie());
         if (!cookie) {
             throw new Error(`POST ${path} set no session cookie`);
         }
@@ -137,6 +134,27 @@ export class Api {
         } while (cursor);
         return items;
     }
+}
+
+/**
+ * The Cookie header a browser would send after these Set-Cookie headers. The
+ * sign-in routes clear the old session cookie before setting the new one, so
+ * the last value of each cookie wins and a cleared cookie is dropped.
+ */
+function sessionCookie(setCookieHeaders) {
+    const cookies = new Map();
+    for (const header of setCookieHeaders) {
+        const [pair] = header.split(";");
+        const separator = pair.indexOf("=");
+        const name = pair.slice(0, separator).trim();
+        const value = pair.slice(separator + 1).trim();
+        if (value) {
+            cookies.set(name, value);
+        } else {
+            cookies.delete(name);
+        }
+    }
+    return [...cookies].map(([name, value]) => `${name}=${value}`).join("; ");
 }
 
 function withQuery(path, query) {
