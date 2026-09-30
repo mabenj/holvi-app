@@ -2,7 +2,8 @@
 // checked through the public HTTP API while signed in as that User. A check
 // throws a CheckFailure, or any other error, when its scenario is not there.
 
-import { COLLECTIONS, USERS, fileName } from "./plan.mjs";
+import { COLLECTIONS, SEEDED_AT, USERS, fileName } from "./plan.mjs";
+import { BROKEN_VIDEO } from "./samples.mjs";
 
 export class CheckFailure extends Error {}
 
@@ -30,6 +31,18 @@ function expectSameNames(seen, planned, whatWasSeen) {
 
 function plannedCollectionsOf(user) {
     return COLLECTIONS.filter((collection) => collection.owner === user);
+}
+
+/** The User's planned collection of that name; fails if there is none */
+function plannedCollection(user, name) {
+    const planned = plannedCollectionsOf(user).find((c) => c.name === name);
+    expect(planned, `${user} has an unplanned collection '${name}'`);
+    return planned;
+}
+
+/** A planned collection's Last opened, or undefined if it is never opened */
+function lastOpened(planned) {
+    return planned.opens?.at(-1);
 }
 
 function allCollections(api) {
@@ -187,7 +200,7 @@ async function pageThrough(api, path, key, query = {}) {
  * @type {Check}
  */
 const activityCheck = {
-    scenario: "demo's Activity shows videos waiting for or undergoing video processing",
+    scenario: "demo's Activity shows videos in video processing, among them an H.264 MP4, an HEVC MOV and the broken video",
     run: async ({ demo }) => {
         const { activity } = await demo.get("/api/activity");
         const { pending, processing } = activity.videoProcessing;
@@ -195,8 +208,40 @@ const activityCheck = {
             activity.active && pending + processing > 0,
             `Activity shows ${pending} pending and ${processing} processing`
         );
+
+        // Until video processing is done with a video, it has no Scrub preview
+        const { videos: failed } = await demo.get("/api/video-processing/failed");
+        const failedIds = new Set(failed.map(({ id }) => id));
+        const waiting = (await timeline(demo)).filter(
+            (file) =>
+                file.mimeType.startsWith("video/") &&
+                !file.scrubPreview &&
+                !failedIds.has(file.id)
+        );
+        const kinds = {
+            "an H.264 MP4": (file) =>
+                file.mimeType === "video/mp4" && !isBrokenVideo(file),
+            "an HEVC MOV": (file) => file.mimeType === "video/quicktime",
+            "the broken video": isBrokenVideo
+        };
+        const missing = Object.entries(kinds)
+            .filter(([, isKind]) => !waiting.some(isKind))
+            .map(([kind]) => kind);
+        expect(
+            missing.length === 0,
+            `video processing is already done with ${missing.join(" and ")}`
+        );
     }
 };
+
+/** Whether the file is the broken sample video, under whatever name the plan gave it */
+function isBrokenVideo(file) {
+    return COLLECTIONS.some((planned) =>
+        planned.files.some(
+            (f) => f.sample === BROKEN_VIDEO && fileName(f) === file.name
+        )
+    );
+}
 
 /** The scenarios the demo exists for, as demo and other see them @type {Check[]} */
 const scenarioChecks = [
@@ -204,6 +249,232 @@ const scenarioChecks = [
         scenario: `demo has more than ${PAGE_SIZE} collections, and the cursor leads to the next page`,
         run: async ({ demo }) => {
             await pageThrough(demo, "/api/collections", "collections");
+        }
+    },
+    {
+        scenario: `demo has a collection of more than ${PAGE_SIZE} files, and the cursor leads to its next page`,
+        run: async ({ demo }) => {
+            const big = (await allCollections(demo)).find(
+                (c) => c.imageCount + c.videoCount > PAGE_SIZE
+            );
+            expect(big, `no collection has more than ${PAGE_SIZE} files`);
+            const pages = await pageThrough(
+                demo,
+                `/api/collections/${big.id}/files`,
+                "files"
+            );
+            const seen = pages.flat().length;
+            expect(
+                seen === big.imageCount + big.videoCount,
+                `paging through '${big.name}' showed ${seen} of its ${big.imageCount + big.videoCount} files`
+            );
+        }
+    },
+    {
+        scenario: "demo has an empty collection, without a Cover",
+        run: async ({ demo }) => {
+            const empty = (await allCollections(demo)).find(
+                (c) => c.imageCount + c.videoCount === 0
+            );
+            expect(empty, "every collection has files");
+            expect(!empty.cover, `the empty '${empty.name}' has a Cover`);
+            const files = await collectionFiles(demo, empty.id);
+            expect(
+                files.length === 0,
+                `the empty '${empty.name}' shows ${files.length} file(s)`
+            );
+        }
+    },
+    {
+        scenario: "demo has Chosen covers, one of them a video, and collections without one still show a Cover",
+        run: async ({ demo }) => {
+            const collections = await allCollections(demo);
+            const chosen = collections.filter((c) => c.cover?.chosen);
+            expect(chosen.length >= 2, `${chosen.length} collection(s) have a Chosen cover`);
+            const coverTypes = await Promise.all(
+                chosen.map(async (c) => {
+                    const coverId = new URL(c.cover.thumbnailSrc, "http://demo")
+                        .searchParams.get("thumbnail");
+                    const files = await collectionFiles(demo, c.id);
+                    return files.find((file) => file.id === coverId)?.mimeType;
+                })
+            );
+            expect(
+                coverTypes.some((type) => type?.startsWith("video/")),
+                `the Chosen covers are ${coverTypes.join(", ")}, none a video`
+            );
+            expect(
+                collections.some((c) => c.cover && !c.cover.chosen),
+                "no collection without a Chosen cover shows a Cover"
+            );
+        }
+    },
+    {
+        scenario: "demo's Forgotten collections are the ones planned, one never opened and one last opened more than a year ago",
+        run: async ({ demo }) => {
+            const yearAgo = new Date(SEEDED_AT);
+            yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+            const planned = plannedCollectionsOf("demo").filter(
+                (c) => (lastOpened(c) ?? c.created) < yearAgo
+            );
+            expect(
+                planned.some((c) => !lastOpened(c)) &&
+                    planned.some((c) => lastOpened(c)),
+                `the plan's Forgotten collections [${names(planned).join(", ")}] are not of both kinds`
+            );
+            const forgotten = await demo.all("/api/collections", "collections", {
+                forgotten: true
+            });
+            expectSameNames(names(forgotten), names(planned), "Forgotten are");
+        }
+    },
+    {
+        scenario: "demo's collections have differing Open counts and Last opened times, and sort by them",
+        run: async ({ demo }) => {
+            const openCount = (c) => c.opens?.length ?? 0;
+            const lastOpenedTime = (c) => lastOpened(c)?.getTime() ?? -Infinity;
+            for (const [sort, key, what] of [
+                ["mostOpened", openCount, "Open counts"],
+                ["recentlyOpened", lastOpenedTime, "Last opened times"]
+            ]) {
+                const sorted = (
+                    await demo.all("/api/collections", "collections", { sort })
+                ).map((c) => plannedCollection("demo", c.name));
+                const keys = sorted.map(key);
+                expect(
+                    new Set(keys).size >= 3,
+                    `demo's collections have only ${new Set(keys).size} different ${what}`
+                );
+                const outOfOrder = sorted.findIndex(
+                    (c, i) => i > 0 && key(c) > key(sorted[i - 1])
+                );
+                expect(
+                    outOfOrder === -1,
+                    `sorted by ${what}, '${sorted[outOfOrder]?.name}' comes after '${sorted[outOfOrder - 1]?.name}'`
+                );
+            }
+        }
+    },
+    {
+        scenario: "demo's collections were last added to at staggered times, in another order than they were created",
+        run: async ({ demo }) => {
+            const byLastAddedTo = await demo.all("/api/collections", "collections", {
+                sort: "lastAddedTo"
+            });
+            for (const collection of byLastAddedTo) {
+                const planned = plannedCollection("demo", collection.name);
+                const expected = planned.added ?? planned.created;
+                expect(
+                    Math.abs(collection.lastAddedTo - expected.getTime()) < 1000,
+                    `'${collection.name}' was last added to ${new Date(collection.lastAddedTo).toISOString()}, planned ${expected.toISOString()}`
+                );
+            }
+            expect(
+                new Set(byLastAddedTo.map((c) => c.lastAddedTo)).size >= 10,
+                "fewer than 10 different Last added to times"
+            );
+            const byCreation = plannedCollectionsOf("demo")
+                .toSorted((a, b) => b.created - a.created)
+                .map((c) => c.name);
+            expect(
+                names(byLastAddedTo).join("|") !== byCreation.join("|"),
+                "sorted by Last added to, the collections are in the order they were created"
+            );
+        }
+    },
+    {
+        scenario: "demo has tags on collections and on files, one written in two cases, and filtering by either finds both",
+        run: async ({ demo }) => {
+            const collections = await allCollections(demo);
+            const byLowerCase = Map.groupBy(
+                [...new Set(collections.flatMap((c) => c.tags))],
+                (tag) => tag.toLowerCase()
+            );
+            const cases = [...byLowerCase.values()].find((tags) => tags.length > 1);
+            expect(cases, "no collection tag is written in two cases");
+            const tagged = collections.filter((c) =>
+                c.tags.some((tag) => cases.includes(tag))
+            );
+            for (const tag of cases) {
+                const found = await demo.all("/api/collections", "collections", {
+                    tags: tag
+                });
+                expectSameNames(names(found), names(tagged), `filtering by '${tag}' found`);
+            }
+
+            const fileTags = await demo.get("/api/tags", { scope: "files" });
+            expect(fileTags.tags.length > 0, "no file has a tag");
+            const taggedFiles = (await timeline(demo)).filter((f) => f.tags.length > 0);
+            expect(taggedFiles.length > 0, "no file on the Timeline shows a tag");
+        }
+    },
+    {
+        scenario: "demo's Timeline has files taken over several years, some with GPS and some without",
+        run: async ({ demo }) => {
+            const files = await timeline(demo);
+            const years = new Set(
+                files.map((f) => new Date(f.timestamp).getUTCFullYear())
+            );
+            expect(years.size >= 5, `the Timeline spans only ${[...years].join(", ")}`);
+            const withGps = files.filter((f) => f.gps);
+            expect(
+                withGps.length > 0 && withGps.length < files.length,
+                `${withGps.length} of the Timeline's ${files.length} files have GPS`
+            );
+        }
+    },
+    {
+        scenario: "demo has no Backup yet",
+        run: async ({ demo }) => {
+            const { jobs } = await demo.get("/api/backups");
+            expect(jobs.length === 0, `demo has ${jobs.length} Backup job(s)`);
+        }
+    },
+    {
+        scenario: "other has a few collections of their own, and sees none of demo's tags or Activity",
+        run: async ({ demo, other }) => {
+            const theirs = await allCollections(other);
+            expect(theirs.length >= 3, `other has ${theirs.length} collection(s)`);
+
+            const tagsOf = async (api) =>
+                (
+                    await Promise.all(
+                        ["collections", "files"].map(
+                            async (scope) => (await api.get("/api/tags", { scope })).tags
+                        )
+                    )
+                )
+                    .flat()
+                    .map(({ name }) => name.toLowerCase());
+            const othersTags = new Set(await tagsOf(other));
+            const plannedTags = new Set(
+                plannedCollectionsOf("other")
+                    .flatMap((c) => [...(c.tags ?? []), ...c.files.flatMap((f) => f.tags ?? [])])
+                    .map((tag) => tag.toLowerCase())
+            );
+            const demosOnly = (await tagsOf(demo)).filter((tag) => !plannedTags.has(tag));
+            expect(demosOnly.length > 0, "demo has no tags of their own");
+            for (const tag of demosOnly) {
+                expect(!othersTags.has(tag), `other sees demo's tag '${tag}'`);
+                const { tags: suggested } = await other.get("/api/tags/suggestions", {
+                    query: tag
+                });
+                expect(
+                    !suggested.some((s) => s.toLowerCase() === tag),
+                    `other is suggested demo's tag '${tag}'`
+                );
+            }
+
+            const { activity } = await other.get("/api/activity");
+            const { pending, processing, done, failed, currentFile } =
+                activity.videoProcessing;
+            expect(
+                !activity.active &&
+                    pending + processing + done + failed === 0 &&
+                    !currentFile &&
+                    !activity.backupJob,
+                `other's Activity shows ${pending} pending, ${processing} processing, ${done} done and ${failed} failed videos${currentFile ? `, '${currentFile.name}' now` : ""}`
+            );
         }
     }
 ];
