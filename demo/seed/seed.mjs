@@ -1,7 +1,10 @@
 // Seeds an empty demo with the scenario plan, then checks every scenario is
-// there. Does nothing when the demo is already seeded, so data made while
-// testing survives, and fails when an earlier seed stopped partway. Runs in
-// the demo's seed service once the app is healthy:
+// there. Seeding goes through the app's public HTTP API, except for the times
+// the API cannot set, which it backdates straight in the database: when
+// collections and files were created, and when Opens were. Does nothing when
+// the demo is already seeded, so data made while testing survives, and fails
+// when an earlier seed stopped partway. Runs in the demo's seed service once
+// the app is healthy:
 //
 //   HOLVI_DEMO_URL=http://app:3000 \
 //   HOLVI_DEMO_DB_CONNECTION_STRING=postgres://... node demo/seed/seed.mjs
@@ -163,7 +166,10 @@ async function seedThroughApi() {
     return created;
 }
 
-/** Puts the planned file tags on the collection's files, each tag on all its files at once, as the UI tags a selection */
+/**
+ * Puts the planned file tags on the collection's files, each tag on all its
+ * files at once, as the UI tags a selection
+ */
 async function tagFiles(api, collection, planned) {
     const filesByTag = Map.groupBy(
         planned.files.flatMap((file) => (file.tags ?? []).map((tag) => ({ tag, file }))),

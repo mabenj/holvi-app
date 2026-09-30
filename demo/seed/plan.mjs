@@ -107,157 +107,369 @@ export const COLLECTIONS = [
         created: daysAgo(12),
         files: []
     },
-    everyday("Waterfalls", 200, 15, ["Water"], [
-        "horseshoe-falls.jpg",
-        "waterfall-glandieu.jpg",
-        "waterfall-vertical.mp4"
-    ], [150, 14]),
-    everyday("Budapest weekend", 250, 250, ["Hungary", "Travel"], [
-        "chain-bridge-budapest-night.jpg"
-    ]),
-    everyday("Spain 2014", 280, 100, ["Spain", "Travel", "summer"], [
-        "beach-parasols-evening.jpg",
-        "water-lily-alhambra.jpg",
-        "paella.jpg"
-    ], [99, 50, 8]),
-    everyday("Beach days", 120, 60, ["Beach", "Summer"], [
-        "beach-parasols-evening.jpg",
-        "beach-steps.jpg",
-        "dog-on-beach.jpg"
-    ], [59, 10]),
-    everyday("Denmark, Easter 2017", 310, 305, ["Denmark"], [
-        "dog-on-beach.jpg",
-        "beach-steps.jpg"
-    ], [304]),
-    everyday("Swedish forests", 150, 140, ["Nature"], [
-        "beech-and-ferns.jpg",
-        "spruce-forest.jpg"
-    ]),
-    everyday("Autumn colours", 90, 10, ["Autumn"], [
-        "rose-hips.jpg",
-        "quebec-autumn.jpg",
-        "monschau-autumn.jpg"
-    ], [9, 2]),
-    everyday("Snow days", 60, 5, ["Winter"], [
-        "snowy-trees.jpg",
-        "quebec-snow-fog.jpg",
-        "red-fox-in-snow.jpg"
-    ], [4, 0.5]),
-    {
-        ...everyday("Cats", 350, 45, ["Pets"], [], [44, 30, 20, 10, 5, 3]),
+    everyday({
+        name: "Waterfalls",
+        tags: ["Water"],
+        created: 200,
+        added: 15,
+        opens: [150, 14],
+        files: [
+            "horseshoe-falls.jpg",
+            "waterfall-glandieu.jpg",
+            "waterfall-vertical.mp4"
+        ]
+    }),
+    everyday({
+        name: "Budapest weekend",
+        tags: ["Hungary", "Travel"],
+        created: 250,
+        added: 250,
+        files: ["chain-bridge-budapest-night.jpg"]
+    }),
+    everyday({
+        name: "Spain 2014",
+        tags: ["Spain", "Travel", "summer"],
+        created: 280,
+        added: 100,
+        opens: [99, 50, 8],
+        files: [
+            "beach-parasols-evening.jpg",
+            "water-lily-alhambra.jpg",
+            "paella.jpg"
+        ]
+    }),
+    everyday({
+        name: "Beach days",
+        tags: ["Beach", "Summer"],
+        created: 120,
+        added: 60,
+        opens: [59, 10],
+        files: [
+            "beach-parasols-evening.jpg",
+            "beach-steps.jpg",
+            "dog-on-beach.jpg"
+        ]
+    }),
+    everyday({
+        name: "Denmark, Easter 2017",
+        tags: ["Denmark"],
+        created: 310,
+        added: 305,
+        opens: [304],
+        files: ["dog-on-beach.jpg", "beach-steps.jpg"]
+    }),
+    everyday({
+        name: "Swedish forests",
+        tags: ["Nature"],
+        created: 150,
+        added: 140,
+        files: ["beech-and-ferns.jpg", "spruce-forest.jpg"]
+    }),
+    everyday({
+        name: "Autumn colours",
+        tags: ["Autumn"],
+        created: 90,
+        added: 10,
+        opens: [9, 2],
+        files: ["rose-hips.jpg", "quebec-autumn.jpg", "monschau-autumn.jpg"]
+    }),
+    everyday({
+        name: "Snow days",
+        tags: ["Winter"],
+        created: 60,
+        added: 5,
+        opens: [4, 0.5],
+        files: [
+            "snowy-trees.jpg",
+            "quebec-snow-fog.jpg",
+            "red-fox-in-snow.jpg"
+        ]
+    }),
+    everyday({
+        name: "Cats",
+        tags: ["Pets"],
+        created: 350,
+        added: 45,
+        opens: [44, 30, 20, 10, 5, 3],
         files: [
             { sample: "cat-asleep-on-bench.jpg", tags: ["Sleeping"] },
-            { sample: "tabby-cat.jpg" }
+            "tabby-cat.jpg"
         ]
-    },
-    everyday("Dogs", 340, 200, ["Pets"], ["labrador.jpg", "dog-on-beach.jpg"], [199, 100]),
-    everyday("Birds", 100, 95, ["Birds"], [
-        "go-away-bird.jpg",
-        "flamingos-sao-paulo-zoo.jpg"
-    ]),
-    everyday("Christmas 2011", 270, 270, ["Christmas", "Food"], [
-        "buche-de-noel.jpg"
-    ]),
-    everyday("Food", 260, 30, ["Food"], ["paella.jpg", "buche-de-noel.jpg"], [29]),
-    everyday("Quebec City", 230, 225, ["Canada", "Travel"], [
-        "quebec-snow-fog.jpg",
-        "quebec-autumn.jpg"
-    ], [224]),
-    everyday("Rio de Janeiro", 180, 180, ["Brazil", "Travel"], [
-        "rio-sugarloaf-sunset.jpg"
-    ]),
-    everyday("Niagara Falls", 190, 185, ["Canada", "Water"], [
-        "horseshoe-falls.jpg"
-    ]),
-    everyday("São Paulo Zoo", 175, 175, ["Brazil", "Birds"], [
-        "flamingos-sao-paulo-zoo.jpg"
-    ]),
-    everyday("Monschau", 50, 48, ["Germany", "Autumn"], [
-        "monschau-autumn.jpg"
-    ]),
-    everyday("Garden flowers", 110, 25, ["Flowers"], [
-        "marigolds.jpg",
-        "rose-hips.jpg",
-        "water-lily-alhambra.jpg"
-    ], [24, 12, 6]),
-    everyday("Sunsets", 160, 7, ["sunsets"], [
-        "aegina-sunset.jpg",
-        "rio-sugarloaf-sunset.jpg",
-        "beach-parasols-evening.jpg"
-    ], [6, 3]),
-    everyday("Night photos", 140, 130, [], [
-        "chain-bridge-budapest-night.jpg",
-        "aegina-harbour-night.jpg"
-    ]),
-    everyday("Wildlife", 80, 4, ["Animals"], [
-        "red-fox-in-snow.jpg",
-        "go-away-bird.jpg",
-        "loons.mp4"
-    ], [3.5]),
-    everyday("Sea foam", 70, 70, ["Water"], ["sea-foam.mp4"]),
-    everyday("Portrait videos", 40, 40, [], ["waterfall-vertical.mp4"]),
-    everyday("Lakes", 130, 125, ["Water"], [
-        "lake-khovsgol.jpg",
-        "lake-terkhiin-tsagaan.jpg",
-        "water-lily-alhambra.jpg"
-    ]),
-    everyday("Trees", 125, 50, ["Nature"], [
-        "snowy-trees.jpg",
-        "spruce-forest.jpg",
-        "beech-and-ferns.jpg"
-    ]),
-    everyday("Bridges", 115, 115, [], ["chain-bridge-budapest-night.jpg"]),
-    everyday("Harbours", 105, 105, ["Greece"], ["aegina-harbour-night.jpg"]),
-    everyday("Winter 2021", 95, 95, ["Winter"], ["snowy-trees.jpg"]),
-    everyday("Summer 2022", 85, 85, ["Flowers"], ["marigolds.jpg"]),
-    everyday("Holiday 2023", 75, 72, ["Travel"], [
-        "rio-sugarloaf-sunset.jpg",
-        "lake-khovsgol.jpg"
-    ]),
-    everyday("Canada", 65, 12, ["Canada"], [
-        "horseshoe-falls.jpg",
-        "quebec-autumn.jpg",
-        "loons.mp4"
-    ], [11]),
-    everyday("Pets", 55, 3, ["Pets"], [
-        "tabby-cat.jpg",
-        "labrador.jpg",
-        "cat-asleep-on-bench.jpg"
-    ], [2.5]),
-    everyday("Greece", 45, 44, ["Greece"], ["aegina-sunset.jpg"]),
-    everyday("Hungary", 35, 34, ["Hungary"], [
-        "chain-bridge-budapest-night.jpg"
-    ]),
-    everyday("Brazil", 28, 27, ["Brazil"], [
-        "rio-sugarloaf-sunset.jpg",
-        "flamingos-sao-paulo-zoo.jpg"
-    ]),
-    everyday("Germany", 25, 24, ["Germany"], ["monschau-autumn.jpg"]),
-    everyday("Japan", 22, 21, ["Japan"], ["waterfall-vertical.mp4"]),
-    everyday("Water", 18, 17, ["Water"], [
-        "sea-foam.mp4",
-        "waterfall-glandieu.jpg"
-    ]),
-    everyday("Wallpapers", 16, 2, [], [
-        "lake-terkhiin-tsagaan.jpg",
-        "spruce-forest.jpg",
-        "monschau-autumn.jpg"
-    ]),
-    everyday("Favourites 2025", 14, 6, [], [
-        "go-away-bird.jpg",
-        "monschau-autumn.jpg",
-        "red-fox-in-snow.jpg"
-    ], [5, 4, 3, 2, 1, 0.25]),
-    everyday("Throwbacks", 11, 9, [], [
-        "paella.jpg",
-        "buche-de-noel.jpg",
-        "chain-bridge-budapest-night.jpg"
-    ]),
-    everyday("France", 9, 8, ["France"], [
-        "cat-asleep-on-bench.jpg",
-        "waterfall-glandieu.jpg"
-    ]),
-    everyday("Print these", 6, 0.5, [], ["quebec-autumn.jpg", "labrador.jpg"]),
+    }),
+    everyday({
+        name: "Dogs",
+        tags: ["Pets"],
+        created: 340,
+        added: 200,
+        opens: [199, 100],
+        files: ["labrador.jpg", "dog-on-beach.jpg"]
+    }),
+    everyday({
+        name: "Birds",
+        tags: ["Birds"],
+        created: 100,
+        added: 95,
+        files: ["go-away-bird.jpg", "flamingos-sao-paulo-zoo.jpg"]
+    }),
+    everyday({
+        name: "Christmas 2011",
+        tags: ["Christmas", "Food"],
+        created: 270,
+        added: 270,
+        files: ["buche-de-noel.jpg"]
+    }),
+    everyday({
+        name: "Food",
+        tags: ["Food"],
+        created: 260,
+        added: 30,
+        opens: [29],
+        files: ["paella.jpg", "buche-de-noel.jpg"]
+    }),
+    everyday({
+        name: "Quebec City",
+        tags: ["Canada", "Travel"],
+        created: 230,
+        added: 225,
+        opens: [224],
+        files: ["quebec-snow-fog.jpg", "quebec-autumn.jpg"]
+    }),
+    everyday({
+        name: "Rio de Janeiro",
+        tags: ["Brazil", "Travel"],
+        created: 180,
+        added: 180,
+        files: ["rio-sugarloaf-sunset.jpg"]
+    }),
+    everyday({
+        name: "Niagara Falls",
+        tags: ["Canada", "Water"],
+        created: 190,
+        added: 185,
+        files: ["horseshoe-falls.jpg"]
+    }),
+    everyday({
+        name: "São Paulo Zoo",
+        tags: ["Brazil", "Birds"],
+        created: 175,
+        added: 175,
+        files: ["flamingos-sao-paulo-zoo.jpg"]
+    }),
+    everyday({
+        name: "Monschau",
+        tags: ["Germany", "Autumn"],
+        created: 50,
+        added: 48,
+        files: ["monschau-autumn.jpg"]
+    }),
+    everyday({
+        name: "Garden flowers",
+        tags: ["Flowers"],
+        created: 110,
+        added: 25,
+        opens: [24, 12, 6],
+        files: ["marigolds.jpg", "rose-hips.jpg", "water-lily-alhambra.jpg"]
+    }),
+    everyday({
+        name: "Sunsets",
+        tags: ["sunsets"],
+        created: 160,
+        added: 7,
+        opens: [6, 3],
+        files: [
+            "aegina-sunset.jpg",
+            "rio-sugarloaf-sunset.jpg",
+            "beach-parasols-evening.jpg"
+        ]
+    }),
+    everyday({
+        name: "Night photos",
+        created: 140,
+        added: 130,
+        files: [
+            "chain-bridge-budapest-night.jpg",
+            "aegina-harbour-night.jpg"
+        ]
+    }),
+    everyday({
+        name: "Wildlife",
+        tags: ["Animals"],
+        created: 80,
+        added: 4,
+        opens: [3.5],
+        files: ["red-fox-in-snow.jpg", "go-away-bird.jpg", "loons.mp4"]
+    }),
+    everyday({
+        name: "Sea foam",
+        tags: ["Water"],
+        created: 70,
+        added: 70,
+        files: ["sea-foam.mp4"]
+    }),
+    everyday({
+        name: "Portrait videos",
+        created: 40,
+        added: 40,
+        files: ["waterfall-vertical.mp4"]
+    }),
+    everyday({
+        name: "Lakes",
+        tags: ["Water"],
+        created: 130,
+        added: 125,
+        files: [
+            "lake-khovsgol.jpg",
+            "lake-terkhiin-tsagaan.jpg",
+            "water-lily-alhambra.jpg"
+        ]
+    }),
+    everyday({
+        name: "Trees",
+        tags: ["Nature"],
+        created: 125,
+        added: 50,
+        files: [
+            "snowy-trees.jpg",
+            "spruce-forest.jpg",
+            "beech-and-ferns.jpg"
+        ]
+    }),
+    everyday({
+        name: "Bridges",
+        created: 115,
+        added: 115,
+        files: ["chain-bridge-budapest-night.jpg"]
+    }),
+    everyday({
+        name: "Harbours",
+        tags: ["Greece"],
+        created: 105,
+        added: 105,
+        files: ["aegina-harbour-night.jpg"]
+    }),
+    everyday({
+        name: "Winter 2021",
+        tags: ["Winter"],
+        created: 95,
+        added: 95,
+        files: ["snowy-trees.jpg"]
+    }),
+    everyday({
+        name: "Summer 2022",
+        tags: ["Flowers"],
+        created: 85,
+        added: 85,
+        files: ["marigolds.jpg"]
+    }),
+    everyday({
+        name: "Holiday 2023",
+        tags: ["Travel"],
+        created: 75,
+        added: 72,
+        files: ["rio-sugarloaf-sunset.jpg", "lake-khovsgol.jpg"]
+    }),
+    everyday({
+        name: "Canada",
+        tags: ["Canada"],
+        created: 65,
+        added: 12,
+        opens: [11],
+        files: ["horseshoe-falls.jpg", "quebec-autumn.jpg", "loons.mp4"]
+    }),
+    everyday({
+        name: "Pets",
+        tags: ["Pets"],
+        created: 55,
+        added: 3,
+        opens: [2.5],
+        files: ["tabby-cat.jpg", "labrador.jpg", "cat-asleep-on-bench.jpg"]
+    }),
+    everyday({
+        name: "Greece",
+        tags: ["Greece"],
+        created: 45,
+        added: 44,
+        files: ["aegina-sunset.jpg"]
+    }),
+    everyday({
+        name: "Hungary",
+        tags: ["Hungary"],
+        created: 35,
+        added: 34,
+        files: ["chain-bridge-budapest-night.jpg"]
+    }),
+    everyday({
+        name: "Brazil",
+        tags: ["Brazil"],
+        created: 28,
+        added: 27,
+        files: ["rio-sugarloaf-sunset.jpg", "flamingos-sao-paulo-zoo.jpg"]
+    }),
+    everyday({
+        name: "Germany",
+        tags: ["Germany"],
+        created: 25,
+        added: 24,
+        files: ["monschau-autumn.jpg"]
+    }),
+    everyday({
+        name: "Japan",
+        tags: ["Japan"],
+        created: 22,
+        added: 21,
+        files: ["waterfall-vertical.mp4"]
+    }),
+    everyday({
+        name: "Water",
+        tags: ["Water"],
+        created: 18,
+        added: 17,
+        files: ["sea-foam.mp4", "waterfall-glandieu.jpg"]
+    }),
+    everyday({
+        name: "Wallpapers",
+        created: 16,
+        added: 2,
+        files: [
+            "lake-terkhiin-tsagaan.jpg",
+            "spruce-forest.jpg",
+            "monschau-autumn.jpg"
+        ]
+    }),
+    everyday({
+        name: "Favourites 2025",
+        created: 14,
+        added: 6,
+        opens: [5, 4, 3, 2, 1, 0.25],
+        files: [
+            "go-away-bird.jpg",
+            "monschau-autumn.jpg",
+            "red-fox-in-snow.jpg"
+        ]
+    }),
+    everyday({
+        name: "Throwbacks",
+        created: 11,
+        added: 9,
+        files: [
+            "paella.jpg",
+            "buche-de-noel.jpg",
+            "chain-bridge-budapest-night.jpg"
+        ]
+    }),
+    everyday({
+        name: "France",
+        tags: ["France"],
+        created: 9,
+        added: 8,
+        files: ["cat-asleep-on-bench.jpg", "waterfall-glandieu.jpg"]
+    }),
+    everyday({
+        name: "Print these",
+        created: 6,
+        added: 0.5,
+        files: ["quebec-autumn.jpg", "labrador.jpg"]
+    }),
     // The second User's own few, with tags demo never uses
     {
         owner: "other",
@@ -369,25 +581,31 @@ function samples(...names) {
 }
 
 /**
- * One of demo's everyday collections, there to fill the Collections tab:
- * created, added to and opened the given numbers of days before the seed
+ * One of demo's everyday collections, there to fill the Collections tab. Its
+ * times are numbers of days before the seed, and its files sample names or
+ * planned files.
+ *
+ * @param {{
+ *   name: string,
+ *   tags?: string[],
+ *   created: number,
+ *   added: number,
+ *   opens?: number[],
+ *   files: (string | PlannedFile)[]
+ * }} collection
+ * @returns {PlannedCollection}
  */
-function everyday(
-    name,
-    createdDaysAgo,
-    addedDaysAgo,
-    tags,
-    sampleNames,
-    opensDaysAgo = []
-) {
+function everyday({ name, tags = [], created, added, opens = [], files }) {
     return {
         owner: "demo",
         name,
         tags,
-        created: daysAgo(createdDaysAgo),
-        added: daysAgo(addedDaysAgo),
-        opens: opensDaysAgo.map((days) => daysAgo(days)),
-        files: samples(...sampleNames)
+        created: daysAgo(created),
+        added: daysAgo(added),
+        opens: opens.map((days) => daysAgo(days)),
+        files: files.map((file) =>
+            typeof file === "string" ? { sample: file } : file
+        )
     };
 }
 

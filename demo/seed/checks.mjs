@@ -333,9 +333,9 @@ const scenarioChecks = [
         run: async ({ demo }) => {
             const openCount = (c) => c.opens?.length ?? 0;
             const lastOpenedTime = (c) => lastOpened(c)?.getTime() ?? -Infinity;
-            for (const [sort, key, what] of [
-                ["mostOpened", openCount, "Open counts"],
-                ["recentlyOpened", lastOpenedTime, "Last opened times"]
+            for (const { sort, key, what } of [
+                { sort: "mostOpened", key: openCount, what: "Open counts" },
+                { sort: "recentlyOpened", key: lastOpenedTime, what: "Last opened times" }
             ]) {
                 const sorted = (
                     await demo.all("/api/collections", "collections", { sort })
@@ -374,7 +374,7 @@ const scenarioChecks = [
                 "fewer than 10 different Last added to times"
             );
             const byCreation = plannedCollectionsOf("demo")
-                .toSorted((a, b) => b.created - a.created)
+                .toSorted((a, b) => b.created.getTime() - a.created.getTime())
                 .map((c) => c.name);
             expect(
                 names(byLastAddedTo).join("|") !== byCreation.join("|"),
