@@ -57,6 +57,15 @@ open_browser() {
     esac
 }
 
+# Each build leaves the image it replaces untagged, several GB each time.
+# Removes those of this project only: untagged, labelled holvi-demo, and not
+# used by any container.
+remove_stale_images() {
+    docker image prune --force \
+        --filter "label=com.docker.compose.project=$PROJECT" >/dev/null ||
+        echo "Could not remove the demo's stale images" >&2
+}
+
 up() {
     local open=true
     for arg in "$@"; do
@@ -69,8 +78,16 @@ up() {
         esac
     done
 
-    echo "Building and starting the demo..."
-    compose up --detach --build --wait --wait-timeout 300 db app ||
+    echo "Building the demo..."
+    compose build db app || not_ready "the build failed (see above)"
+
+    echo
+    echo "Starting the demo..."
+    local started=true
+    compose up --detach --wait --wait-timeout 300 db app || started=false
+    # Only now are the images the previous containers ran on unused
+    remove_stale_images
+    [ "$started" = true ] ||
         not_ready "the app did not start. See ./demo.sh logs"
 
     echo

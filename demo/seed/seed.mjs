@@ -17,9 +17,18 @@ import { COLLECTIONS, USERS, fileName } from "./plan.mjs";
 const baseUrl = requireEnv("HOLVI_DEMO_URL");
 const connectionString = requireEnv("HOLVI_DEMO_DB_CONNECTION_STRING");
 
-// The plan's last collection of User demo: seeding creates it after every
-// User and every other collection of theirs, so without it the seed failed
-const marker = COLLECTIONS.findLast((collection) => collection.owner === "demo");
+/**
+ * The seed's own table in the demo database, which the app's models never
+ * touch: it holds a row once a seed has passed every check
+ */
+const MARKER_TABLE = "demo_seed";
+
+const db = new pg.Client({ connectionString });
+try {
+    await db.connect();
+} catch (error) {
+    fail("Could not connect to the demo database", error);
+}
 
 let state;
 try {
@@ -28,16 +37,13 @@ try {
     fail("Could not tell whether the demo is seeded", error);
 }
 if (state === "seeded") {
-    console.log(
-        `User '${USERS.demo.username}' and their collection '${marker.name}' exist: the demo is already seeded`
-    );
+    console.log("The demo is already seeded");
     process.exit(0);
 }
 if (state === "partial") {
     fail(
-        `User '${USERS.demo.username}' exists without their collection '${marker.name}', ` +
-            "the last one the seed creates: an earlier seed failed partway, " +
-            "or the collection was renamed or deleted. " +
+        `User '${USERS.demo.username}' exists, but no seed of this demo ever passed its checks: ` +
+            "an earlier seed failed partway. " +
             "Run ./demo.sh reset to seed the demo again from scratch."
     );
 }
@@ -54,38 +60,52 @@ if (failures.length > 0) {
     failures.forEach((scenario) => console.error(`  - ${scenario}`));
     process.exit(1);
 }
+
+try {
+    await markSeeded();
+} catch (error) {
+    fail("Could not record that the demo is seeded", error);
+}
+await db.end();
 console.log("\nThe demo is seeded and every check passed");
 
 /**
- * Read straight from the database: "empty" without User demo, "seeded" with
- * User demo and their last planned collection, "partial" with only the User.
- * The one place that decides whether to seed.
+ * Read straight from the database: "empty" without User demo, "seeded" once
+ * a seed has passed its checks, "partial" otherwise. The one place that
+ * decides whether to seed.
  */
 async function seedState() {
-    const client = new pg.Client({ connectionString });
-    await client.connect();
-    try {
-        const { rows } = await client.query(
-            `SELECT to_regclass('"Users"') IS NOT NULL AS "hasUsers"`
-        );
-        if (!rows[0].hasUsers) {
-            return "empty";
-        }
-        const users = await client.query(
-            `SELECT id FROM "Users" WHERE username = $1`,
-            [USERS.demo.username]
-        );
-        if (users.rowCount === 0) {
-            return "empty";
-        }
-        const collections = await client.query(
-            `SELECT 1 FROM "Collections" WHERE "UserId" = $1 AND name = $2`,
-            [users.rows[0].id, marker.name]
-        );
-        return collections.rowCount > 0 ? "seeded" : "partial";
-    } finally {
-        await client.end();
+    const { rows } = await db.query(
+        `SELECT to_regclass('"Users"') IS NOT NULL AS "hasUsers",
+                to_regclass($1) IS NOT NULL AS "hasMarker"`,
+        [MARKER_TABLE]
+    );
+    if (!rows[0].hasUsers) {
+        return "empty";
     }
+    const users = await db.query(`SELECT 1 FROM "Users" WHERE username = $1`, [
+        USERS.demo.username
+    ]);
+    if (users.rowCount === 0) {
+        return "empty";
+    }
+    if (rows[0].hasMarker) {
+        const marker = await db.query(`SELECT 1 FROM ${MARKER_TABLE}`);
+        if (marker.rowCount > 0) {
+            return "seeded";
+        }
+    }
+    return "partial";
+}
+
+/** Records that this seed passed every check, so no later up seeds again */
+async function markSeeded() {
+    await db.query(
+        `CREATE TABLE IF NOT EXISTS ${MARKER_TABLE} (
+            seeded_at timestamptz NOT NULL DEFAULT now()
+        )`
+    );
+    await db.query(`INSERT INTO ${MARKER_TABLE} DEFAULT VALUES`);
 }
 
 /** Seeding: the plan, through the same public API routes the UI uses */
@@ -96,26 +116,52 @@ async function seedThroughApi() {
         sessions[user] = await Api.signUp(baseUrl, username, password);
     }
 
+    /** Each planned collection's id, in plan order */
+    const collectionIds = [];
     for (const planned of COLLECTIONS) {
         const api = sessions[planned.owner];
         console.log(`Creating ${planned.owner}'s collection '${planned.name}'`);
         const collectionId = await api.createCollection(planned);
-        if (planned.files.length > 0) {
-            const files = await Promise.all(
-                planned.files.map(async (file) => {
-                    const sample = SAMPLES[file.sample];
-                    return {
-                        name: fileName(file),
-                        mimeType: sample.mimeType,
-                        content: await sample.content(),
-                        lastModified: new Date(file.lastModified)
-                    };
-                })
-            );
-            console.log(`  uploading ${files.length} file(s)`);
-            await api.upload(collectionId, files);
-        }
+        collectionIds.push(collectionId);
+        await uploadFiles(api, collectionId, planned, "image/");
     }
+
+    // Videos last: video processing starts on each upload and gets through
+    // the sample videos in seconds, so only the last ones uploaded are still
+    // in Activity when the checks start
+    console.log("Uploading the videos");
+    for (const [i, planned] of COLLECTIONS.entries()) {
+        await uploadFiles(sessions[planned.owner], collectionIds[i], planned, "video/");
+    }
+}
+
+/** Uploads the planned files of one type, e.g. "video/", as the client does */
+async function uploadFiles(api, collectionId, planned, mimeTypePrefix) {
+    const files = await Promise.all(
+        planned.files
+            .filter((file) => sampleOf(file).mimeType.startsWith(mimeTypePrefix))
+            .map(async (file) => {
+                const sample = sampleOf(file);
+                return {
+                    name: fileName(file),
+                    mimeType: sample.mimeType,
+                    content: await sample.content(),
+                    lastModified: planned.added
+                };
+            })
+    );
+    if (files.length > 0) {
+        console.log(`  uploading ${files.length} file(s) into '${planned.name}'`);
+        await api.upload(collectionId, files);
+    }
+}
+
+function sampleOf(file) {
+    const sample = SAMPLES[file.sample];
+    if (!sample) {
+        throw new Error(`demo/media has no sample file '${file.sample}'`);
+    }
+    return sample;
 }
 
 /**

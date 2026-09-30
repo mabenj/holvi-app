@@ -153,5 +153,65 @@ const isolationChecks = Object.keys(USERS).flatMap((user) =>
         }))
 );
 
+/** The page size the Collections tab and collection pages load, the API's default */
+const PAGE_SIZE = 48;
+
+/**
+ * Pages through a paged list at the default page size, following each page's
+ * cursor. Fails unless there are at least two full pages' worth to reach.
+ */
+async function pageThrough(api, path, key, query = {}) {
+    const first = await api.get(path, query);
+    expect(
+        first[key].length === PAGE_SIZE && first.nextCursor,
+        `the first page holds ${first[key].length} and ${first.nextCursor ? "has" : "has no"} cursor to a next page`
+    );
+    const pages = [first[key]];
+    let cursor = first.nextCursor;
+    while (cursor) {
+        const page = await api.get(path, { ...query, cursor });
+        pages.push(page[key]);
+        cursor = page.nextCursor;
+    }
+    const ids = pages.flat().map(({ id }) => id);
+    expect(
+        new Set(ids).size === ids.length,
+        "following the cursor showed some of them again"
+    );
+    return pages;
+}
+
+/**
+ * Runs before every other check: video processing gets through the sample
+ * videos in seconds, so it is over soon after the seed uploads the last ones
+ * @type {Check}
+ */
+const activityCheck = {
+    scenario: "demo's Activity shows videos waiting for or undergoing video processing",
+    run: async ({ demo }) => {
+        const { activity } = await demo.get("/api/activity");
+        const { pending, processing } = activity.videoProcessing;
+        expect(
+            activity.active && pending + processing > 0,
+            `Activity shows ${pending} pending and ${processing} processing`
+        );
+    }
+};
+
+/** The scenarios the demo exists for, as demo and other see them @type {Check[]} */
+const scenarioChecks = [
+    {
+        scenario: `demo has more than ${PAGE_SIZE} collections, and the cursor leads to the next page`,
+        run: async ({ demo }) => {
+            await pageThrough(demo, "/api/collections", "collections");
+        }
+    }
+];
+
 /** Every check, in the order they run @type {Check[]} */
-export const CHECKS = [...planChecks, ...isolationChecks];
+export const CHECKS = [
+    activityCheck,
+    ...planChecks,
+    ...scenarioChecks,
+    ...isolationChecks
+];
