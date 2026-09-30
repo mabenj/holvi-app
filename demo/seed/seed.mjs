@@ -10,7 +10,7 @@
 import pg from "pg";
 import { Api } from "./api.mjs";
 import { CHECKS } from "./checks.mjs";
-import { MEDIA } from "./media.mjs";
+import { SAMPLES } from "./samples.mjs";
 import { COLLECTIONS, USERS, fileName } from "./plan.mjs";
 
 const baseUrl = requireEnv("HOLVI_DEMO_URL");
@@ -77,7 +77,7 @@ async function seedThroughApi() {
         if (planned.files.length > 0) {
             const files = await Promise.all(
                 planned.files.map(async (file) => {
-                    const sample = MEDIA[file.media];
+                    const sample = SAMPLES[file.sample];
                     return {
                         name: fileName(file),
                         mimeType: sample.mimeType,

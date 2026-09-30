@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
 # The demo environment: a local, production-built Holvi from the current
-# working tree, with its own database and data, seeded the first time.
-#
-#   ./demo.sh up [--no-open]   build, start, seed if empty, open the browser
-#   ./demo.sh down             stop the demo, keeping its data
-#   ./demo.sh reset            stop the demo and delete its data
-#   ./demo.sh logs             follow the app's logs
+# working tree, with its own database and data, seeded the first time. See
+# usage below and the README's "Demo environment".
 #
 # Always the compose project holvi-demo, so the deploy docker-compose.yml and
 # the dev setup are never touched. Works from Git Bash on Windows too.
@@ -83,12 +79,16 @@ up() {
         not_ready "seeding or its checks failed (see above).
 Run ./demo.sh reset and then ./demo.sh up to seed it again from scratch."
 
+    # As the app got it, whether from the shell, demo/.env.local or the default
+    local shuffle_period
+    shuffle_period=$(compose exec -T app printenv HOLVI_SHUFFLE_PERIOD_MINUTES)
+
     cat <<EOF
 
 The demo is running at $URL
   Sign in as demo / demo1234 (owns the scenarios)
           or other / other1234 (the second User)
-  Shuffle period: ${HOLVI_SHUFFLE_PERIOD_MINUTES:-1} minute(s)
+  Shuffle period: $shuffle_period minute(s)
   Stop it with ./demo.sh down; only ./demo.sh reset deletes its data.
 EOF
 

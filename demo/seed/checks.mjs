@@ -13,13 +13,19 @@ function expect(condition, detail) {
     }
 }
 
-/** A multiset of names, sorted, for comparing what is seen with what was planned */
-function names(items) {
-    return items.map((item) => item.name).sort();
+function names(collectionsOrFiles) {
+    return collectionsOrFiles.map(({ name }) => name);
 }
 
-function sameNames(seen, planned) {
-    return JSON.stringify(seen) === JSON.stringify([...planned].sort());
+/** Fails unless the names seen are the names planned, in any order */
+function expectSameNames(seen, planned, whatWasSeen) {
+    const [seenSorted, plannedSorted] = [seen, planned].map((list) =>
+        [...list].sort()
+    );
+    expect(
+        JSON.stringify(seenSorted) === JSON.stringify(plannedSorted),
+        `${whatWasSeen} [${seenSorted.join(", ")}], planned [${plannedSorted.join(", ")}]`
+    );
 }
 
 function plannedCollectionsOf(user) {
@@ -53,10 +59,7 @@ function collectionsCheck(user) {
         run: async (users) => {
             const seen = names(await allCollections(users[user]));
             const planned = plannedCollectionsOf(user).map((c) => c.name);
-            expect(
-                sameNames(seen, planned),
-                `saw [${seen.join(", ")}], planned [${[...planned].sort().join(", ")}]`
-            );
+            expectSameNames(seen, planned, "saw");
         }
     };
 }
@@ -76,10 +79,7 @@ function filesCheck(user) {
                 const files = await collectionFiles(api, collection.id);
                 const seen = names(files);
                 const expected = planned.files.map(fileName);
-                expect(
-                    sameNames(seen, expected),
-                    `'${planned.name}' holds [${seen.join(", ")}], planned [${[...expected].sort().join(", ")}]`
-                );
+                expectSameNames(seen, expected, `'${planned.name}' holds`);
                 const counted =
                     collection.imageCount + collection.videoCount;
                 expect(

@@ -7,7 +7,7 @@ import sharp from "sharp";
  * @typedef {{ name: string, mimeType: string, content: () => Promise<Buffer> }} SampleFile
  * @type {Record<string, SampleFile>}
  */
-export const MEDIA = {
+export const SAMPLES = {
     /** A generated sunset: a sky gradient, a sun and a horizon */
     sunset: {
         name: "sunset.jpg",

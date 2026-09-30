@@ -1,4 +1,4 @@
-// A signed-in User's view of the running demo, through the same public HTTP
+// The running demo as one signed-in User sees it, through the same public HTTP
 // API the app's client uses
 
 export class ApiError extends Error {

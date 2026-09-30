@@ -1,8 +1,8 @@
 // The scenario plan: what an empty demo is seeded with, as data. The seed
 // signs up every User, then creates each collection for its owner and uploads
-// its files. Every file names a sample file from media.mjs.
+// its files. Every file names a sample file from samples.mjs.
 
-import { MEDIA } from "./media.mjs";
+import { SAMPLES } from "./samples.mjs";
 
 /** The demo's Users, by the name the plan and the checks call them */
 export const USERS = {
@@ -12,7 +12,7 @@ export const USERS = {
 
 /**
  * @typedef {{
- *   media: string,
+ *   sample: string,
  *   name?: string,
  *   lastModified: string
  * }} PlannedFile a sample file, optionally renamed, with the last-modified
@@ -33,11 +33,11 @@ export const COLLECTIONS = [
         name: "Evening by the sea",
         description: "The first collection of the demo",
         tags: ["Sunsets"],
-        files: [{ media: "sunset", lastModified: "2024-06-21T21:30:00Z" }]
+        files: [{ sample: "sunset", lastModified: "2024-06-21T21:30:00Z" }]
     }
 ];
 
 /** The name a planned file is uploaded under */
 export function fileName(file) {
-    return file.name ?? MEDIA[file.media].name;
+    return file.name ?? SAMPLES[file.sample].name;
 }
