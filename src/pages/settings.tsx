@@ -1,35 +1,22 @@
-import { signOut } from "@/lib/client/auth";
 import { SignedInPageProps, signedInPageProps } from "@/lib/common/signed-in-page";
-import { getErrorMessage } from "@/lib/common/utilities";
 import AppShell from "@/lib/components/app-shell/AppShell";
 import Activity from "@/lib/components/settings/Activity";
 import Backups from "@/lib/components/settings/Backups";
 import VideoProcessing from "@/lib/components/settings/VideoProcessing";
-import ConfirmationSurface from "@/lib/components/surfaces/ConfirmationSurface";
 import {
     GRID_DENSITIES,
     parseGridDensity,
     useGridDensity
 } from "@/lib/hooks/useGridDensity";
-import {
-    Box,
-    Button,
-    Heading,
-    SegmentGroup,
-    Stack,
-    Text
-} from "@chakra-ui/react";
-import { mdiLogout } from "@mdi/js";
-import Icon from "@mdi/react";
+import { Box, Heading, SegmentGroup, Stack, Text } from "@chakra-ui/react";
 import { useTheme } from "next-themes";
-import { useRouter } from "next/router";
 import { ReactNode, useEffect, useState } from "react";
 
 export const getServerSideProps = signedInPageProps;
 
 export default function SettingsTab({ user }: SignedInPageProps) {
     return (
-        <AppShell title="Settings">
+        <AppShell title="Settings" username={user.username}>
             <Stack gap="8" px="4" py="4" maxW="lg">
                 <Section title="Activity">
                     <Activity />
@@ -43,9 +30,6 @@ export default function SettingsTab({ user }: SignedInPageProps) {
                 <Section title="Appearance">
                     <ThemeSetting />
                     <GridDensitySetting />
-                </Section>
-                <Section title="Account">
-                    <SignOutSetting username={user.username} />
                 </Section>
             </Stack>
         </AppShell>
@@ -141,54 +125,6 @@ function GridDensitySetting() {
                     flex="1"
                 />
             </SegmentGroup.Root>
-        </Setting>
-    );
-}
-
-function SignOutSetting({ username }: { username: string }) {
-    const router = useRouter();
-    const [confirmOpen, setConfirmOpen] = useState(false);
-    const [signingOut, setSigningOut] = useState(false);
-    const [error, setError] = useState<string>();
-
-    const onConfirm = async () => {
-        setSigningOut(true);
-        setError(undefined);
-        try {
-            await signOut();
-            await router.replace("/login");
-        } catch (error) {
-            setError(getErrorMessage(error));
-            setSigningOut(false);
-            setConfirmOpen(false);
-        }
-    };
-
-    return (
-        <Setting label="Signed in" hint={username}>
-            <Button
-                variant="outline"
-                size="lg"
-                colorPalette="red"
-                onClick={() => setConfirmOpen(true)}>
-                <Icon path={mdiLogout} size="20px" aria-hidden />
-                Sign out
-            </Button>
-            {error && (
-                <Text textStyle="sm" color="fg.error">
-                    {error}
-                </Text>
-            )}
-            <ConfirmationSurface
-                open={confirmOpen}
-                onClose={() => setConfirmOpen(false)}
-                title="Sign out?"
-                description="You will need your username and password to sign in again."
-                confirmLabel="Sign out"
-                onConfirm={onConfirm}
-                confirming={signingOut}
-                destructive
-            />
         </Setting>
     );
 }

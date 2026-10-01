@@ -1,8 +1,9 @@
-import { Box, Flex, Heading, IconButton } from "@chakra-ui/react";
+import { Box, Flex, Heading, HStack, IconButton } from "@chakra-ui/react";
 import Icon from "@mdi/react";
 import Head from "next/head";
 import { ReactNode } from "react";
 import { TAB_BAR_HEIGHT } from "../theme/system";
+import AccountMenu from "./AccountMenu";
 import TabBar from "./TabBar";
 
 /** The context-aware floating action button; each screen decides its action */
@@ -14,6 +15,8 @@ export interface FloatingAction {
 
 interface AppShellProps {
     title: string;
+    /** The signed-in user's, named in the page header's account menu */
+    username: string;
     children: ReactNode;
     /** Hidden when absent, e.g. on the Timeline */
     floatingAction?: FloatingAction;
@@ -27,13 +30,14 @@ interface AppShellProps {
     ownHeader?: boolean;
     /** Replaces the tab bar and the floating action button while present, e.g. the selection bar */
     contextualBar?: ReactNode;
-    /** Beside the page header, e.g. a filter button */
+    /** In the page header, left of the account button, e.g. a filter button */
     headerAction?: ReactNode;
 }
 
 /** Frame of every signed-in screen: page header, content and the bottom tab bar */
 export default function AppShell({
     title,
+    username,
     children,
     floatingAction,
     onActiveTabReselect,
@@ -66,7 +70,10 @@ export default function AppShell({
                         <Heading as="h1" textStyle="2xl">
                             {title}
                         </Heading>
-                        {headerAction}
+                        <HStack gap="1" flexShrink="0">
+                            {headerAction}
+                            <AccountMenu username={username} />
+                        </HStack>
                     </Flex>
                 )}
                 <Box flex="1">{children}</Box>

@@ -155,6 +155,7 @@ export default function TimelineTab({ user }: SignedInPageProps) {
     return (
         <AppShell
             title="Timeline"
+            username={user.username}
             headerAction={
                 <TimelineFilterButton value={tags} onChange={setTags} />
             }

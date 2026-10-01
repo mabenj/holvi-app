@@ -153,6 +153,7 @@ export default function CollectionsTab({ user }: SignedInPageProps) {
     return (
         <AppShell
             title="Collections"
+            username={user.username}
             onActiveTabReselect={startOver}
             floatingAction={{
                 label: "New collection",
