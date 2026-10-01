@@ -65,6 +65,7 @@ export default function CollectionPage({ user }: SignedInPageProps) {
             key={collectionId}
             collectionId={collectionId}
             userId={user.id}
+            username={user.username}
         />
     );
 }
@@ -87,10 +88,12 @@ function useRecordOpen(collectionId: string) {
 
 function CollectionScreen({
     collectionId,
-    userId
+    userId,
+    username
 }: {
     collectionId: string;
     userId: string;
+    username: string;
 }) {
     const {
         data: collection,
@@ -203,6 +206,7 @@ function CollectionScreen({
     return (
         <AppShell
             title={collection?.name ?? "Collection"}
+            username={username}
             ownHeader
             floatingAction={
                 collection && !isUploading(upload)
