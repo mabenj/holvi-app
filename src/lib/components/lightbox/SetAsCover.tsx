@@ -13,7 +13,7 @@ interface SetAsCoverProps {
     file: FileSummary;
     /** Whether the file is the collection's Chosen cover; not so for its Rotating cover */
     isChosenCover: boolean;
-    /** Called once the Cover is chosen or un-chosen, to show it on the hero and the card */
+    /** Called once the Cover is chosen or un-chosen, to show it on the collection's card */
     onChange: () => Promise<unknown> | void;
 }
 

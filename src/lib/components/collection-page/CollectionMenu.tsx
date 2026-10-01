@@ -4,15 +4,12 @@ import Icon from "@mdi/react";
 import TitleBarButton from "./TitleBarButton";
 
 interface CollectionMenuProps {
-    /** Whether the title bar has collapsed onto the page, rather than lying over the Cover */
-    collapsed: boolean;
     onEdit: () => void;
     onDelete: () => void;
 }
 
 /** The collection page's overflow menu, keeping rare and destructive actions out of the way */
 export default function CollectionMenu({
-    collapsed,
     onEdit,
     onDelete
 }: CollectionMenuProps) {
@@ -24,7 +21,6 @@ export default function CollectionMenu({
                 <TitleBarButton
                     aria-label="More actions"
                     icon={mdiDotsVertical}
-                    collapsed={collapsed}
                 />
             </Menu.Trigger>
             <Portal>

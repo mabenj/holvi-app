@@ -10,7 +10,7 @@ import { useGridLayout } from "../grid/useGridLayout";
 import { FILE_TILE_ATTRIBUTE } from "../lightbox/lightbox-slides";
 import SelectionMark from "../selection/SelectionMark";
 import { TAB_BAR_HEIGHT } from "../theme/system";
-import { TITLE_BAR_HEIGHT } from "./CollectionHero";
+import { TITLE_BAR_HEIGHT } from "./CollectionTitleBar";
 
 interface FileGridProps {
     files: FileSummary[];
