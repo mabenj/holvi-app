@@ -41,7 +41,7 @@ const appConfig = {
         3 * MEGABYTE
     ),
     geoApiKey: getEnvVariable("HOLVI_GEO_API_KEY"),
-    /** How long the random order of a user's collections stays the same */
+    /** How long the random order of a user's collections, and their Rotating covers, stay the same */
     shufflePeriodMinutes: getEnvVariable(
         "HOLVI_SHUFFLE_PERIOD_MINUTES",
         "number",

@@ -11,6 +11,8 @@ export interface CollectionSummary {
     cover: {
         thumbnailSrc: string;
         blurDataUrl: string | null;
+        /** Whether it is the Chosen cover, rather than the Rotating cover */
+        chosen: boolean;
     } | null;
     /** Last added to, as epoch milliseconds */
     lastAddedTo: number;

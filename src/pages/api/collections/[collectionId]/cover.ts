@@ -2,7 +2,7 @@ import { ApiRequest, ApiResponse, ApiRoute } from "@/lib/common/api-route";
 import { CollectionService } from "@/lib/services/collection.service";
 import { z } from "zod";
 
-/** Makes one of the collection's files its Cover, or null the automatic Cover again */
+/** Makes one of the collection's files its Chosen cover, or null lets its Cover rotate again */
 async function setCover(
     req: ApiRequest<{ fileId: string | null }>,
     res: ApiResponse

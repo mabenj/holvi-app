@@ -1,4 +1,6 @@
-FROM node:latest
+# Pinned to one Node major: new Node releases break native modules such as
+# sharp and bcrypt
+FROM node:24
 
 WORKDIR /app
 

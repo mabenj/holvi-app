@@ -20,8 +20,16 @@ _Avoid_: item, media, asset
 A case-insensitive label that can be attached to collections and to files.
 
 **Cover**:
-The file that represents a collection on its card and page. Chosen by the user, or otherwise the collection's first file by name.
+The file that represents a collection on its card and page. The **Chosen cover** if the user picked one, otherwise the **Rotating cover**.
 _Avoid_: thumbnail (every file has a thumbnail; the Cover is a file)
+
+**Chosen cover**:
+A file, photo or video, that the user picked as a collection's Cover. It stays the Cover until the user picks another or lets the Cover rotate again.
+_Avoid_: pinned cover
+
+**Rotating cover**:
+The Cover of a collection without a Chosen cover: one of its files, photo or video, picked at random, which changes each Shuffle period.
+_Avoid_: automatic cover, random cover
 
 **Timeline**:
 Every file a user owns, across all their collections, newest first.
@@ -47,7 +55,7 @@ _Avoid_: newest, last updated
 A collection whose Last opened, or its creation time if it has never been opened, is more than a year ago.
 
 **Shuffle period**:
-The length of time for which the random order of a user's collections stays the same before it changes on its own.
+The length of time for which a user's random choices, the random order of their collections and each collection's Rotating cover, stay the same before they change on their own.
 
 ### Video
 
@@ -98,7 +106,8 @@ _Avoid_: jobs, tasks
 - A **User** owns zero or more **Collections**
 - A **Collection** contains zero or more **Files**
 - **Tags** attach to **Collections** and to **Files** independently
-- A **Collection** with files has exactly one **Cover**, one of its own **Files**
+- A **Collection** with files has exactly one **Cover** at any moment, one of its own **Files**, shown alike on its card and its page
+- A **Collection** has at most one **Chosen cover**; without one, its **Cover** is its **Rotating cover**
 - A **Collection's** **Open count** and **Last opened** summarise its **Opens**; each **Collection** has one owner, so Opens measure that **User's** own habits
 - A video **File** has at most one **Rendition** and at most one **Scrub preview**
 - A **Backup job** produces at most one **Backup** for one **User**

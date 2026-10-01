@@ -212,8 +212,8 @@ export async function updateCollection(
 }
 
 /**
- * Makes one of the collection's files, a photo or a video, its Cover; null
- * goes back to the automatic Cover
+ * Makes one of the collection's files, a photo or a video, its Chosen cover;
+ * null un-chooses it, so the collection's Cover rotates again
  */
 export async function setCover(collectionId: string, fileId: string | null) {
     await sendJson(

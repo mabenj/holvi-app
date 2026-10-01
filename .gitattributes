@@ -1,0 +1,12 @@
+# LF for shell scripts and for the files that run inside the Linux containers,
+# so a Windows checkout with core.autocrlf doesn't break them
+*.sh text eol=lf
+*.mjs text eol=lf
+*.sql text eol=lf
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+
+# Demo sample media: never diffed or converted
+demo/media/** binary
+# The sources file next to the media stays text
+demo/media/SOURCES.md text diff merge

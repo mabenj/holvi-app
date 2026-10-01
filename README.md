@@ -40,13 +40,13 @@ A backup is a zip holding decrypted copies of every file, so point `HOLVI_BACKUP
 
 `HOLVI_ENCRYPTION_KEY=<32 character long encryption key>`
 
-`HOLVI_SHUFFLE_PERIOD_MINUTES=<minutes the random order of each user's collections stays the same (optional, defaults to 60)>`
+`HOLVI_SHUFFLE_PERIOD_MINUTES=<minutes the random order of each user's collections, and each collection's rotating cover, stay the same (optional, defaults to 60)>`
 
 `HOLVI_RENDITION_MAX_BITRATE_KBPS=<highest bitrate, in kbit/s, of the web-playable Rendition made for a video the browser may not play, such as HEVC (optional, defaults to 10000)>`
 
 Video processing gives every video whose original is not web-safe (H.264 with AAC or no audio, in MP4) an encrypted Rendition stored next to the original, which is never modified. It runs in the background, one video at a time: new uploads are processed automatically, and existing videos when their user chooses "Process videos" in Settings. Backups contain originals only.
 
-The Collections tab opens in random order. Within one Shuffle period a refresh gives the same order; when the next period starts, the order changes by itself.
+The Collections tab opens in random order. Within one Shuffle period a refresh gives the same order; when the next period starts, the order changes by itself. So does the cover of every collection whose cover the user has not chosen: each period it shows another of the collection's files, and every file gets a turn before any repeats.
 
 ### Install dependencies
 
@@ -86,3 +86,23 @@ yarn test:watch
 ```
 
 The tests connect to `postgres://admin:admin@localhost:5433/holvi_test` by default. Set `HOLVI_TEST_DB_CONNECTION_STRING` to use a different database; its name must end with `test`, because the tests delete all of its data. The data directory, backup directory and encryption key are pointed at temporary values for each test file (see `test/setup-env.ts`), so `.env.local` is not used.
+
+## Demo environment
+
+A local, production-built Holvi for trying out features with known data. It builds the app from the current working tree, uncommitted changes included, and runs it in Docker with its own database and data. The first time, it seeds the demo with sample data and checks the seed through the app's API. Needs Docker with Docker Compose; on Windows, run it from Git Bash.
+
+```bash
+./demo.sh up           # build, start, seed if empty, open the browser
+./demo.sh up --no-open # the same without opening the browser
+./demo.sh down         # stop the demo and keep its data
+./demo.sh reset        # stop the demo and delete its data; the next up seeds again
+./demo.sh logs         # follow the app's logs
+```
+
+- The app runs at [http://localhost:7100](http://localhost:7100). Sign in as `demo` / `demo1234`, who owns the sample collections, or as `other` / `other1234`, a second User.
+- The seed's scenarios are planned in `demo/seed/plan.mjs`, from the sample files in `demo/media`. `demo` has more than a page of collections, among them: "Unsorted", with more than a page of files; "Living room wall ideas", which is empty; "Wood Lake loons", with a video as its Chosen cover; "Old phone, 2019" and "Mongolia 2023", Forgotten collections; and "Clips to sort", with an H.264 MP4, HEVC MOVs that get a Rendition, and a broken video whose processing fails. Collections have a range of Open counts, Last opened and Last added to times, and tags, one of them written as both "Sunsets" and "sunsets". `other` has three collections of their own. Video processing is still running in the background when `up` finishes.
+- Its database is on `127.0.0.1:5434` (user `holvi`, password `holvi-demo`, database `holvi_demo`), reachable from this machine only.
+- It runs under its own Compose project, `holvi-demo`, from `demo/docker-compose.yml`, so it can run next to `yarn dev` and the deploy `docker-compose.yml` without touching their containers, volumes or data. Each `up` removes the demo images its build replaced, several GB each, and no other images. It doesn't read `.env.local`; its session password and encryption key are fixed, committed and not secret.
+- `up` seeds only an empty demo, so what you change while testing survives `down` and later `up`s, including on other branches, whose database upgrades then run against the existing demo data. If seeding or its checks fail, `up` says the demo is not ready and exits non-zero without opening the browser. Run `reset` and then `up` to seed it again from scratch; until then, `up` keeps failing on the half-seeded demo. The seed recognises a finished seed by a row it writes into a table of its own, `demo_seed`, once every check has passed; a demo with User `demo` but without that row is half-seeded. Only `reset` deletes demo data.
+- The Shuffle period is 1 minute, so the random collection order and Rotating covers change during one session. Override it for one run with `HOLVI_SHUFFLE_PERIOD_MINUTES=60 ./demo.sh up`.
+- For place names on files with GPS, put a reverse geocoding key in `demo/.env.local` (git-ignored) as `HOLVI_GEO_API_KEY=<key>`. Without it the demo still starts; those files just have no place name.

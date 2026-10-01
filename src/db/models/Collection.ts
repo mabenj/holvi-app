@@ -28,9 +28,9 @@ export class Collection extends Model<
     /** When the collection was last opened; null if never */
     declare lastOpened: CreationOptional<Date | null>;
     /**
-     * The file the user chose as the Cover; null for the automatic Cover.
-     * No foreign key: it may name a file that is gone, which falls back to
-     * the automatic Cover when collections are read.
+     * The collection's Chosen cover; null for a Rotating cover. No foreign
+     * key: it may name a file that is gone, which falls back to the Rotating
+     * cover when collections are read.
      */
     declare coverFileId: CreationOptional<string | null>;
 
