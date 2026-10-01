@@ -13,8 +13,8 @@ import { getErrorMessage } from "@/lib/common/utilities";
 import AppShell from "@/lib/components/app-shell/AppShell";
 import DropOverlay from "@/lib/components/app-shell/DropOverlay";
 import CollectionDetails from "@/lib/components/collection-page/CollectionDetails";
-import CollectionHero from "@/lib/components/collection-page/CollectionHero";
 import CollectionMenu from "@/lib/components/collection-page/CollectionMenu";
+import CollectionTitleBar from "@/lib/components/collection-page/CollectionTitleBar";
 import FileGrid from "@/lib/components/collection-page/FileGrid";
 import FileSortSelect from "@/lib/components/collection-page/FileSortSelect";
 import FileTagFilter from "@/lib/components/collection-page/FileTagFilter";
@@ -134,7 +134,7 @@ function CollectionScreen({
     );
 
     // Deleting or renaming files, or choosing the Cover, can change the counts
-    // and the Cover, here and on the Collections tab
+    // here, and the counts and the Cover on the Collections tab
     const refreshCollection = async () => {
         const updated = await refetchCollection();
         if (updated) replaceCollection(userId, updated);
@@ -155,7 +155,7 @@ function CollectionScreen({
     const lightbox = useLightboxHistory();
 
     // When an upload into this collection ends, the new files appear and the
-    // hero shows the new counts and Cover. One that finished before the page
+    // details show the new counts. One that finished before the page
     // opened is already in what it loads. While the lightbox is open, the
     // grid waits until it closes: reloading replaces the loaded files, which
     // would shift the slides under it.
@@ -203,7 +203,7 @@ function CollectionScreen({
     return (
         <AppShell
             title={collection?.name ?? "Collection"}
-            bleedTop
+            ownHeader
             floatingAction={
                 collection && !isUploading(upload)
                     ? {
@@ -240,12 +240,11 @@ function CollectionScreen({
                     />
                 ) : undefined
             }>
-            <CollectionHero
-                collection={collection ?? null}
-                actions={(collapsed) =>
+            <CollectionTitleBar
+                name={collection?.name}
+                actions={
                     collection && (
                         <CollectionMenu
-                            collapsed={collapsed}
                             onEdit={() => setEditing(true)}
                             onDelete={() => setConfirmingDelete(true)}
                         />
@@ -260,6 +259,8 @@ function CollectionScreen({
                 <>
                     {collection && (
                         <CollectionDetails
+                            imageCount={collection.imageCount}
+                            videoCount={collection.videoCount}
                             description={collection.description}
                             tags={collection.tags}
                         />

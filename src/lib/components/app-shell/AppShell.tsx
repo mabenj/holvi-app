@@ -20,10 +20,11 @@ interface AppShellProps {
     /** What tapping the tab of this screen does, e.g. refresh and scroll to the top */
     onActiveTabReselect?: () => void;
     /**
-     * The content starts at the very top, under the notch, and shows its own
-     * heading instead of the page header, e.g. a collection page's hero
+     * The screen brings its own header instead of the page header, e.g. a
+     * collection page's title bar. The content then starts at the very top,
+     * under the notch, and the screen keeps it clear of its header.
      */
-    bleedTop?: boolean;
+    ownHeader?: boolean;
     /** Replaces the tab bar and the floating action button while present, e.g. the selection bar */
     contextualBar?: ReactNode;
     /** Beside the page header, e.g. a filter button */
@@ -36,7 +37,7 @@ export default function AppShell({
     children,
     floatingAction,
     onActiveTabReselect,
-    bleedTop = false,
+    ownHeader = false,
     contextualBar,
     headerAction
 }: AppShellProps) {
@@ -49,12 +50,12 @@ export default function AppShell({
                 as="main"
                 direction="column"
                 minH="100dvh"
-                pt={bleedTop ? undefined : "env(safe-area-inset-top)"}
+                pt={ownHeader ? undefined : "env(safe-area-inset-top)"}
                 pl="env(safe-area-inset-left)"
                 pr="env(safe-area-inset-right)"
                 // Keep the end of the content clear of the fixed tab bar
                 pb={`calc(${TAB_BAR_HEIGHT} + env(safe-area-inset-bottom))`}>
-                {!bleedTop && (
+                {!ownHeader && (
                     <Flex
                         alignItems="center"
                         justifyContent="space-between"

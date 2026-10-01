@@ -20,7 +20,7 @@ _Avoid_: item, media, asset
 A case-insensitive label that can be attached to collections and to files.
 
 **Cover**:
-The file that represents a collection on its card and page. The **Chosen cover** if the user picked one, otherwise the **Rotating cover**.
+The file that represents a collection on its card. The **Chosen cover** if the user picked one, otherwise the **Rotating cover**.
 _Avoid_: thumbnail (every file has a thumbnail; the Cover is a file)
 
 **Chosen cover**:
@@ -106,7 +106,7 @@ _Avoid_: jobs, tasks
 - A **User** owns zero or more **Collections**
 - A **Collection** contains zero or more **Files**
 - **Tags** attach to **Collections** and to **Files** independently
-- A **Collection** with files has exactly one **Cover** at any moment, one of its own **Files**, shown alike on its card and its page
+- A **Collection** with files has exactly one **Cover** at any moment, one of its own **Files**, shown on its card
 - A **Collection** has at most one **Chosen cover**; without one, its **Cover** is its **Rotating cover**
 - A **Collection's** **Open count** and **Last opened** summarise its **Opens**; each **Collection** has one owner, so Opens measure that **User's** own habits
 - A video **File** has at most one **Rendition** and at most one **Scrub preview**
