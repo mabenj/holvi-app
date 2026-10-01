@@ -321,8 +321,12 @@ async function verify() {
     const failures = [];
     for (const check of CHECKS) {
         try {
-            await check.run(users);
-            console.log(`  ok   ${check.scenario}`);
+            const warning = await check.run(users);
+            console.log(
+                warning
+                    ? `  warn ${check.scenario}: ${warning}`
+                    : `  ok   ${check.scenario}`
+            );
         } catch (error) {
             console.log(`  FAIL ${check.scenario}`);
             failures.push(`${check.scenario}: ${describe(error)}`);

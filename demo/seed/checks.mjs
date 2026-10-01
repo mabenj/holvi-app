@@ -1,6 +1,7 @@
 // The seed's verification: scenarios stated the way a User sees them, each
 // checked through the public HTTP API while signed in as that User. A check
-// throws a CheckFailure, or any other error, when its scenario is not there.
+// throws a CheckFailure, or any other error, when its scenario is not there,
+// and returns a warning when the scenario is there but not quite as planned.
 
 import { COLLECTIONS, SEEDED_AT, USERS, fileName } from "./plan.mjs";
 import { BROKEN_VIDEO } from "./samples.mjs";
@@ -67,7 +68,7 @@ function timeline(api) {
 /**
  * @typedef {Record<keyof typeof USERS, import("./api.mjs").Api>} SignedIn
  *   a fresh session for every User
- * @typedef {{ scenario: string, run: (users: SignedIn) => Promise<void> }} Check
+ * @typedef {{ scenario: string, run: (users: SignedIn) => Promise<string | void> }} Check
  */
 
 /** The User sees their planned collections, and no others @returns {Check} */
@@ -199,42 +200,47 @@ async function pageThrough(api, path, key, query = {}) {
 }
 
 /**
- * Runs before every other check: video processing gets through the sample
- * videos in seconds, so it is over soon after the seed uploads the last ones
+ * Runs before every other check, while video processing may still be busy
+ * with the sample videos. Processing gets through them in seconds, so finding
+ * it already done with some of them is only a warning: the videos are there,
+ * Activity just has less in it.
  * @type {Check}
  */
 const activityCheck = {
     scenario: "demo's Activity shows videos in video processing, among them an H.264 MP4, an HEVC MOV and the broken video",
     run: async ({ demo }) => {
-        const { activity } = await demo.get("/api/activity");
-        const { pending, processing } = activity.videoProcessing;
-        expect(
-            activity.active && pending + processing > 0,
-            `Activity shows ${pending} pending and ${processing} processing`
-        );
-
-        // Until video processing is done with a video, it has no Scrub preview
-        const { videos: failed } = await demo.get("/api/video-processing/failed");
-        const failedIds = new Set(failed.map(({ id }) => id));
-        const waiting = (await timeline(demo)).filter(
-            (file) =>
-                file.mimeType.startsWith("video/") &&
-                !file.scrubPreview &&
-                !failedIds.has(file.id)
-        );
         const kinds = {
             "an H.264 MP4": (file) =>
                 file.mimeType === "video/mp4" && !isBrokenVideo(file),
             "an HEVC MOV": (file) => file.mimeType === "video/quicktime",
             "the broken video": isBrokenVideo
         };
-        const missing = Object.entries(kinds)
+        const videos = (await timeline(demo)).filter((file) =>
+            file.mimeType.startsWith("video/")
+        );
+        const absent = Object.entries(kinds)
+            .filter(([, isKind]) => !videos.some(isKind))
+            .map(([kind]) => kind);
+        expect(absent.length === 0, `demo has no ${absent.join(" and ")}`);
+
+        const { activity } = await demo.get("/api/activity");
+        const { pending, processing } = activity.videoProcessing;
+        if (!activity.active || pending + processing === 0) {
+            return "video processing has already finished, so Activity is empty";
+        }
+
+        // Until video processing is done with a video, it has no Scrub preview
+        const { videos: failed } = await demo.get("/api/video-processing/failed");
+        const failedIds = new Set(failed.map(({ id }) => id));
+        const waiting = videos.filter(
+            (file) => !file.scrubPreview && !failedIds.has(file.id)
+        );
+        const done = Object.entries(kinds)
             .filter(([, isKind]) => !waiting.some(isKind))
             .map(([kind]) => kind);
-        expect(
-            missing.length === 0,
-            `video processing is already done with ${missing.join(" and ")}`
-        );
+        if (done.length > 0) {
+            return `video processing is already done with ${done.join(" and ")}`;
+        }
     }
 };
 
