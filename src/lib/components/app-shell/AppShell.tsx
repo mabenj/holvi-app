@@ -15,7 +15,7 @@ export interface FloatingAction {
 
 interface AppShellProps {
     title: string;
-    /** The signed-in user's, named in the page header's account menu */
+    /** The signed-in user's username, shown in the page header's account menu */
     username: string;
     children: ReactNode;
     /** Hidden when absent, e.g. on the Timeline */
