@@ -116,12 +116,12 @@ export function readBackup(zipPath: string): Promise<BackupContents> {
 }
 
 /**
- * Reads a Backup like readBackup, then lets `use` stream its files from the
- * zip, which stays open until `use` has finished.
+ * Reads a Backup like readBackup, then lets `work` stream its files from the
+ * zip, which stays open until `work` has finished.
  */
 export async function withBackup<T>(
     zipPath: string,
-    use: (contents: BackupContents, zip: ZipReader) => Promise<T>
+    work: (contents: BackupContents, zip: ZipReader) => Promise<T>
 ): Promise<T> {
     const { size, mtime } = await stat(zipPath);
     const zip = await openZip(zipPath);
@@ -143,7 +143,7 @@ export async function withBackup<T>(
             zipSizeBytes: size,
             zipModifiedAt: mtime
         };
-        return await use(contents, zip);
+        return await work(contents, zip);
     } finally {
         await zip.close();
     }
