@@ -11,6 +11,7 @@ import appConfig from "../common/app-config";
 import Cryptography from "../common/cryptography";
 import { InvalidArgumentError, NotFoundError } from "../common/errors";
 import Log, { LogColor } from "../common/log";
+import { UserFileSystem } from "../common/user-file-system";
 import { formatBytes, getErrorMessage, isUuidv4 } from "../common/utilities";
 import { ZipReader } from "../common/zip-reader";
 import {
@@ -93,6 +94,20 @@ interface CopyProgress {
     bytesDone: number;
     currentFileName: string | null;
 }
+
+/** What a running job copies its files with */
+interface CopyContext {
+    userId: string;
+    backup: BackupContents;
+    zip: ZipReader;
+    copyEntry: EntryCopy;
+    progress: CopyProgress;
+    thumbnails: EarlyThumbnails;
+    signal: AbortSignal;
+}
+
+/** The user and collections of a job's library, whose files it writes */
+type RestoredLibrary = Pick<RestoreJob, "UserId" | "collectionIds">;
 
 type RestoreJobFields = Partial<InferAttributes<RestoreJob>>;
 
@@ -308,7 +323,7 @@ export class RestoreService {
             );
             // A job resumed after a restart is queued with the files it already wrote
             if (cancelled > 0) {
-                await removeWrittenFiles(job.UserId, job.collectionIds);
+                await removeWrittenFiles(job);
             }
         }
         const stopped = await getRunner().cancel(job.id);
@@ -319,7 +334,7 @@ export class RestoreService {
                 { where: { id: job.id, status: "running" } }
             );
             if (cancelled > 0) {
-                await removeWrittenFiles(job.UserId, job.collectionIds);
+                await removeWrittenFiles(job);
             }
         }
         return (await this.findUserJob(jobId)).toDto();
@@ -584,7 +599,7 @@ async function recoverInterruptedJobs() {
         where: { status: "running" }
     });
     for (const job of interrupted) {
-        await removePartialFiles(job.UserId, job.collectionIds);
+        await removePartialFiles(job);
         await updateJob(job.id, { status: "queued", currentFileName: null });
     }
     logger.info(
@@ -593,9 +608,10 @@ async function recoverInterruptedJobs() {
 }
 
 /** Deletes the files a job was writing when it stopped, which never passed their checks */
-async function removePartialFiles(userId: string, collectionIds: string[]) {
+async function removePartialFiles({ UserId, collectionIds }: RestoredLibrary) {
+    const fileSystem = new UserFileSystem(UserId);
     for (const collectionId of collectionIds) {
-        const dir = path.join(appConfig.dataDir, userId, collectionId);
+        const dir = fileSystem.getCollectionDir(collectionId);
         const names = await readdir(dir).catch(() => []);
         for (const name of names.filter((name) => name.endsWith(".partial"))) {
             await rm(path.join(dir, name), { force: true });
@@ -609,20 +625,14 @@ async function removePartialFiles(userId: string, collectionIds: string[]) {
  * starts only if none of its collections exist. Once the job's library is in
  * the database, its files are kept.
  */
-async function removeWrittenFiles(userId: string, collectionIds: string[]) {
-    if (await isLibraryInserted(userId, collectionIds)) {
+async function removeWrittenFiles(library: RestoredLibrary) {
+    if (await isLibraryInserted(library)) {
         return;
     }
-    for (const collectionId of collectionIds) {
-        await rm(path.join(appConfig.dataDir, userId, collectionId), {
-            recursive: true,
-            force: true
-        }).catch((error) =>
-            logger.error(
-                `Could not delete restored files of collection '${collectionId}'`,
-                error
-            )
-        );
+    const fileSystem = new UserFileSystem(library.UserId);
+    for (const collectionId of library.collectionIds) {
+        // Logged by the file system; the other collections are still deleted
+        await fileSystem.deleteCollectionDir(collectionId).catch(() => {});
     }
 }
 
@@ -649,7 +659,7 @@ async function runRestoreJob(
     let unrestoredFiles: UnrestoredFile[] | null = null;
     try {
         throwIfAborted(signal);
-        if (await isLibraryInserted(job.UserId, job.collectionIds)) {
+        if (await isLibraryInserted(job)) {
             // Interrupted by a restart after the insert, before being marked completed
             unrestoredFiles = job.unrestoredFiles;
             await finishCompletedJob(job.id, unrestoredFiles);
@@ -670,15 +680,15 @@ async function runRestoreJob(
             });
             logger.info(`Restore job '${job.id}' started`);
             progressSaver.start();
-            const unrestored = await copyFiles(
-                job.UserId,
+            const unrestored = await copyFiles({
+                userId: job.UserId,
                 backup,
                 zip,
-                dependencies,
+                copyEntry: dependencies.copyEntry,
                 progress,
                 thumbnails,
                 signal
-            );
+            });
             await progressSaver.stop();
             throwIfAborted(signal);
             progress.currentFileName = null;
@@ -698,7 +708,7 @@ async function runRestoreJob(
         }
         // Thumbnails being made would otherwise land after their files are deleted
         await thumbnails.settle();
-        await removeWrittenFiles(job.UserId, job.collectionIds);
+        await removeWrittenFiles(job);
         const cancelled = signal.aborted;
         if (cancelled) {
             logger.info(`Restore job '${job.id}' cancelled`);
@@ -743,10 +753,10 @@ async function finishCompletedJob(
 }
 
 /** Whether the job's library is in the database: inserted all at once, and none of it existed when the job started */
-async function isLibraryInserted(userId: string, collectionIds: string[]) {
+async function isLibraryInserted({ UserId, collectionIds }: RestoredLibrary) {
     const db = await Database.getInstance();
     const inserted = await db.models.Collection.count({
-        where: { id: collectionIds, UserId: userId }
+        where: { id: collectionIds, UserId }
     });
     return inserted > 0;
 }
@@ -770,15 +780,8 @@ async function checkSourceUnchanged(job: RestoreJob) {
  * reading stays close to sequential while hashing, encrypting and writing
  * overlap. Returns the files whose content did not match, in zip order.
  */
-async function copyFiles(
-    userId: string,
-    backup: BackupContents,
-    zip: ZipReader,
-    dependencies: RestoreJobDependencies,
-    progress: CopyProgress,
-    thumbnails: EarlyThumbnails,
-    signal: AbortSignal
-) {
+async function copyFiles(context: CopyContext) {
+    const { backup, progress, thumbnails, signal } = context;
     const remainingByCollection = new Map(
         backup.collections.map(({ id }) => [id, 0])
     );
@@ -810,14 +813,10 @@ async function copyFiles(
                 break;
             }
             progress.currentFileName = file.metadata.name;
-            const copy: Promise<void> = copyFile(
-                userId,
-                file,
-                zip,
-                dependencies.copyEntry,
-                (count) => (progress.bytesDone += count),
-                controller.signal
-            )
+            const copy: Promise<void> = copyFile(file, {
+                ...context,
+                signal: controller.signal
+            })
                 .then((reason) => {
                     if (reason) {
                         reasons.set(file, reason);
@@ -872,17 +871,17 @@ async function copyFiles(
  * place. Read and write failures fail the job.
  */
 async function copyFile(
-    userId: string,
     { collectionId, metadata, entry }: IncludedFile,
-    zip: ZipReader,
-    copyEntry: EntryCopy,
-    onBytes: (count: number) => void,
-    signal: AbortSignal
+    { userId, zip, copyEntry, progress, signal }: CopyContext
 ): Promise<string | null> {
     if (!entry) {
         return "The Backup has no content for this file";
     }
-    const storedPath = path.join(appConfig.dataDir, userId, collectionId, metadata.id);
+    const onBytes = (count: number) => (progress.bytesDone += count);
+    const storedPath = new UserFileSystem(userId).getFilePath(
+        collectionId,
+        metadata.id
+    );
     if (await exists(storedPath)) {
         // Renamed into place, so checked, before the job was interrupted by a restart
         onBytes(metadata.sizeBytes);
