@@ -35,7 +35,7 @@ import Icon from "@mdi/react";
 import { useState } from "react";
 import ConfirmationSurface from "../surfaces/ConfirmationSurface";
 
-const STATUS_LABELS: Record<BackupJobStatus, string> = {
+export const STATUS_LABELS: Record<BackupJobStatus, string> = {
     queued: "Queued",
     running: "Running",
     completed: "Completed",
@@ -44,7 +44,7 @@ const STATUS_LABELS: Record<BackupJobStatus, string> = {
     cancelled: "Cancelled"
 };
 
-const STATUS_PALETTES: Record<BackupJobStatus, string> = {
+export const STATUS_PALETTES: Record<BackupJobStatus, string> = {
     queued: "gray",
     running: "blue",
     completed: "green",
@@ -237,7 +237,7 @@ function ActiveJob({
     );
 }
 
-function ProgressRow({
+export function ProgressRow({
     label,
     valueText,
     done,
@@ -327,7 +327,7 @@ function FinishedJob({
     );
 }
 
-function ProblemFiles({
+export function ProblemFiles({
     problems,
     skippedCount,
     damagedCount
@@ -387,6 +387,6 @@ function describeProblem(problem: BackupProblem) {
     return `Damaged · ${problem.reason} · ${formatBytes(problem.bytesWritten ?? 0)} of ${expected} written`;
 }
 
-function formatTimestamp(epochMs: number) {
+export function formatTimestamp(epochMs: number) {
     return new Date(epochMs).toLocaleString();
 }

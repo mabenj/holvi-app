@@ -70,7 +70,7 @@ _Avoid_: sprite, storyboard
 ### Backup
 
 **Backup**:
-A single zip archive containing all of one user's files in decrypted form plus all their metadata, produced so the user holds a complete copy of their data outside Holvi. Designed so it could be restored later, although restore does not exist yet.
+A single zip archive containing all of one user's files in decrypted form plus all their metadata, produced so the user holds a complete copy of their data outside Holvi. Designed so it can be restored later.
 _Avoid_: export
 
 **Backup job**:

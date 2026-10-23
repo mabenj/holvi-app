@@ -34,6 +34,10 @@ Create a `.env.local` file in the root of the project and add the following vari
 
 A backup is a zip holding decrypted copies of every file, so point `HOLVI_BACKUP_DIR` at a separate disk or network mount to keep backups off the data disk; `docker-compose.yml` carries a commented-out `backup-data` volume showing how. Each user keeps only their newest backup, which they can download or delete from the Backups panel.
 
+`HOLVI_RESTORE_DIR=<directory to read backups to restore from (optional, defaults to a restore directory inside HOLVI_BACKUP_DIR)>`
+
+To restore a user's backup, copy its zip (with rsync, scp, a USB drive…) into that user's folder inside `HOLVI_RESTORE_DIR`, named exactly after their username, e.g. `<restore dir>/alice/holvi-backup-alice.zip`. The user then restores it from the Restore panel in Settings, which also offers their Current backup if its zip is still on the server. Restore is only possible into an account with no collections. Holvi only ever reads from the restore directory, so it can be mounted read-only; see ADR-0004.
+
 `HOLVI_SESSION_PASSWORD=<32 character long session password>`
 
 `HOLVI_GEO_API_KEY=<reverse geocoding API key (https://www.bigdatacloud.com/packages/reverse-geocoding)>`
