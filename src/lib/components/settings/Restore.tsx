@@ -22,17 +22,17 @@ import {
     Stack,
     Text
 } from "@chakra-ui/react";
-import { mdiBackupRestore, mdiChevronDown, mdiClose } from "@mdi/js";
+import { mdiBackupRestore, mdiChevronDown } from "@mdi/js";
 import Icon from "@mdi/react";
 import { useEffect, useRef, useState } from "react";
 import ConfirmationSurface from "../surfaces/ConfirmationSurface";
 import {
+    ActiveJob,
     formatTimestamp,
     ProblemFiles,
-    ProgressRow,
     STATUS_LABELS,
     STATUS_PALETTES
-} from "./Backups";
+} from "./JobParts";
 
 /**
  * The Restore section of Settings: the Backups the user can restore from, a
@@ -124,10 +124,15 @@ export default function Restore() {
             )}
             {activeJob ? (
                 <ActiveJob
+                    kind="restore"
                     job={activeJob}
                     cancelling={cancelling}
-                    onCancel={() => onCancel(activeJob)}
-                />
+                    onCancel={() => onCancel(activeJob)}>
+                    <Text textStyle="sm" color="fg.muted">
+                        Your collections appear all at once when the Restore
+                        has finished.
+                    </Text>
+                </ActiveJob>
             ) : (
                 <>
                     {unavailableReason && (
@@ -276,11 +281,7 @@ function Inspection({
                         />
                     </Stack>
                     {summary.problems.length > 0 && (
-                        <ProblemFiles
-                            problems={summary.problems}
-                            skippedCount={countKind(summary.problems, "skipped")}
-                            damagedCount={countKind(summary.problems, "damaged")}
-                        />
+                        <ProblemFiles problems={summary.problems} />
                     )}
                 </>
             ) : (
@@ -316,77 +317,6 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
     );
 }
 
-function ActiveJob({
-    job,
-    cancelling,
-    onCancel
-}: {
-    job: RestoreJobDto;
-    cancelling: boolean;
-    onCancel: () => void;
-}) {
-    const { progress } = job;
-    return (
-        <Stack
-            gap="4"
-            p="4"
-            borderWidth="1px"
-            rounded="lg"
-            bg="bg.subtle"
-            aria-live="polite">
-            <Flex align="center" gap="2">
-                <Spinner size="sm" colorPalette={STATUS_PALETTES[job.status]} />
-                <Text fontWeight="medium">
-                    {job.status === "queued" ? "Restore queued" : "Restoring"}
-                </Text>
-            </Flex>
-            {job.status === "queued" ? (
-                <Text textStyle="sm" color="fg.muted">
-                    Only one Restore runs on the instance at a time. This one
-                    starts when the ones ahead of it have finished.
-                </Text>
-            ) : (
-                <>
-                    <ProgressRow
-                        label="Files"
-                        valueText={`${progress.filesDone} / ${progress.filesTotal}`}
-                        done={progress.filesDone}
-                        total={progress.filesTotal}
-                    />
-                    <ProgressRow
-                        label="Size"
-                        valueText={`${formatBytes(progress.bytesDone)} / ${formatBytes(progress.bytesTotal)}`}
-                        done={progress.bytesDone}
-                        total={progress.bytesTotal}
-                    />
-                    <Text textStyle="sm" color="fg.muted">
-                        Collections {progress.collectionsDone} /{" "}
-                        {progress.collectionsTotal}
-                    </Text>
-                    {progress.currentFileName && (
-                        <Text textStyle="sm" color="fg.muted" truncate>
-                            {progress.currentFileName}
-                        </Text>
-                    )}
-                </>
-            )}
-            <Text textStyle="sm" color="fg.muted">
-                Your collections appear all at once when the Restore has
-                finished.
-            </Text>
-            <Button
-                variant="outline"
-                size="lg"
-                colorPalette="red"
-                loading={cancelling}
-                onClick={onCancel}>
-                <Icon path={mdiClose} size="20px" aria-hidden />
-                Cancel restore
-            </Button>
-        </Stack>
-    );
-}
-
 function FinishedJob({ job }: { job: RestoreJobDto }) {
     return (
         <Stack as="li" gap="2" py="4" borderTopWidth="1px">
@@ -408,11 +338,7 @@ function FinishedJob({ job }: { job: RestoreJobDto }) {
                 <UnrestoredFiles files={job.unrestoredFiles} />
             )}
             {job.problems.length > 0 && (
-                <ProblemFiles
-                    problems={job.problems}
-                    skippedCount={countKind(job.problems, "skipped")}
-                    damagedCount={countKind(job.problems, "damaged")}
-                />
+                <ProblemFiles problems={job.problems} />
             )}
         </Stack>
     );
@@ -453,11 +379,4 @@ function UnrestoredFiles({ files }: { files: UnrestoredFile[] }) {
             </Collapsible.Content>
         </Collapsible.Root>
     );
-}
-
-function countKind(
-    problems: { kind: "skipped" | "damaged" }[],
-    kind: "skipped" | "damaged"
-) {
-    return problems.filter((problem) => problem.kind === kind).length;
 }

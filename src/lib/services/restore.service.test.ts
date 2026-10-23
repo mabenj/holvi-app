@@ -34,8 +34,7 @@ import { addVideo } from "../../../test/video-fixtures";
 import appConfig from "../common/app-config";
 import { InvalidArgumentError, NotFoundError } from "../common/errors";
 import { UserFileSystem } from "../common/user-file-system";
-import { isActiveBackupJobStatus } from "../types/backup-job-dto";
-import { isActiveRestoreJobStatus } from "../types/restore-job-dto";
+import { isActiveJobStatus } from "../types/job-dto";
 import { BackupService } from "./backup.service";
 import { CollectionService } from "./collection.service";
 import { RestoreService } from "./restore.service";
@@ -50,7 +49,7 @@ async function runRestore(service: RestoreService, sourceId: string) {
     const started = await service.start(sourceId);
     return waitFor(
         () => service.getJob(started.id),
-        (job) => !isActiveRestoreJobStatus(job.status)
+        (job) => !isActiveJobStatus(job.status)
     );
 }
 
@@ -356,7 +355,7 @@ describe("RestoreService (integration)", () => {
         release();
         const job = await waitFor(
             () => service.getJob(started.id),
-            (job) => !isActiveRestoreJobStatus(job.status)
+            (job) => !isActiveJobStatus(job.status)
         );
         expect(job.status).toBe("completed");
         expect(job.progress).toEqual({
@@ -690,7 +689,7 @@ describe("RestoreService (integration)", () => {
             release();
             await waitFor(
                 () => service.getJob(first.id),
-                (job) => !isActiveRestoreJobStatus(job.status)
+                (job) => !isActiveJobStatus(job.status)
             );
         });
     });
@@ -721,7 +720,7 @@ describe("RestoreService (integration)", () => {
             release();
             const bobsFinished = await waitFor(
                 () => bobs.getJob(bobsJob.id),
-                (job) => !isActiveRestoreJobStatus(job.status)
+                (job) => !isActiveJobStatus(job.status)
             );
             const alicesFinished = await alices.getJob(alicesJob.id);
 
@@ -759,7 +758,7 @@ describe("RestoreService (integration)", () => {
             holding.release();
             await waitFor(
                 () => bobsBackups.getJob(bobsBackup.id),
-                (job) => !isActiveBackupJobStatus(job.status)
+                (job) => !isActiveJobStatus(job.status)
             );
         });
 
@@ -780,7 +779,7 @@ describe("RestoreService (integration)", () => {
             release();
             await waitFor(
                 () => restores.getJob(restoreJob.id),
-                (job) => !isActiveRestoreJobStatus(job.status)
+                (job) => !isActiveJobStatus(job.status)
             );
         });
     });
@@ -853,7 +852,7 @@ describe("RestoreService (integration)", () => {
             release();
             await waitFor(
                 () => new RestoreService(blocker.id).getJob(blocking.id),
-                (job) => !isActiveRestoreJobStatus(job.status)
+                (job) => !isActiveJobStatus(job.status)
             );
 
             expect(cancelled.status).toBe("cancelled");
@@ -958,7 +957,7 @@ describe("RestoreService (integration)", () => {
             const alices = new RestoreService(alice.id);
             const resumed = await waitFor(
                 () => alices.getJob(interrupted.id),
-                (job) => !isActiveRestoreJobStatus(job.status)
+                (job) => !isActiveJobStatus(job.status)
             );
             expect(resumed).toMatchObject({
                 status: "completed",
@@ -994,7 +993,7 @@ describe("RestoreService (integration)", () => {
             );
             const bobsJob = await waitFor(
                 () => new RestoreService(bob.id).getJob(queued.id),
-                (job) => !isActiveRestoreJobStatus(job.status)
+                (job) => !isActiveJobStatus(job.status)
             );
             expect(bobsJob.status).toBe("completed");
             expect(bobsJob.startedAt!).toBeGreaterThanOrEqual(resumed.finishedAt!);
@@ -1030,7 +1029,7 @@ describe("RestoreService (integration)", () => {
 
             const resumed = await waitFor(
                 () => service.getJob(completed.id),
-                (job) => !isActiveRestoreJobStatus(job.status)
+                (job) => !isActiveJobStatus(job.status)
             );
             expect(resumed).toMatchObject({
                 status: "completedWithErrors",
@@ -1089,7 +1088,7 @@ describe("RestoreService (integration)", () => {
             ] as const) {
                 const finished = await waitFor(
                     () => new RestoreService(user.id).getJob(job.id),
-                    (job) => !isActiveRestoreJobStatus(job.status)
+                    (job) => !isActiveJobStatus(job.status)
                 );
                 expect(finished).toMatchObject({
                     status: "failed",
@@ -1126,7 +1125,7 @@ describe("RestoreService (integration)", () => {
         release();
         const job = await waitFor(
             () => service.getJob(queued.id),
-            (job) => !isActiveRestoreJobStatus(job.status)
+            (job) => !isActiveJobStatus(job.status)
         );
 
         expect(job.status).toBe("failed");
@@ -1135,7 +1134,7 @@ describe("RestoreService (integration)", () => {
         expect(await listStoredFiles(user.id)).toEqual([]);
         await waitFor(
             () => new RestoreService(blocker.id).getJob(blocking.id),
-            (job) => !isActiveRestoreJobStatus(job.status)
+            (job) => !isActiveJobStatus(job.status)
         );
     });
 
@@ -1207,7 +1206,7 @@ describe("RestoreService (integration)", () => {
         release();
         const job = await waitFor(
             () => service.getJob(started.id),
-            (job) => !isActiveRestoreJobStatus(job.status)
+            (job) => !isActiveJobStatus(job.status)
         );
         const thumbnails = new ThumbnailService(user.id);
         await waitFor(
@@ -1268,7 +1267,7 @@ describe("RestoreService (integration)", () => {
         release();
         const job = await waitFor(
             () => service.getJob(started.id),
-            (job) => !isActiveRestoreJobStatus(job.status)
+            (job) => !isActiveJobStatus(job.status)
         );
 
         // The first four in the zip, in whichever order their copies got going

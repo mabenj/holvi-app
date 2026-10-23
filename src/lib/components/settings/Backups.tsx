@@ -7,51 +7,19 @@ import {
 import { formatBytes, getErrorMessage } from "@/lib/common/utilities";
 import { refreshActivity } from "@/lib/hooks/useActivity";
 import { useBackupJobs } from "@/lib/hooks/useBackupJobs";
-import {
-    BackupJobDto,
-    BackupJobStatus,
-    BackupProblem,
-    isCurrentBackup
-} from "@/lib/types/backup-job-dto";
-import {
-    Badge,
-    Box,
-    Button,
-    Collapsible,
-    Flex,
-    Progress,
-    Spinner,
-    Stack,
-    Text
-} from "@chakra-ui/react";
-import {
-    mdiBackupRestore,
-    mdiChevronDown,
-    mdiClose,
-    mdiDeleteOutline,
-    mdiDownload
-} from "@mdi/js";
+import { BackupJobDto, isCurrentBackup } from "@/lib/types/backup-job-dto";
+import { Badge, Button, Flex, Spinner, Stack, Text } from "@chakra-ui/react";
+import { mdiBackupRestore, mdiDeleteOutline, mdiDownload } from "@mdi/js";
 import Icon from "@mdi/react";
 import { useState } from "react";
 import ConfirmationSurface from "../surfaces/ConfirmationSurface";
-
-export const STATUS_LABELS: Record<BackupJobStatus, string> = {
-    queued: "Queued",
-    running: "Running",
-    completed: "Completed",
-    completedWithErrors: "Completed with errors",
-    failed: "Failed",
-    cancelled: "Cancelled"
-};
-
-export const STATUS_PALETTES: Record<BackupJobStatus, string> = {
-    queued: "gray",
-    running: "blue",
-    completed: "green",
-    completedWithErrors: "orange",
-    failed: "red",
-    cancelled: "gray"
-};
+import {
+    ActiveJob,
+    formatTimestamp,
+    ProblemFiles,
+    STATUS_LABELS,
+    STATUS_PALETTES
+} from "./JobParts";
 
 /**
  * The Backups section of Settings: start a Backup job and follow its progress,
@@ -119,6 +87,7 @@ export default function Backups() {
             )}
             {activeJob ? (
                 <ActiveJob
+                    kind="backup"
                     job={activeJob}
                     cancelling={busy === "cancelling"}
                     onCancel={() =>
@@ -170,101 +139,6 @@ export default function Backups() {
     );
 }
 
-function ActiveJob({
-    job,
-    cancelling,
-    onCancel
-}: {
-    job: BackupJobDto;
-    cancelling: boolean;
-    onCancel: () => void;
-}) {
-    const { progress } = job;
-    return (
-        <Stack
-            gap="4"
-            p="4"
-            borderWidth="1px"
-            rounded="lg"
-            bg="bg.subtle"
-            aria-live="polite">
-            <Flex align="center" gap="2">
-                <Spinner size="sm" colorPalette={STATUS_PALETTES[job.status]} />
-                <Text fontWeight="medium">
-                    {job.status === "queued" ? "Backup queued" : "Backing up"}
-                </Text>
-            </Flex>
-            {job.status === "queued" ? (
-                <Text textStyle="sm" color="fg.muted">
-                    Only one backup runs on the instance at a time. This one
-                    starts when the ones ahead of it have finished.
-                </Text>
-            ) : (
-                <>
-                    <ProgressRow
-                        label="Files"
-                        valueText={`${progress.filesDone} / ${progress.filesTotal}`}
-                        done={progress.filesDone}
-                        total={progress.filesTotal}
-                    />
-                    <ProgressRow
-                        label="Size"
-                        valueText={`${formatBytes(progress.bytesDone)} / ${formatBytes(progress.bytesTotal)}`}
-                        done={progress.bytesDone}
-                        total={progress.bytesTotal}
-                    />
-                    <Text textStyle="sm" color="fg.muted">
-                        Collections {progress.collectionsDone} /{" "}
-                        {progress.collectionsTotal}
-                    </Text>
-                    {progress.currentFileName && (
-                        <Text textStyle="sm" color="fg.muted" truncate>
-                            {progress.currentFileName}
-                        </Text>
-                    )}
-                </>
-            )}
-            <Button
-                variant="outline"
-                size="lg"
-                colorPalette="red"
-                loading={cancelling}
-                onClick={onCancel}>
-                <Icon path={mdiClose} size="20px" aria-hidden />
-                Cancel backup
-            </Button>
-        </Stack>
-    );
-}
-
-export function ProgressRow({
-    label,
-    valueText,
-    done,
-    total
-}: {
-    label: string;
-    valueText: string;
-    done: number;
-    total: number;
-}) {
-    return (
-        <Progress.Root
-            value={total > 0 ? Math.min(100, (done / total) * 100) : 0}
-            size="sm">
-            <Flex justify="space-between" mb="1.5" gap="2">
-                <Progress.Label textStyle="sm">{label}</Progress.Label>
-                <Text textStyle="sm" color="fg.muted">
-                    {valueText}
-                </Text>
-            </Flex>
-            <Progress.Track rounded="full">
-                <Progress.Range />
-            </Progress.Track>
-        </Progress.Root>
-    );
-}
-
 function FinishedJob({
     job,
     onDelete
@@ -297,11 +171,7 @@ function FinishedJob({
                 </Text>
             )}
             {job.problems.length > 0 && (
-                <ProblemFiles
-                    problems={job.problems}
-                    skippedCount={job.skippedCount}
-                    damagedCount={job.damagedCount}
-                />
+                <ProblemFiles problems={job.problems} />
             )}
             {current && (
                 <Flex gap="2" wrap="wrap" mt="1">
@@ -325,68 +195,4 @@ function FinishedJob({
             )}
         </Stack>
     );
-}
-
-export function ProblemFiles({
-    problems,
-    skippedCount,
-    damagedCount
-}: {
-    problems: BackupProblem[];
-    skippedCount: number;
-    damagedCount: number;
-}) {
-    return (
-        <Collapsible.Root>
-            <Collapsible.Trigger asChild>
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    px="0"
-                    color="fg.warning"
-                    css={{
-                        "& [data-chevron]": { transition: "transform 0.2s" },
-                        "&[data-state=open] [data-chevron]": {
-                            transform: "rotate(180deg)"
-                        }
-                    }}>
-                    {problems.length} problem file
-                    {problems.length === 1 ? "" : "s"} ({skippedCount} skipped,{" "}
-                    {damagedCount} damaged)
-                    <Box as="span" data-chevron display="inline-flex">
-                        <Icon path={mdiChevronDown} size="18px" aria-hidden />
-                    </Box>
-                </Button>
-            </Collapsible.Trigger>
-            <Collapsible.Content>
-                <Stack as="ul" gap="2" pt="1" listStyleType="none">
-                    {problems.map((problem) => (
-                        <Box as="li" key={problem.fileId} textStyle="sm">
-                            <Text fontWeight="medium" wordBreak="break-all">
-                                {problem.name}
-                            </Text>
-                            <Text color="fg.muted">
-                                {describeProblem(problem)}
-                            </Text>
-                        </Box>
-                    ))}
-                </Stack>
-            </Collapsible.Content>
-        </Collapsible.Root>
-    );
-}
-
-function describeProblem(problem: BackupProblem) {
-    if (problem.kind === "skipped") {
-        return `Skipped · ${problem.reason}`;
-    }
-    const expected =
-        problem.bytesExpected === null
-            ? "unknown size"
-            : formatBytes(problem.bytesExpected);
-    return `Damaged · ${problem.reason} · ${formatBytes(problem.bytesWritten ?? 0)} of ${expected} written`;
-}
-
-export function formatTimestamp(epochMs: number) {
-    return new Date(epochMs).toLocaleString();
 }

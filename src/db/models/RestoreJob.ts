@@ -1,9 +1,6 @@
 import { BackupProblem } from "@/lib/types/backup-job-dto";
-import {
-    RestoreJobDto,
-    RestoreJobStatus,
-    UnrestoredFile
-} from "@/lib/types/restore-job-dto";
+import { JobStatus } from "@/lib/types/job-dto";
+import { RestoreJobDto, UnrestoredFile } from "@/lib/types/restore-job-dto";
 import {
     CreationOptional,
     DataTypes,
@@ -20,7 +17,7 @@ export class RestoreJob extends Model<
     InferCreationAttributes<RestoreJob>
 > {
     declare id: CreationOptional<string>;
-    declare status: RestoreJobStatus;
+    declare status: JobStatus;
     declare sourceId: string;
     declare sourceName: string;
     /** The zip it reads, resolved when the job was queued */

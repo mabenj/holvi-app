@@ -37,8 +37,7 @@ import {
 } from "../../../test/video-fixtures";
 import appConfig from "../common/app-config";
 import { UserFileSystem } from "../common/user-file-system";
-import { isActiveBackupJobStatus } from "../types/backup-job-dto";
-import { isActiveRestoreJobStatus } from "../types/restore-job-dto";
+import { isActiveJobStatus } from "../types/job-dto";
 import { BackupService } from "./backup.service";
 import { CollectionService } from "./collection.service";
 import { RestoreService } from "./restore.service";
@@ -494,7 +493,7 @@ describe("VideoProcessingService (integration)", () => {
         const started = await backups.start();
         const job = await waitFor(
             () => backups.getJob(started.id),
-            (job) => !isActiveBackupJobStatus(job.status)
+            (job) => !isActiveJobStatus(job.status)
         );
 
         expect(job.status).toBe("completed");
@@ -681,7 +680,7 @@ describe("VideoProcessingService (integration)", () => {
         );
         const bobsFinished = await waitFor(
             () => bobsRestores.getJob(bobsJob.id),
-            (job) => !isActiveRestoreJobStatus(job.status)
+            (job) => !isActiveJobStatus(job.status)
         );
         expect(bobsFinished.status).toBe("completed");
     });

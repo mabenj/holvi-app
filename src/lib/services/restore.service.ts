@@ -28,11 +28,10 @@ import {
 } from "./job-runner";
 import { ThumbnailResult, ThumbnailService } from "./thumbnail.service";
 import { VideoProcessingService } from "./video-processing.service";
-import { isCompletedBackupJobStatus } from "../types/backup-job-dto";
+import { isCompletedJobStatus, JobStatus } from "../types/job-dto";
 import {
     RestoreInspection,
     RestoreJobDto,
-    RestoreJobStatus,
     RestoreSourceDto,
     RestoreSources,
     RestoreSummary,
@@ -388,7 +387,7 @@ export class RestoreService {
         const jobs = await db.models.BackupJob.findAll({
             where: { UserId: this.userId, zipFileName: { [Op.ne]: null } }
         });
-        const job = jobs.find((job) => isCompletedBackupJobStatus(job.status));
+        const job = jobs.find((job) => isCompletedJobStatus(job.status));
         if (!job?.zipFileName) {
             return null;
         }
@@ -730,7 +729,7 @@ async function finishCompletedJob(
     // Not awaited: both carry on after the Restore job
     ThumbnailService.kick();
     VideoProcessingService.kick();
-    const status: RestoreJobStatus =
+    const status: JobStatus =
         unrestoredFiles.length > 0 ? "completedWithErrors" : "completed";
     await updateJob(jobId, {
         status,

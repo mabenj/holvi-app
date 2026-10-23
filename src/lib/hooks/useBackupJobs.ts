@@ -1,6 +1,6 @@
 import useSWR from "swr";
 import { BACKUP_JOBS_URL, getBackupJobs } from "../client/backups";
-import { isActiveBackupJobStatus } from "../types/backup-job-dto";
+import { isActiveJobStatus } from "../types/job-dto";
 
 const POLL_INTERVAL_MS = 2_000;
 
@@ -14,7 +14,7 @@ export function useBackupJobs() {
         getBackupJobs,
         {
             refreshInterval: (latest) =>
-                latest?.some((job) => isActiveBackupJobStatus(job.status))
+                latest?.some((job) => isActiveJobStatus(job.status))
                     ? POLL_INTERVAL_MS
                     : 0
         }
@@ -22,8 +22,8 @@ export function useBackupJobs() {
     const jobs = data ?? [];
     return {
         jobs,
-        activeJob: jobs.find((job) => isActiveBackupJobStatus(job.status)),
-        history: jobs.filter((job) => !isActiveBackupJobStatus(job.status)),
+        activeJob: jobs.find((job) => isActiveJobStatus(job.status)),
+        history: jobs.filter((job) => !isActiveJobStatus(job.status)),
         error: error as Error | undefined,
         isLoading,
         refresh: mutate

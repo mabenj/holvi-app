@@ -1,17 +1,5 @@
 import { BackupProblem } from "./backup-job-dto";
-
-export type RestoreJobStatus =
-    | "queued"
-    | "running"
-    | "completed"
-    | "completedWithErrors"
-    | "failed"
-    | "cancelled";
-
-/** Whether a Restore job with this status is still waiting or running */
-export function isActiveRestoreJobStatus(status: RestoreJobStatus) {
-    return status === "queued" || status === "running";
-}
+import { JobProgress, JobStatus } from "./job-dto";
 
 /** A file of a Backup whose content did not match its metadata, so the Restore job left it out */
 export interface UnrestoredFile {
@@ -24,7 +12,7 @@ export interface UnrestoredFile {
 
 export interface RestoreJobDto {
     id: string;
-    status: RestoreJobStatus;
+    status: JobStatus;
     /** The source it restores from, as listed by the user's restore sources */
     sourceId: string;
     /** The zip's file name */
@@ -32,15 +20,7 @@ export interface RestoreJobDto {
     queuedAt: number;
     startedAt: number | null;
     finishedAt: number | null;
-    progress: {
-        collectionsDone: number;
-        collectionsTotal: number;
-        filesDone: number;
-        filesTotal: number;
-        bytesDone: number;
-        bytesTotal: number;
-        currentFileName: string | null;
-    };
+    progress: JobProgress;
     unrestoredFiles: UnrestoredFile[];
     /** The Backup's own Problem files, which it holds no whole copy of */
     problems: BackupProblem[];

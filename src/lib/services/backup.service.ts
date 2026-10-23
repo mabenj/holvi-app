@@ -27,12 +27,8 @@ import {
     ProgressSaver,
     throwIfAborted
 } from "./job-runner";
-import {
-    BackupJobDto,
-    BackupJobStatus,
-    BackupProblem,
-    isCompletedBackupJobStatus
-} from "../types/backup-job-dto";
+import { BackupJobDto, BackupProblem } from "../types/backup-job-dto";
+import { isCompletedJobStatus, JobStatus } from "../types/job-dto";
 
 /** Version 2 adds each collection's Chosen cover, Open count and Last opened */
 const BACKUP_FORMAT_VERSION = 2;
@@ -231,7 +227,7 @@ export class BackupService {
     /** Locates a completed job's backup zip for download */
     async openDownload(jobId: string): Promise<BackupDownload> {
         const job = await this.findUserJob(jobId);
-        if (!isCompletedBackupJobStatus(job.status) || !job.zipFileName) {
+        if (!isCompletedJobStatus(job.status) || !job.zipFileName) {
             throw new NotFoundError(
                 `Backup job '${jobId}' has no backup to download`
             );
@@ -253,7 +249,7 @@ export class BackupService {
      */
     async deleteBackup(jobId: string): Promise<BackupJobDto> {
         const job = await this.findUserJob(jobId);
-        if (!isCompletedBackupJobStatus(job.status) || !job.zipFileName) {
+        if (!isCompletedJobStatus(job.status) || !job.zipFileName) {
             throw new NotFoundError(
                 `Backup job '${jobId}' has no backup to delete`
             );
@@ -716,7 +712,7 @@ async function writeBackupZip(
     signal: AbortSignal
 ): Promise<{
     finishedAt: Date;
-    outcome: BackupJobStatus;
+    outcome: JobStatus;
     problems: BackupProblem[];
 }> {
     const output = openZipOutput(partialZipPath);
@@ -869,7 +865,7 @@ async function writeBackupZip(
         }
 
         const finishedAt = new Date();
-        const outcome: BackupJobStatus =
+        const outcome: JobStatus =
             problems.length > 0 ? "completedWithErrors" : "completed";
         const manifest = {
             formatVersion: BACKUP_FORMAT_VERSION,

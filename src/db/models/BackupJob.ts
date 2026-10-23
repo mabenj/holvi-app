@@ -1,8 +1,5 @@
-import {
-    BackupJobDto,
-    BackupJobStatus,
-    BackupProblem
-} from "@/lib/types/backup-job-dto";
+import { BackupJobDto, BackupProblem } from "@/lib/types/backup-job-dto";
+import { JobStatus } from "@/lib/types/job-dto";
 import {
     CreationOptional,
     DataTypes,
@@ -19,7 +16,7 @@ export class BackupJob extends Model<
     InferCreationAttributes<BackupJob>
 > {
     declare id: CreationOptional<string>;
-    declare status: BackupJobStatus;
+    declare status: JobStatus;
     declare queuedAt: Date;
     declare startedAt: CreationOptional<Date | null>;
     declare finishedAt: CreationOptional<Date | null>;

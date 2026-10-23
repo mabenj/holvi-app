@@ -37,7 +37,7 @@ import appConfig from "../common/app-config";
 import { ByteRange, parseByteRange } from "../common/byte-range";
 import { NotFoundError } from "../common/errors";
 import { UserFileSystem } from "../common/user-file-system";
-import { isActiveBackupJobStatus } from "../types/backup-job-dto";
+import { isActiveJobStatus } from "../types/job-dto";
 import { BackupFileRef, BackupService } from "./backup.service";
 
 function sha256(data: Buffer) {
@@ -48,7 +48,7 @@ async function runBackup(service: BackupService) {
     const started = await service.start();
     return waitFor(
         () => service.getJob(started.id),
-        (job) => !isActiveBackupJobStatus(job.status)
+        (job) => !isActiveJobStatus(job.status)
     );
 }
 
@@ -431,7 +431,7 @@ describe("BackupService (integration)", () => {
         opener.release();
         const job = await waitFor(
             () => service.getJob(started.id),
-            (current) => !isActiveBackupJobStatus(current.status)
+            (current) => !isActiveJobStatus(current.status)
         );
 
         expect(job.status).toBe("completed");
@@ -493,7 +493,7 @@ describe("BackupService (integration)", () => {
         opener.release();
         const finished = await waitFor(
             () => service.getJob(started.id),
-            (job) => !isActiveBackupJobStatus(job.status)
+            (job) => !isActiveJobStatus(job.status)
         );
 
         expect(finished.status).toBe("completed");
@@ -1102,7 +1102,7 @@ describe("BackupService (integration)", () => {
             opener.release();
             const job = await waitFor(
                 () => service.getJob(started.id),
-                (current) => !isActiveBackupJobStatus(current.status)
+                (current) => !isActiveJobStatus(current.status)
             );
 
             expect(job.status).toBe("completedWithErrors");
@@ -1160,7 +1160,7 @@ describe("BackupService (integration)", () => {
             opener.release();
             const job = await waitFor(
                 () => service.getJob(started.id),
-                (current) => !isActiveBackupJobStatus(current.status)
+                (current) => !isActiveJobStatus(current.status)
             );
 
             expect(job.status).toBe("completedWithErrors");
@@ -1297,7 +1297,7 @@ describe("BackupService (integration)", () => {
         async function waitUntilFinished(service: BackupService, jobId: string) {
             return waitFor(
                 () => service.getJob(jobId),
-                (job) => !isActiveBackupJobStatus(job.status)
+                (job) => !isActiveJobStatus(job.status)
             );
         }
 
@@ -1454,7 +1454,7 @@ describe("BackupService (integration)", () => {
             opener.release();
             const aliceJob = await waitFor(
                 () => aliceService.getJob(aliceStarted.id),
-                (job) => !isActiveBackupJobStatus(job.status)
+                (job) => !isActiveJobStatus(job.status)
             );
             expect(aliceJob.status).toBe("completed");
             // Give a wrongly started job time to show up
@@ -1506,7 +1506,7 @@ describe("BackupService (integration)", () => {
                 );
                 const bobJob = await waitFor(
                     () => bobService.getJob(bobQueued.id),
-                    (job) => !isActiveBackupJobStatus(job.status)
+                    (job) => !isActiveJobStatus(job.status)
                 );
                 expect(bobJob.status).toBe("completed");
                 expect((await aliceService.getJob(started.id)).status).toBe("cancelled");
@@ -1538,7 +1538,7 @@ describe("BackupService (integration)", () => {
             opener.release();
             const job = await waitFor(
                 () => aliceService.getJob(started.id),
-                (current) => !isActiveBackupJobStatus(current.status)
+                (current) => !isActiveJobStatus(current.status)
             );
             expect(job.status).toBe("completed");
         });
@@ -1638,11 +1638,11 @@ describe("BackupService (integration)", () => {
             const carolService = new BackupService(carol.id);
             const bobJob = await waitFor(
                 () => bobService.getJob(bobQueued.id),
-                (job) => !isActiveBackupJobStatus(job.status)
+                (job) => !isActiveJobStatus(job.status)
             );
             const carolJob = await waitFor(
                 () => carolService.getJob(carolQueued.id),
-                (job) => !isActiveBackupJobStatus(job.status)
+                (job) => !isActiveJobStatus(job.status)
             );
             expect(bobJob.status).toBe("completed");
             expect(carolJob.status).toBe("completed");

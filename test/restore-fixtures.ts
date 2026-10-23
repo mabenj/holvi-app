@@ -2,7 +2,7 @@ import appConfig from "@/lib/common/app-config";
 import { BackupService } from "@/lib/services/backup.service";
 import { EntryCopy } from "@/lib/services/restore.service";
 import { Readable } from "stream";
-import { isActiveBackupJobStatus } from "@/lib/types/backup-job-dto";
+import { isActiveJobStatus } from "@/lib/types/job-dto";
 import archiver from "archiver";
 import { createWriteStream } from "fs";
 import { copyFile, mkdir, rm } from "fs/promises";
@@ -22,7 +22,7 @@ export async function makeBackup(
     const started = await service.start();
     const job = await waitFor(
         () => service.getJob(started.id),
-        (job) => !isActiveBackupJobStatus(job.status)
+        (job) => !isActiveJobStatus(job.status)
     );
     const { filePath } = await service.openDownload(job.id);
     return filePath;
