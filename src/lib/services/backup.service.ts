@@ -28,7 +28,8 @@ import {
     isCompletedBackupJobStatus
 } from "../types/backup-job-dto";
 
-const BACKUP_FORMAT_VERSION = 1;
+/** Version 2 adds each collection's Chosen cover, Open count and Last opened */
+const BACKUP_FORMAT_VERSION = 2;
 const PROGRESS_SAVE_INTERVAL_MS = 1_000;
 const MEBIBYTE = 1_024 * 1_024;
 /** Local and central directory headers of one entry, with ZIP64 fields and a long path */
@@ -1125,6 +1126,12 @@ function toCollectionMetadata(
         description: collection.description ?? null,
         createdAt: toIsoString(collection.createdAt),
         updatedAt: toIsoString(collection.updatedAt),
+        // Null for a Rotating cover, including a Chosen cover whose file is gone
+        coverFileId: files.some((file) => file.id === collection.coverFileId)
+            ? collection.coverFileId
+            : null,
+        openCount: collection.openCount,
+        lastOpened: toIsoString(collection.lastOpened),
         tags: toTagNames(collection.Tags),
         files
     };
