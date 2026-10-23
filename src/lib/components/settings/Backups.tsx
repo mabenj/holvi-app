@@ -196,7 +196,7 @@ function ActiveJob({
             </Flex>
             {job.status === "queued" ? (
                 <Text textStyle="sm" color="fg.muted">
-                    Only one backup runs on the server at a time. This one
+                    Only one backup runs on the instance at a time. This one
                     starts when the ones ahead of it have finished.
                 </Text>
             ) : (

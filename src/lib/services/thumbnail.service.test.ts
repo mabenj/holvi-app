@@ -10,7 +10,7 @@ import {
     listFiles,
     waitFor
 } from "../../../test/fixtures";
-import { resetDatabase } from "../../../test/database";
+import { getTestDatabase, resetDatabase } from "../../../test/database";
 import { pngImage } from "../../../test/upload-fixtures";
 import {
     addVideo,
@@ -121,15 +121,13 @@ describe("ThumbnailService (integration)", () => {
         const status = await makeThumbnails(service);
 
         expect(status).toEqual({ pending: 0, failed: 2 });
-        const failed = await service.getFailedThumbnails();
-        expect(
-            failed.map(({ id, collectionId, name }) => ({ id, collectionId, name }))
-        ).toEqual([
-            { id: notAnImage.id, collectionId: trip.id, name: "broken.jpg" },
-            { id: unscreenshottable.id, collectionId: trip.id, name: "broken.mp4" }
-        ]);
-        for (const { error } of failed) {
-            expect(error).toEqual(expect.any(String));
+        // Recorded on the file, for the operator to find
+        const db = await getTestDatabase();
+        for (const broken of [notAnImage, unscreenshottable]) {
+            expect(await db.models.CollectionFile.findByPk(broken.id)).toMatchObject({
+                thumbnailStatus: "failed",
+                thumbnailError: expect.any(String)
+            });
         }
         const collections = new CollectionService(user.id);
         const blur = Buffer.from(blurDataUrl.split(",")[1], "base64");
@@ -145,6 +143,31 @@ describe("ThumbnailService (integration)", () => {
             false
         );
         expect(await readdir(STAGING_DIR).catch(() => [])).toEqual([]);
+    });
+
+    it("serves a neutral placeholder for a file with neither a thumbnail nor a blur placeholder", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const collections = new CollectionService(user.id);
+        for (const thumbnailStatus of ["pending", "failed"] as const) {
+            const file = await addFile(
+                user.id,
+                trip.id,
+                `${thumbnailStatus}.png`,
+                await pngImage(),
+                { mimeType: "image/png", thumbnailStatus, blurDataUrl: null }
+            );
+
+            const thumbnail = await collections.getThumbnail(trip.id, file.id);
+
+            expect(thumbnail).toMatchObject({
+                placeholder: true,
+                mimeType: "image/png"
+            });
+            expect(await sharp(thumbnail.file).metadata()).toMatchObject({
+                format: "png"
+            });
+        }
     });
 
     it("deletes a file whose thumbnail was never made", async () => {

@@ -41,6 +41,12 @@ export type {
   FileSort,
 } from "./file-browsing";
 
+/** A transparent 1×1 PNG, served for a file with neither a ready thumbnail nor a blur placeholder */
+const NEUTRAL_PLACEHOLDER = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+  "base64"
+);
+
 /** A saved collection's id, or why its name was rejected */
 type SaveResult = { id: string; nameError?: never } | { id?: never; nameError: string };
 
@@ -323,7 +329,8 @@ export class CollectionService {
 
   /**
    * A file's thumbnail, or its blur placeholder while its thumbnail is not
-   * ready: still pending, or failed
+   * ready: still pending, or failed. One without a blur placeholder gets a
+   * neutral one.
    */
   async getThumbnail(
     collectionId: string,
@@ -338,12 +345,9 @@ export class CollectionService {
       const blur = /^data:([^;,]+);base64,(.*)$/.exec(
         fileInfo.blurDataUrl ?? ""
       );
-      if (!blur) {
-        throw new NotFoundError(`File '${fileId}' has no thumbnail yet`);
-      }
       return {
-        mimeType: blur[1],
-        file: Buffer.from(blur[2], "base64"),
+        mimeType: blur?.[1] ?? "image/png",
+        file: blur ? Buffer.from(blur[2], "base64") : NEUTRAL_PLACEHOLDER,
         filename,
         placeholder: true,
       };

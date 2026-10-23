@@ -20,10 +20,10 @@ import {
 } from "../../../test/fixtures";
 import {
     clearRestoreDir,
-    corruptEntries,
     createHoldingCopy,
     deleteAllContent,
     editJson,
+    flipFirstByte,
     makeBackup,
     placeInRestoreFolder,
     releaseHoldingCopies,
@@ -292,6 +292,31 @@ describe("RestoreService (integration)", () => {
             });
             expect(restored.files).toHaveLength(2);
         });
+
+        it("restores none of a Chosen cover that names a file of another collection", async () => {
+            const user = await createUser("alice");
+            const { holiday } = await createOpenedCollectionWithCover(user.id);
+            const pets = await createCollection(user.id, "Pets");
+            const cat = await addFile(user.id, pets.id, "cat.jpg", crypto.randomBytes(500));
+            const zipPath = await makeBackup(user.id);
+            const editedPath = await rewriteZip(zipPath, `${zipPath}.edited`, (name, data) =>
+                name.startsWith("metadata/")
+                    ? editJson(data, (collection) =>
+                          collection.id === holiday.id
+                              ? { ...collection, coverFileId: cat.id }
+                              : collection
+                      )
+                    : data
+            );
+            await placeInRestoreFolder("alice", editedPath);
+            await deleteAllContent(user.id);
+
+            const job = await runRestore(new RestoreService(user.id), "backup.zip");
+
+            expect(job.status).toBe("completed");
+            const library = await readLibrary(user.id);
+            expect(library.find(({ id }) => id === holiday.id)?.coverFileId).toBeNull();
+        });
     });
 
     it("shows nothing of the Restore in the account while the job runs, reporting progress, and everything once it completes", async () => {
@@ -448,16 +473,17 @@ describe("RestoreService (integration)", () => {
             );
         });
 
-        it("gives an empty list with a hint when the user's folder does not exist", async () => {
+        it("gives an empty list with a hint naming the user's folder, without revealing paths on the server, when the folder does not exist", async () => {
             const user = await createUser("alice");
 
-            const { sources, folder, hint } = await new RestoreService(
-                user.id
-            ).listSources();
+            const listed = await new RestoreService(user.id).listSources();
 
-            expect(sources).toEqual([]);
-            expect(folder).toBe(path.join(appConfig.restoreDir, "alice"));
-            expect(hint).toContain(folder);
+            expect(listed).toMatchObject({
+                sources: [],
+                folderName: "alice",
+                hint: expect.stringContaining("'alice'")
+            });
+            expect(JSON.stringify(listed)).not.toContain(appConfig.restoreDir);
         });
 
         it("restores from the Current backup", async () => {
@@ -975,6 +1001,48 @@ describe("RestoreService (integration)", () => {
             expect((await readLibrary(bob.id)).map(({ id }) => id)).toEqual([bobs.id]);
         });
 
+        it("completes a job left running after its library was inserted, keeping the library and its files", async () => {
+            const user = await createUser("alice");
+            const holiday = await createCollection(user.id, "Holiday");
+            await addFile(user.id, holiday.id, "a.jpg", crypto.randomBytes(1_000));
+            const mismatched = await addFile(
+                user.id,
+                holiday.id,
+                "b.jpg",
+                crypto.randomBytes(1_000)
+            );
+            await placeInRestoreFolder("alice", await makeBackup(user.id));
+            await deleteAllContent(user.id);
+            const service = new RestoreService(user.id, {
+                copyEntry: flipFirstByte([mismatched.id])
+            });
+            const completed = await runRestore(service, "backup.zip");
+            const library = await readLibrary(user.id);
+            const storedFiles = await listStoredFiles(user.id);
+            // The server stopped after the library was inserted, before the job was marked completed
+            const db = await getTestDatabase();
+            await db.models.RestoreJob.update(
+                { status: "running", finishedAt: null },
+                { where: { id: completed.id } }
+            );
+
+            await RestoreService.recover();
+
+            const resumed = await waitFor(
+                () => service.getJob(completed.id),
+                (job) => !isActiveRestoreJobStatus(job.status)
+            );
+            expect(resumed).toMatchObject({
+                status: "completedWithErrors",
+                errorMessage: null,
+                unrestoredFiles: completed.unrestoredFiles,
+                progress: completed.progress
+            });
+            expect(resumed.finishedAt).not.toBeNull();
+            expect(await readLibrary(user.id)).toEqual(library);
+            expect(await listStoredFiles(user.id)).toEqual(storedFiles);
+        });
+
         it("fails a job left running and deletes every file it wrote when its zip changed or disappeared meanwhile", async () => {
             const alice = await createUser("alice");
             const holiday = await createCollection(alice.id, "Holiday");
@@ -1173,20 +1241,20 @@ describe("RestoreService (integration)", () => {
                 await addFile(user.id, collection.id, `${i}.jpg`, crypto.randomBytes(1_000 + i))
             );
         }
-        const corrupted = [files[2], files[7]];
+        const mismatched = [files[2], files[7]];
         const before = await readLibrary(user.id);
         const zipPath = await placeInRestoreFolder("alice", await makeBackup(user.id));
         await deleteAllContent(user.id);
         const zipOrder = (await readZip(zipPath))
             .map(({ name }) => path.basename(name))
             .filter((name) => name.endsWith(".jpg"));
-        const corrupt = corruptEntries(corrupted.map(({ id }) => id));
+        const flip = flipFirstByte(mismatched.map(({ id }) => id));
         const { copyEntry: hold, release } = createHoldingCopy();
         const startedNames: string[] = [];
         const service = new RestoreService(user.id, {
             copyEntry: (entry, content) => {
                 startedNames.push(entry.name);
-                return hold(entry, corrupt(entry, content));
+                return hold(entry, flip(entry, content));
             }
         });
 
@@ -1207,22 +1275,22 @@ describe("RestoreService (integration)", () => {
         expect(startedWhileHeld.sort()).toEqual(zipOrder.slice(0, 4).sort());
         expect([...startedNames].sort()).toEqual([...zipOrder].sort());
         expect(job.status).toBe("completedWithErrors");
-        const corruptedInZipOrder = [...corrupted].sort(
+        const mismatchedInZipOrder = [...mismatched].sort(
             (a, b) => zipOrder.indexOf(a.name) - zipOrder.indexOf(b.name)
         );
         expect(job.unrestoredFiles).toEqual(
-            corruptedInZipOrder.map((file) => ({
+            mismatchedInZipOrder.map((file) => ({
                 fileId: file.id,
                 collectionId: file.CollectionId,
                 name: file.name,
                 reason: expect.stringContaining("checksum")
             }))
         );
-        const corruptedIds = corrupted.map(({ id }) => id);
+        const mismatchedIds = mismatched.map(({ id }) => id);
         expect(await readLibrary(user.id)).toEqual(
             before.map((collection) => ({
                 ...collection,
-                files: collection.files.filter(({ id }) => !corruptedIds.includes(id))
+                files: collection.files.filter(({ id }) => !mismatchedIds.includes(id))
             }))
         );
         expect(await listStoredFiles(user.id)).toHaveLength(8);
@@ -1244,7 +1312,7 @@ describe("RestoreService (integration)", () => {
             await placeInRestoreFolder("alice", await makeBackup(user.id));
             await deleteAllContent(user.id);
             const service = new RestoreService(user.id, {
-                copyEntry: corruptEntries([bad.id])
+                copyEntry: flipFirstByte([bad.id])
             });
 
             const job = await runRestore(service, "backup.zip");
@@ -1354,7 +1422,7 @@ describe("RestoreService (integration)", () => {
             await placeInRestoreFolder("alice", await makeBackup(user.id));
             await deleteAllContent(user.id);
             const service = new RestoreService(user.id, {
-                copyEntry: corruptEntries([cover.id, cat.id])
+                copyEntry: flipFirstByte([cover.id, cat.id])
             });
 
             const job = await runRestore(service, "backup.zip");

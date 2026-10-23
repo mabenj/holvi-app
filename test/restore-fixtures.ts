@@ -94,8 +94,8 @@ export function editJson(
     return Buffer.from(JSON.stringify(changed, null, 2));
 }
 
-/** A per-entry copy that flips the first byte of the given files, as a bit flip in the zip would */
-export function corruptEntries(fileIds: string[]): EntryCopy {
+/** A per-entry copy that flips the first byte of the given files, so their content no longer matches its checksum */
+export function flipFirstByte(fileIds: string[]): EntryCopy {
     return (entry, content) => {
         if (!fileIds.includes(entry.fileId)) {
             return content;

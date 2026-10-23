@@ -335,6 +335,10 @@ async function recoverInterruptedJobs() {
     let removedCount = 0;
     for (const userDir of userDirs.filter((entry) => entry.isDirectory())) {
         const dir = path.join(appConfig.backupDir, userDir.name);
+        // Inside the backup directory by default, but only ever read
+        if (path.resolve(dir) === path.resolve(appConfig.restoreDir)) {
+            continue;
+        }
         for (const fileName of await readdir(dir)) {
             if (fileName.endsWith(".partial")) {
                 await rm(path.join(dir, fileName), { force: true });

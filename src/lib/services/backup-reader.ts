@@ -150,7 +150,7 @@ export async function withBackup<T>(
 }
 
 /** When a Backup was taken, from its Manifest; null if it is not a readable Backup */
-export async function readSnapshotTime(zipPath: string) {
+export async function readTakenAt(zipPath: string) {
     try {
         const zip = await openZip(zipPath);
         try {

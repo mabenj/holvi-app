@@ -60,8 +60,8 @@ export interface RestoreSourceDto {
 
 export interface RestoreSources {
     sources: RestoreSourceDto[];
-    /** Where the operator places the user's Backups */
-    folder: string;
+    /** The name of the user's folder in the restore directory, where the operator places their Backups */
+    folderName: string;
     /** Set when the folder does not exist yet, saying what to ask the operator for */
     hint: string | null;
     /** Why no source can be restored right now, such as the account having collections */

@@ -1649,6 +1649,23 @@ describe("BackupService (integration)", () => {
             expect(carolJob.startedAt!).toBeGreaterThanOrEqual(bobJob.finishedAt!);
             expect(await listUserBackupDir(bob.id)).toEqual([bobJob.zipFileName]);
         });
+
+        it("leaves the restore directory alone, though by default it is inside the backup directory", async () => {
+            const placed = [
+                path.join(appConfig.restoreDir, "upload.zip.partial"),
+                path.join(appConfig.restoreDir, "alice", "backup.zip.partial")
+            ];
+            for (const filePath of placed) {
+                await mkdir(path.dirname(filePath), { recursive: true });
+                await writeFile(filePath, "placed by the operator");
+            }
+
+            await BackupService.recover();
+
+            for (const filePath of placed) {
+                expect(existsSync(filePath)).toBe(true);
+            }
+        });
     });
 
     it("lists a user's jobs latest first and hides them from other users", async () => {

@@ -18,14 +18,6 @@ export interface ThumbnailStatus {
     failed: number;
 }
 
-/** A file whose thumbnail could not be made; it shows its blur placeholder instead */
-export interface FailedThumbnail {
-    id: string;
-    collectionId: string;
-    name: string;
-    error: string | null;
-}
-
 /** A file whose thumbnail is to be made */
 export interface PendingFile {
     id: string;
@@ -80,20 +72,6 @@ export class ThumbnailService {
         const countOf = (status: string) =>
             counts.find((row) => row.status === status)?.count ?? 0;
         return { pending: countOf("pending"), failed: countOf("failed") };
-    }
-
-    /** The user's files whose thumbnail could not be made, oldest first, with the error each failed with */
-    async getFailedThumbnails(): Promise<FailedThumbnail[]> {
-        const db = await Database.getInstance();
-        return (await db.select(
-            `SELECT f.id, f."CollectionId" AS "collectionId", f.name,
-                    f."thumbnailError" AS error
-                FROM "CollectionFiles" f
-                JOIN "Collections" c ON c.id = f."CollectionId"
-                WHERE c."UserId" = :userId AND f."thumbnailStatus" = 'failed'
-                ORDER BY f."createdAt", f.id`,
-            { userId: this.userId }
-        )) as FailedThumbnail[];
     }
 
     /** Starts the worker on files whose thumbnail is pending, such as files just restored */

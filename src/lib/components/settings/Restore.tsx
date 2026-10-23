@@ -114,8 +114,8 @@ export default function Restore() {
             <Text textStyle="sm" color="fg.muted">
                 A Restore brings the collections and files of a Backup back
                 into your account, with their tags, Covers and dates. The
-                Backup must already be on the server: your Current backup, or a
-                zip the operator placed in your folder.
+                Backup must already be on this instance: your Current backup,
+                or a zip the operator placed in your folder.
             </Text>
             {error && (
                 <Text textStyle="sm" color="fg.error">
@@ -139,7 +139,7 @@ export default function Restore() {
                     {sources && sources.sources.length === 0 && (
                         <Text textStyle="sm" color="fg.muted">
                             {sources.hint ??
-                                `No Backups to restore from. Ask the operator to place your Backup zip in '${sources.folder}'.`}
+                                `No Backups to restore from. Ask the operator to place your Backup zip in your folder, '${sources.folderName}', in the restore directory.`}
                         </Text>
                     )}
                     {sources && sources.sources.length > 0 && (
@@ -342,7 +342,7 @@ function ActiveJob({
             </Flex>
             {job.status === "queued" ? (
                 <Text textStyle="sm" color="fg.muted">
-                    Only one Restore runs on the server at a time. This one
+                    Only one Restore runs on the instance at a time. This one
                     starts when the ones ahead of it have finished.
                 </Text>
             ) : (

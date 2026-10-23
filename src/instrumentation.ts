@@ -10,8 +10,8 @@ export async function register() {
         const { RestoreService } = await import(
             "./lib/services/restore.service"
         );
-        // Fails Restore jobs left running and deletes what they wrote, then
-        // runs queued ones. Failures are logged by the service.
+        // Continues Restore jobs left running where they left off, then runs
+        // queued ones. Failures are logged by the service.
         await RestoreService.recover().catch(() => {});
         const { VideoProcessingService } = await import(
             "./lib/services/video-processing.service"

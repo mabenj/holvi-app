@@ -17,7 +17,7 @@ import {
     BackupContents,
     IncludedFile,
     readBackup,
-    readSnapshotTime,
+    readTakenAt,
     withBackup
 } from "./backup-reader";
 import {
@@ -169,12 +169,13 @@ export class RestoreService {
         const unavailableReason = await checkNoCollections(this.userId, db)
             .then(() => null)
             .catch((error: Error) => error.message);
+        const folderName = path.basename(folder);
         return {
             sources,
-            folder,
+            folderName,
             hint: folderExists
                 ? null
-                : `Your folder for Backups does not exist yet. Ask the operator of this Holvi instance to place your Backup zip in '${folder}'.`,
+                : `Your folder for Backups does not exist yet. Ask the operator of this Holvi instance to place your Backup zip in a folder named '${folderName}' in the restore directory.`,
             unavailableReason
         };
     }
@@ -374,7 +375,7 @@ export class RestoreService {
                         kind: "placed",
                         fileName,
                         sizeBytes: stats.size,
-                        takenAt: (await readSnapshotTime(zipPath))?.getTime() ?? null
+                        takenAt: (await readTakenAt(zipPath))?.getTime() ?? null
                     }
                 });
             }
@@ -407,7 +408,7 @@ export class RestoreService {
                 kind: "current",
                 fileName: job.zipFileName,
                 sizeBytes: stats.size,
-                takenAt: (await readSnapshotTime(zipPath))?.getTime() ?? null
+                takenAt: (await readTakenAt(zipPath))?.getTime() ?? null
             }
         };
     }
@@ -606,9 +607,13 @@ async function removePartialFiles(userId: string, collectionIds: string[]) {
 /**
  * Deletes everything a job wrote: the directories of the Backup's
  * collections, which nothing else on the instance can have, since a Restore
- * starts only if none of its collections exist.
+ * starts only if none of its collections exist. Once the job's library is in
+ * the database, its files are kept.
  */
 async function removeWrittenFiles(userId: string, collectionIds: string[]) {
+    if (await isLibraryInserted(userId, collectionIds)) {
+        return;
+    }
     for (const collectionId of collectionIds) {
         await rm(path.join(appConfig.dataDir, userId, collectionId), {
             recursive: true,
@@ -645,6 +650,12 @@ async function runRestoreJob(
     let unrestoredFiles: UnrestoredFile[] | null = null;
     try {
         throwIfAborted(signal);
+        if (await isLibraryInserted(job.UserId, job.collectionIds)) {
+            // Interrupted by a restart after the insert, before being marked completed
+            unrestoredFiles = job.unrestoredFiles;
+            await finishCompletedJob(job.id, unrestoredFiles);
+            return;
+        }
         await checkSourceUnchanged(job);
         await withBackup(job.zipPath, async (backup, zip) => {
             await updateJob(job.id, {
@@ -671,18 +682,19 @@ async function runRestoreJob(
             );
             await progressSaver.stop();
             throwIfAborted(signal);
+            progress.currentFileName = null;
+            // Saved before the insert, so a job interrupted right after it can still be completed
+            await updateJob(job.id, { ...progress, unrestoredFiles: unrestored });
             await insertLibrary(job.UserId, backup, unrestored, thumbnails);
             unrestoredFiles = unrestored;
         });
-        await finishCompletedJob(job.id, progress, unrestoredFiles!);
+        await finishCompletedJob(job.id, unrestoredFiles!);
     } catch (error) {
         await progressSaver.stop();
         if (unrestoredFiles) {
             // The library is in the account: the job completed, whatever failed after
             logger.error(`Could not finish Restore job '${job.id}'`, error);
-            await finishCompletedJob(job.id, progress, unrestoredFiles).catch(
-                () => {}
-            );
+            await finishCompletedJob(job.id, unrestoredFiles).catch(() => {});
             return;
         }
         // Thumbnails being made would otherwise land after their files are deleted
@@ -713,7 +725,6 @@ async function runRestoreJob(
 /** Records a job whose library is in the account, and starts the background work its files need */
 async function finishCompletedJob(
     jobId: string,
-    progress: CopyProgress,
     unrestoredFiles: UnrestoredFile[]
 ) {
     // Not awaited: both carry on after the Restore job
@@ -722,7 +733,6 @@ async function finishCompletedJob(
     const status: RestoreJobStatus =
         unrestoredFiles.length > 0 ? "completedWithErrors" : "completed";
     await updateJob(jobId, {
-        ...progress,
         status,
         finishedAt: new Date(),
         currentFileName: null,
@@ -731,6 +741,15 @@ async function finishCompletedJob(
     logger.info(
         `Restore job '${jobId}' ${status} (${unrestoredFiles.length} unrestored files)`
     );
+}
+
+/** Whether the job's library is in the database: inserted all at once, and none of it existed when the job started */
+async function isLibraryInserted(userId: string, collectionIds: string[]) {
+    const db = await Database.getInstance();
+    const inserted = await db.models.Collection.count({
+        where: { id: collectionIds, UserId: userId }
+    });
+    return inserted > 0;
 }
 
 /** Fails the job if its zip is gone or changed since the job was queued, so a Restore never mixes two Backups */
@@ -938,8 +957,8 @@ async function flushToDisk(filePath: string) {
 /**
  * Inserts every collection, restored file, tag and link in one transaction,
  * with their original ids and timestamps, so the whole library appears at
- * once. Chosen covers whose file did not come back are cleared. Files whose
- * thumbnail was made during the job are inserted with it.
+ * once. Chosen covers that are not one of the collection's own restored files
+ * are cleared. Files whose thumbnail was made during the job are inserted with it.
  */
 async function insertLibrary(
     userId: string,
@@ -951,7 +970,9 @@ async function insertLibrary(
     const restoredFiles = includedFiles.filter(
         ({ metadata }) => !unrestoredIds.has(metadata.id)
     );
-    const restoredIds = new Set(restoredFiles.map(({ metadata }) => metadata.id));
+    const restoredCollectionIds = new Map(
+        restoredFiles.map(({ collectionId, metadata }) => [metadata.id, collectionId])
+    );
     const db = await Database.getInstance();
     const transaction = await db.transaction();
     try {
@@ -975,7 +996,8 @@ async function insertLibrary(
                     updatedAt: new Date(collection.updatedAt),
                     coverFileId:
                         collection.coverFileId &&
-                        restoredIds.has(collection.coverFileId)
+                        restoredCollectionIds.get(collection.coverFileId) ===
+                            collection.id
                             ? collection.coverFileId
                             : null,
                     openCount: collection.openCount,
