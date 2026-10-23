@@ -26,11 +26,29 @@ export interface FailedThumbnail {
     error: string | null;
 }
 
-interface PendingFile {
+/** A file whose thumbnail is to be made */
+export interface PendingFile {
     id: string;
     collectionId: string;
     userId: string;
     mimeType: string;
+}
+
+/** The outcome of making one thumbnail, as recorded on its file */
+export type ThumbnailResult =
+    | {
+          thumbnailStatus: "ready";
+          thumbnailError: null;
+          thumbnailWidth: number;
+          thumbnailHeight: number;
+      }
+    | { thumbnailStatus: "failed"; thumbnailError: string };
+
+/** A file handed over before its row exists, waiting for a free lane */
+interface HandedOverFile {
+    file: PendingFile;
+    signal: AbortSignal;
+    resolve: (result: ThumbnailResult | null) => void;
 }
 
 /** Where the worker stages each file's plaintext while making its thumbnail; only ever holds files in progress */
@@ -84,6 +102,20 @@ export class ThumbnailService {
     }
 
     /**
+     * Makes the thumbnail of a file that is in storage but whose row does not
+     * exist yet, such as a file a Restore job has just written, ahead of
+     * pending files. Resolves with the result, which is also recorded on the
+     * file if its row exists by then, or with null if `signal` aborted before
+     * it started.
+     */
+    static makeEarly(
+        file: PendingFile,
+        signal: AbortSignal
+    ): Promise<ThumbnailResult | null> {
+        return getWorker().makeEarly(file, signal);
+    }
+
+    /**
      * Run once on server start: empties the directory where a previous process
      * staged plaintext and resumes the pending thumbnails. Resolves once
      * recovery is done.
@@ -99,6 +131,10 @@ class ThumbnailWorker {
     private queueChanged = false;
     /** Each file being worked on, by id, until its thumbnail is recorded */
     private readonly inProgress = new Map<string, Promise<void>>();
+    /** Files handed over before their row exists, oldest first */
+    private readonly handedOver: HandedOverFile[] = [];
+    /** Lets a file handed over take a free lane without waiting for one in progress to finish */
+    private wakeUp = () => {};
     private recoveryRequests: {
         resolve: () => void;
         reject: (error: unknown) => void;
@@ -110,6 +146,15 @@ class ThumbnailWorker {
         );
         this.kick();
         return recovered;
+    }
+
+    makeEarly(file: PendingFile, signal: AbortSignal) {
+        const result = new Promise<ThumbnailResult | null>((resolve) =>
+            this.handedOver.push({ file, signal, resolve })
+        );
+        this.wakeUp();
+        this.kick();
+        return result;
     }
 
     kick() {
@@ -138,24 +183,39 @@ class ThumbnailWorker {
         }
     }
 
-    /** Keeps every lane busy until no thumbnail is pending or in progress */
+    /** Keeps every lane busy until no thumbnail is handed over, pending or in progress */
     private async makePendingThumbnails() {
         for (;;) {
+            this.startHandedOver();
             const free = CONCURRENCY - this.inProgress.size;
             const next = free > 0 ? await this.findPending(free) : [];
             for (const file of next) {
-                this.inProgress.set(
-                    file.id,
-                    makeThumbnail(file).finally(() =>
-                        this.inProgress.delete(file.id)
-                    )
-                );
+                this.start(file.id, makePendingThumbnail(file));
             }
-            if (this.inProgress.size === 0) {
+            if (this.inProgress.size === 0 && this.handedOver.length === 0) {
                 return;
             }
-            await Promise.race(this.inProgress.values());
+            const woken = new Promise<void>((resolve) => (this.wakeUp = resolve));
+            await Promise.race([...Array.from(this.inProgress.values()), woken]);
         }
+    }
+
+    private startHandedOver() {
+        while (this.inProgress.size < CONCURRENCY && this.handedOver.length > 0) {
+            const { file, signal, resolve } = this.handedOver.shift()!;
+            if (signal.aborted || this.inProgress.has(file.id)) {
+                resolve(null);
+                continue;
+            }
+            this.start(file.id, makeEarlyThumbnail(file).then(resolve));
+        }
+    }
+
+    private start(fileId: string, making: Promise<void>) {
+        this.inProgress.set(
+            fileId,
+            making.finally(() => this.inProgress.delete(fileId))
+        );
     }
 
     private async findPending(limit: number) {
@@ -169,8 +229,13 @@ class ThumbnailWorker {
                 ORDER BY f."createdAt", f.id
                 LIMIT :limit`,
             {
+                // Handed over files too, which wait for a free lane.
                 // Never empty, which IN () would not accept
-                inProgress: [EMPTY_UUIDV4, ...Array.from(this.inProgress.keys())],
+                inProgress: [
+                    EMPTY_UUIDV4,
+                    ...Array.from(this.inProgress.keys()),
+                    ...this.handedOver.map(({ file }) => file.id)
+                ],
                 limit
             }
         )) as PendingFile[];
@@ -196,12 +261,41 @@ class ThumbnailWorker {
     }
 }
 
+/** Makes a pending file's thumbnail and records it; a thumbnail made for a file deleted meanwhile is deleted */
+async function makePendingThumbnail(file: PendingFile) {
+    const result = await makeThumbnail(file);
+    const recorded = await recordResult(file.id, result).catch((error) => {
+        logger.error(`Could not record the thumbnail of '${file.id}'`, error);
+        return true;
+    });
+    if (!recorded && result.thumbnailStatus === "ready") {
+        await deleteThumbnail(
+            new UserFileSystem(file.userId).getThumbnailPath(
+                file.collectionId,
+                file.id
+            )
+        );
+    }
+}
+
+/**
+ * Makes the thumbnail of a file whose row may not exist yet, and records it
+ * if the row exists by now, inserted pending while the thumbnail was made.
+ */
+async function makeEarlyThumbnail(file: PendingFile) {
+    const result = await makeThumbnail(file);
+    await recordResult(file.id, result).catch((error) =>
+        logger.error(`Could not record the thumbnail of '${file.id}'`, error)
+    );
+    return result;
+}
+
 /**
  * Decrypts the original to a temporary file in the data directory, makes its
- * thumbnail with the helper uploads use, encrypts it and moves it where
- * uploads store thumbnails, records the result and deletes the plaintext.
+ * thumbnail with the helper uploads use, encrypts it, moves it where uploads
+ * store thumbnails and deletes the plaintext. Failures are returned, not thrown.
  */
-async function makeThumbnail(file: PendingFile) {
+async function makeThumbnail(file: PendingFile): Promise<ThumbnailResult> {
     const workDir = path.join(appConfig.dataDir, THUMBNAILS_DIR_NAME, file.id);
     const fileSystem = new UserFileSystem(file.userId);
     const storedPath = fileSystem.getThumbnailPath(file.collectionId, file.id);
@@ -223,27 +317,18 @@ async function makeThumbnail(file: PendingFile) {
         await Cryptography.encryptFile(outputPath);
         await mkdir(path.dirname(storedPath), { recursive: true });
         await rename(outputPath, storedPath);
-        const recorded = await recordResult(file.id, {
+        return {
             thumbnailStatus: "ready",
             thumbnailError: null,
             thumbnailWidth,
             thumbnailHeight
-        });
-        if (!recorded) {
-            // Deleted while its thumbnail was being made
-            await deleteThumbnail(storedPath);
-        }
+        };
     } catch (error) {
         logger.error(`Could not make the thumbnail of '${file.id}'`, error);
-        await recordResult(file.id, {
+        return {
             thumbnailStatus: "failed",
             thumbnailError: getErrorMessage(error)
-        }).catch((updateError) =>
-            logger.error(
-                `Could not mark the thumbnail of '${file.id}' failed`,
-                updateError
-            )
-        );
+        };
     } finally {
         await rm(workDir, { recursive: true, force: true }).catch((error) =>
             logger.error(`Could not delete '${workDir}'`, error)
@@ -265,16 +350,8 @@ async function deleteThumbnail(storedPath: string) {
     }
 }
 
-/** Records a thumbnail's result; false if its file no longer exists or is no longer pending */
-async function recordResult(
-    fileId: string,
-    fields: {
-        thumbnailStatus: "ready" | "failed";
-        thumbnailError: string | null;
-        thumbnailWidth?: number;
-        thumbnailHeight?: number;
-    }
-) {
+/** Records a thumbnail's result; false if its file does not exist or is no longer pending */
+async function recordResult(fileId: string, fields: ThumbnailResult) {
     const db = await Database.getInstance();
     const [updated] = await db.models.CollectionFile.update(fields, {
         where: { id: fileId, thumbnailStatus: "pending" },

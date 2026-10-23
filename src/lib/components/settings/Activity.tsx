@@ -1,6 +1,7 @@
 import { formatBytes, plural } from "@/lib/common/utilities";
 import { useActivity } from "@/lib/hooks/useActivity";
 import { BackupJobDto } from "@/lib/types/backup-job-dto";
+import { RestoreJobDto } from "@/lib/types/restore-job-dto";
 import {
     isVideoProcessingActive,
     VideoProcessingStatus
@@ -8,6 +9,7 @@ import {
 import { Box, Flex, Progress, Spinner, Stack, Text } from "@chakra-ui/react";
 import {
     mdiArchiveArrowDownOutline,
+    mdiBackupRestore,
     mdiImageSyncOutline,
     mdiMovieCogOutline
 } from "@mdi/js";
@@ -42,7 +44,8 @@ export default function Activity() {
         );
     }
 
-    const { backupJob, videoProcessing, pendingThumbnails } = activity;
+    const { backupJob, restoreJob, videoProcessing, pendingThumbnails } =
+        activity;
     return (
         <Stack
             as="ul"
@@ -54,6 +57,7 @@ export default function Activity() {
             aria-label="Background work"
             aria-live="polite">
             {backupJob && <BackupActivity job={backupJob} />}
+            {restoreJob && <RestoreActivity job={restoreJob} />}
             {isVideoProcessingActive(videoProcessing) && (
                 <VideoProcessingActivity status={videoProcessing} />
             )}
@@ -97,6 +101,45 @@ function BackupActivity({ job }: { job: BackupJobDto }) {
         <ActivityItem
             icon={mdiArchiveArrowDownOutline}
             title="Backing up"
+            detail={`${progress.filesDone} of ${plural(
+                progress.filesTotal,
+                "file",
+                "files"
+            )} · ${formatBytes(progress.bytesDone)} of ${formatBytes(
+                progress.bytesTotal
+            )}`}
+            done={progress.bytesDone}
+            total={progress.bytesTotal}
+            currentFile={progress.currentFileName}
+        />
+    );
+}
+
+function RestoreActivity({ job }: { job: RestoreJobDto }) {
+    const { progress } = job;
+    if (job.status === "queued") {
+        return (
+            <ActivityItem
+                icon={mdiBackupRestore}
+                title="Restore queued"
+                detail="Starts when the restores ahead of it have finished"
+            />
+        );
+    }
+    if (progress.filesTotal === 0) {
+        // Running, but not done reading the Backup yet
+        return (
+            <ActivityItem
+                icon={mdiBackupRestore}
+                title="Restoring"
+                detail="Starting"
+            />
+        );
+    }
+    return (
+        <ActivityItem
+            icon={mdiBackupRestore}
+            title="Restoring"
             detail={`${progress.filesDone} of ${plural(
                 progress.filesTotal,
                 "file",

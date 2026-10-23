@@ -12,7 +12,7 @@ import { InferAttributes, Op, Transaction } from "sequelize";
 import { Readable } from "stream";
 import appConfig from "../common/app-config";
 import { UniqueSafeNames } from "../common/backup-paths";
-import { NotFoundError } from "../common/errors";
+import { InvalidArgumentError, NotFoundError } from "../common/errors";
 import Log, { LogColor } from "../common/log";
 import { UserFileSystem } from "../common/user-file-system";
 import {
@@ -116,14 +116,15 @@ export class BackupService {
 
     /**
      * Queues a backup job to run in the background and returns it immediately,
-     * or returns the user's job that is already queued or running.
+     * or returns the user's job that is already queued or running. Refused
+     * while the user's Restore job is queued or running.
      */
     async start(): Promise<BackupJobDto> {
         const db = await Database.getInstance();
         const transaction = await db.transaction();
         let job: BackupJob;
         try {
-            // Serialises starts per user, so concurrent requests cannot both create a job
+            // Serialises starts per user, Restore job starts included, so concurrent requests cannot both create a job
             await db.models.BackupJob.sequelize!.query(
                 "SELECT pg_advisory_xact_lock(hashtext(:userId))",
                 { replacements: { userId: this.userId }, transaction }
@@ -135,6 +136,17 @@ export class BackupService {
             if (activeJob) {
                 await transaction.commit();
                 return activeJob.toDto();
+            }
+            // A Backup of a half-restored account would be missing what the Restore has yet to bring back
+            const activeRestore = await db.models.RestoreJob.findOne({
+                attributes: ["id"],
+                where: { UserId: this.userId, status: ["queued", "running"] },
+                transaction
+            });
+            if (activeRestore) {
+                throw new InvalidArgumentError(
+                    "A Backup cannot start while your Restore job is queued or running"
+                );
             }
             job = await db.models.BackupJob.create(
                 {

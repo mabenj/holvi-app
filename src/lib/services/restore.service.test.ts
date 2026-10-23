@@ -3,6 +3,11 @@ import { mkdir, readFile, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { Readable } from "stream";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+    createHoldingOpener,
+    readZip,
+    releaseHoldingOpeners
+} from "../../../test/backup-fixtures";
 import { getTestDatabase, resetDatabase } from "../../../test/database";
 import {
     addFile,
@@ -29,11 +34,17 @@ import { addVideo } from "../../../test/video-fixtures";
 import appConfig from "../common/app-config";
 import { InvalidArgumentError, NotFoundError } from "../common/errors";
 import { UserFileSystem } from "../common/user-file-system";
+import { isActiveBackupJobStatus } from "../types/backup-job-dto";
 import { isActiveRestoreJobStatus } from "../types/restore-job-dto";
+import { BackupService } from "./backup.service";
 import { CollectionService } from "./collection.service";
 import { RestoreService } from "./restore.service";
 import { ThumbnailService } from "./thumbnail.service";
 import { VideoProcessingService } from "./video-processing.service";
+
+function sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 async function runRestore(service: RestoreService, sourceId: string) {
     const started = await service.start(sourceId);
@@ -110,6 +121,7 @@ describe("RestoreService (integration)", () => {
 
     afterEach(() => {
         releaseHoldingCopies();
+        releaseHoldingOpeners();
     });
 
     it("restores a Backup placed in the user's folder with the same ids and content", async () => {
@@ -657,56 +669,368 @@ describe("RestoreService (integration)", () => {
         });
     });
 
-    it("on server start, fails a job left running by a previous process, deletes the files it wrote and runs queued jobs", async () => {
-        const alice = await createUser("alice");
-        const bob = await createUser("bob");
-        const bobs = await createCollection(bob.id, "Bob's");
-        await addFile(bob.id, bobs.id, "b.jpg", crypto.randomBytes(1_000));
-        const bobZip = await placeInRestoreFolder("bob", await makeBackup(bob.id));
-        await deleteAllContent(bob.id);
-        const db = await getTestDatabase();
-        const leftCollectionId = crypto.randomUUID();
-        const leftDir = path.join(appConfig.dataDir, alice.id, leftCollectionId);
-        await mkdir(leftDir, { recursive: true });
-        await writeFile(path.join(leftDir, `${crypto.randomUUID()}.partial`), "x");
-        await writeFile(path.join(leftDir, crypto.randomUUID()), "x");
-        const zipStats = await stat(bobZip);
-        const interrupted = await db.models.RestoreJob.create({
-            UserId: alice.id,
-            status: "running",
-            queuedAt: new Date(Date.now() - 60_000),
-            sourceId: "alice.zip",
-            sourceName: "alice.zip",
-            zipPath: path.join(appConfig.restoreDir, "alice", "alice.zip"),
-            zipSizeBytes: 1,
-            zipModifiedAt: new Date(),
-            collectionIds: [leftCollectionId]
-        });
-        const queued = await db.models.RestoreJob.create({
-            UserId: bob.id,
-            status: "queued",
-            queuedAt: new Date(),
-            sourceId: "backup.zip",
-            sourceName: "backup.zip",
-            zipPath: bobZip,
-            zipSizeBytes: zipStats.size,
-            zipModifiedAt: zipStats.mtime,
-            collectionIds: [bobs.id]
+    describe("sharing the instance", () => {
+        async function placeBackupOf(username: string, fileCount = 1) {
+            const user = await createUser(username);
+            const collection = await createCollection(user.id, `${username}'s`);
+            for (let i = 0; i < fileCount; i++) {
+                await addFile(user.id, collection.id, `${i}.jpg`, crypto.randomBytes(1_000));
+            }
+            await placeInRestoreFolder(username, await makeBackup(user.id));
+            await deleteAllContent(user.id);
+            return { user, collection };
+        }
+
+        it("runs two users' Restore jobs one after the other, and lists past jobs latest first", async () => {
+            const alice = await placeBackupOf("alice");
+            const bob = await placeBackupOf("bob");
+            const { copyEntry, release, holding } = createHoldingCopy();
+            const alices = new RestoreService(alice.user.id, { copyEntry });
+            const bobs = new RestoreService(bob.user.id);
+            const alicesJob = await alices.start("backup.zip");
+            await holding;
+            const bobsJob = await bobs.start("backup.zip");
+            await sleep(500);
+            const bobsWhileAlicesRuns = await bobs.getJob(bobsJob.id);
+            release();
+            const bobsFinished = await waitFor(
+                () => bobs.getJob(bobsJob.id),
+                (job) => !isActiveRestoreJobStatus(job.status)
+            );
+            const alicesFinished = await alices.getJob(alicesJob.id);
+
+            expect(bobsWhileAlicesRuns.status).toBe("queued");
+            expect(alicesFinished.status).toBe("completed");
+            expect(bobsFinished.status).toBe("completed");
+            expect(bobsFinished.startedAt!).toBeGreaterThanOrEqual(alicesFinished.finishedAt!);
+            await deleteAllContent(alice.user.id);
+            const second = await runRestore(new RestoreService(alice.user.id), "backup.zip");
+            expect((await alices.getJobs()).map(({ id }) => id)).toEqual([
+                second.id,
+                alicesJob.id
+            ]);
         });
 
-        await RestoreService.recover();
+        it("does not wait behind another user's Backup job", async () => {
+            const alice = await placeBackupOf("alice");
+            const bob = await createUser("bob");
+            const bobsCollection = await createCollection(bob.id, "Bob's");
+            await addFile(bob.id, bobsCollection.id, "b.jpg", crypto.randomBytes(1_000));
+            const holding = createHoldingOpener();
+            const bobsBackups = new BackupService(bob.id, {
+                openDecryptedFile: holding.openDecryptedFile
+            });
+            const bobsBackup = await bobsBackups.start();
+            await waitFor(
+                () => bobsBackups.getJob(bobsBackup.id),
+                (job) => job.status === "running"
+            );
 
-        expect(await new RestoreService(alice.id).getJob(interrupted.id)).toMatchObject({
-            status: "failed",
-            errorMessage: expect.stringContaining("restarted")
+            const job = await runRestore(new RestoreService(alice.user.id), "backup.zip");
+
+            expect(job.status).toBe("completed");
+            expect((await bobsBackups.getJob(bobsBackup.id)).status).toBe("running");
+            holding.release();
+            await waitFor(
+                () => bobsBackups.getJob(bobsBackup.id),
+                (job) => !isActiveBackupJobStatus(job.status)
+            );
         });
-        expect(await listStoredFiles(alice.id)).toEqual([]);
-        const bobsJob = await waitFor(
-            () => new RestoreService(bob.id).getJob(queued.id),
-            (job) => !isActiveRestoreJobStatus(job.status)
-        );
-        expect(bobsJob.status).toBe("completed");
-        expect((await readLibrary(bob.id)).map(({ id }) => id)).toEqual([bobs.id]);
+
+        it("refuses to start the user's Backup while their Restore job is queued or running", async () => {
+            const alice = await placeBackupOf("alice");
+            const { copyEntry, release, holding } = createHoldingCopy();
+            const restores = new RestoreService(alice.user.id, { copyEntry });
+            const restoreJob = await restores.start("backup.zip");
+            await holding;
+            const backups = new BackupService(alice.user.id);
+
+            await expect(backups.start()).rejects.toThrow(InvalidArgumentError);
+            await expect(backups.start()).rejects.toThrow(
+                /Restore job is queued or running/
+            );
+            expect(await backups.getJobs()).toHaveLength(1);
+
+            release();
+            await waitFor(
+                () => restores.getJob(restoreJob.id),
+                (job) => !isActiveRestoreJobStatus(job.status)
+            );
+        });
+    });
+
+    describe("cancelling", () => {
+        it("stops a running job, waits until it has stopped, and leaves no files, thumbnails or rows behind", async () => {
+            const user = await createUser("alice");
+            const holiday = await createCollection(user.id, "Holiday");
+            const photos = [];
+            for (const colour of ["#ff0000", "#00ff00", "#0000ff", "#ffff00", "#00ffff", "#ff00ff"]) {
+                photos.push(
+                    await addFile(user.id, holiday.id, `${colour.slice(1)}.png`, await pngImage(colour), {
+                        mimeType: "image/png"
+                    })
+                );
+            }
+            const zipPath = await placeInRestoreFolder("alice", await makeBackup(user.id));
+            await deleteAllContent(user.id);
+            const lastName = (await readZip(zipPath))
+                .map(({ name }) => path.basename(name))
+                .filter((name) => name.endsWith(".png"))
+                .at(-1);
+            // The others land, and get their thumbnails, while the last is held
+            const { copyEntry: hold, holding } = createHoldingCopy();
+            const service = new RestoreService(user.id, {
+                copyEntry: (entry, content) =>
+                    entry.name === lastName ? hold(entry, content) : content
+            });
+            const started = await service.start("backup.zip");
+            await holding;
+            await waitFor(
+                () => service.getJob(started.id),
+                (job) => job.progress.filesDone >= 3
+            );
+
+            const cancelled = await service.cancel(started.id);
+
+            expect(cancelled).toMatchObject({
+                id: started.id,
+                status: "cancelled",
+                errorMessage: null
+            });
+            expect(cancelled.finishedAt).not.toBeNull();
+            expect(await readLibrary(user.id)).toEqual([]);
+            expect(
+                await listFiles(path.join(appConfig.dataDir, user.id)).catch(() => [])
+            ).toEqual([]);
+        });
+
+        it("cancels a queued job, which then never runs", async () => {
+            const blocker = await createUser("blocker");
+            const blockers = await createCollection(blocker.id, "Blocker");
+            await addFile(blocker.id, blockers.id, "x.jpg", crypto.randomBytes(1_000));
+            await placeInRestoreFolder("blocker", await makeBackup(blocker.id));
+            await deleteAllContent(blocker.id);
+            const user = await createUser("alice");
+            const holiday = await createCollection(user.id, "Holiday");
+            await addFile(user.id, holiday.id, "a.jpg", crypto.randomBytes(1_000));
+            await placeInRestoreFolder("alice", await makeBackup(user.id));
+            await deleteAllContent(user.id);
+            const { copyEntry, release, holding } = createHoldingCopy();
+            const blocking = await new RestoreService(blocker.id, { copyEntry }).start(
+                "backup.zip"
+            );
+            await holding;
+            const service = new RestoreService(user.id);
+            const queued = await service.start("backup.zip");
+
+            const cancelled = await service.cancel(queued.id);
+            release();
+            await waitFor(
+                () => new RestoreService(blocker.id).getJob(blocking.id),
+                (job) => !isActiveRestoreJobStatus(job.status)
+            );
+
+            expect(cancelled.status).toBe("cancelled");
+            expect((await service.getJob(queued.id)).status).toBe("cancelled");
+            expect(await readLibrary(user.id)).toEqual([]);
+            expect(await listStoredFiles(user.id)).toEqual([]);
+        });
+
+        it("returns a finished job unchanged, and refuses another user's job", async () => {
+            const user = await createUser("alice");
+            const holiday = await createCollection(user.id, "Holiday");
+            await addFile(user.id, holiday.id, "a.jpg", crypto.randomBytes(1_000));
+            await placeInRestoreFolder("alice", await makeBackup(user.id));
+            await deleteAllContent(user.id);
+            const bob = await createUser("bob");
+            const service = new RestoreService(user.id);
+            const finished = await runRestore(service, "backup.zip");
+
+            expect(await service.cancel(finished.id)).toEqual(finished);
+            await expect(new RestoreService(bob.id).cancel(finished.id)).rejects.toThrow(
+                NotFoundError
+            );
+            expect((await readLibrary(user.id)).map(({ id }) => id)).toEqual([holiday.id]);
+        });
+    });
+
+    describe("after a server restart", () => {
+        /** A Restore job row as a previous server process left it while running */
+        async function createInterruptedJob(
+            userId: string,
+            zipPath: string,
+            collectionIds: string[],
+            zipStats: { size: number; mtime: Date }
+        ) {
+            const db = await getTestDatabase();
+            return db.models.RestoreJob.create({
+                UserId: userId,
+                status: "running",
+                queuedAt: new Date(Date.now() - 60_000),
+                startedAt: new Date(Date.now() - 50_000),
+                sourceId: "backup.zip",
+                sourceName: "backup.zip",
+                zipPath,
+                zipSizeBytes: zipStats.size,
+                zipModifiedAt: zipStats.mtime,
+                collectionIds,
+                filesDone: 1
+            });
+        }
+
+        it("continues a job left running where it left off, completing with the same result as an uninterrupted one, before queued jobs", async () => {
+            const alice = await createUser("alice");
+            const holiday = await createCollection(alice.id, "Holiday", {
+                description: "Summer",
+                tags: ["summer"]
+            });
+            const pets = await createCollection(alice.id, "Pets");
+            const bytes = [1_000, 2_000, 3_000].map((size) => crypto.randomBytes(size));
+            const a = await addFile(alice.id, holiday.id, "a.jpg", bytes[0], { tags: ["sea"] });
+            const b = await addFile(alice.id, holiday.id, "b.jpg", bytes[1]);
+            const c = await addFile(alice.id, pets.id, "c.jpg", bytes[2]);
+            const before = await readLibrary(alice.id);
+            const zipPath = await placeInRestoreFolder("alice", await makeBackup(alice.id));
+            // a.jpg was renamed into place before the restart, b.jpg was partway
+            const aStored = await readFile(encryptedFilePath(alice.id, holiday.id, a.id));
+            await deleteAllContent(alice.id);
+            await mkdir(path.join(appConfig.dataDir, alice.id, holiday.id), {
+                recursive: true
+            });
+            await writeFile(encryptedFilePath(alice.id, holiday.id, a.id), aStored);
+            await writeFile(
+                `${encryptedFilePath(alice.id, holiday.id, b.id)}.partial`,
+                crypto.randomBytes(500)
+            );
+            const interrupted = await createInterruptedJob(
+                alice.id,
+                zipPath,
+                [holiday.id, pets.id],
+                await stat(zipPath)
+            );
+            const bob = await createUser("bob");
+            const bobs = await createCollection(bob.id, "Bob's");
+            await addFile(bob.id, bobs.id, "b.jpg", crypto.randomBytes(1_000));
+            const bobZip = await placeInRestoreFolder("bob", await makeBackup(bob.id));
+            await deleteAllContent(bob.id);
+            const bobZipStats = await stat(bobZip);
+            const db = await getTestDatabase();
+            const queued = await db.models.RestoreJob.create({
+                UserId: bob.id,
+                status: "queued",
+                queuedAt: new Date(),
+                sourceId: "backup.zip",
+                sourceName: "backup.zip",
+                zipPath: bobZip,
+                zipSizeBytes: bobZipStats.size,
+                zipModifiedAt: bobZipStats.mtime,
+                collectionIds: [bobs.id]
+            });
+
+            await RestoreService.recover();
+
+            const alices = new RestoreService(alice.id);
+            const resumed = await waitFor(
+                () => alices.getJob(interrupted.id),
+                (job) => !isActiveRestoreJobStatus(job.status)
+            );
+            expect(resumed).toMatchObject({
+                status: "completed",
+                errorMessage: null,
+                startedAt: interrupted.startedAt!.getTime(),
+                progress: {
+                    collectionsDone: 2,
+                    filesDone: 3,
+                    filesTotal: 3,
+                    bytesDone: 6_000,
+                    bytesTotal: 6_000
+                }
+            });
+            expect(await readLibrary(alice.id)).toEqual(before);
+            for (const [file, collectionId, plaintext] of [
+                [a, holiday.id, bytes[0]],
+                [b, holiday.id, bytes[1]],
+                [c, pets.id, bytes[2]]
+            ] as const) {
+                const decrypted = await readDecryptedFile(alice.id, collectionId, file.id);
+                expect(decrypted.equals(plaintext)).toBe(true);
+            }
+            // Kept as it was rather than copied again
+            expect(
+                (await readFile(encryptedFilePath(alice.id, holiday.id, a.id))).equals(aStored)
+            ).toBe(true);
+            expect((await listStoredFiles(alice.id)).sort()).toEqual(
+                [
+                    path.join(holiday.id, a.id),
+                    path.join(holiday.id, b.id),
+                    path.join(pets.id, c.id)
+                ].sort()
+            );
+            const bobsJob = await waitFor(
+                () => new RestoreService(bob.id).getJob(queued.id),
+                (job) => !isActiveRestoreJobStatus(job.status)
+            );
+            expect(bobsJob.status).toBe("completed");
+            expect(bobsJob.startedAt!).toBeGreaterThanOrEqual(resumed.finishedAt!);
+            expect((await readLibrary(bob.id)).map(({ id }) => id)).toEqual([bobs.id]);
+        });
+
+        it("fails a job left running and deletes every file it wrote when its zip changed or disappeared meanwhile", async () => {
+            const alice = await createUser("alice");
+            const holiday = await createCollection(alice.id, "Holiday");
+            const a = await addFile(alice.id, holiday.id, "a.jpg", crypto.randomBytes(1_000));
+            await addFile(alice.id, holiday.id, "b.jpg", crypto.randomBytes(1_000));
+            const zipPath = await placeInRestoreFolder("alice", await makeBackup(alice.id));
+            const aStored = await readFile(encryptedFilePath(alice.id, holiday.id, a.id));
+            const bob = await createUser("bob");
+            const bobs = await createCollection(bob.id, "Bob's");
+            await addFile(bob.id, bobs.id, "x.jpg", crypto.randomBytes(1_000));
+            const bobZip = await placeInRestoreFolder("bob", await makeBackup(bob.id));
+            for (const user of [alice, bob]) {
+                await deleteAllContent(user.id);
+            }
+            await mkdir(path.join(appConfig.dataDir, alice.id, holiday.id), {
+                recursive: true
+            });
+            await writeFile(encryptedFilePath(alice.id, holiday.id, a.id), aStored);
+            const changed = await createInterruptedJob(
+                alice.id,
+                zipPath,
+                [holiday.id],
+                await stat(zipPath)
+            );
+            await writeFile(zipPath, crypto.randomBytes(10));
+            await mkdir(path.join(appConfig.dataDir, bob.id, bobs.id), { recursive: true });
+            await writeFile(
+                path.join(appConfig.dataDir, bob.id, bobs.id, `${crypto.randomUUID()}.partial`),
+                "x"
+            );
+            const disappeared = await createInterruptedJob(
+                bob.id,
+                bobZip,
+                [bobs.id],
+                await stat(bobZip)
+            );
+            await unlink(bobZip);
+
+            await RestoreService.recover();
+
+            for (const [user, job] of [
+                [alice, changed],
+                [bob, disappeared]
+            ] as const) {
+                const finished = await waitFor(
+                    () => new RestoreService(user.id).getJob(job.id),
+                    (job) => !isActiveRestoreJobStatus(job.status)
+                );
+                expect(finished).toMatchObject({
+                    status: "failed",
+                    errorMessage: expect.stringMatching(/changed or disappeared/)
+                });
+                expect(await readLibrary(user.id)).toEqual([]);
+                expect(await listStoredFiles(user.id)).toEqual([]);
+            }
+        });
     });
 
     it("fails the job and leaves nothing behind when its zip changed after it was queued", async () => {
@@ -771,6 +1095,137 @@ describe("RestoreService (integration)", () => {
         expect(job).toMatchObject({ status: "failed", errorMessage: "EIO: i/o error, read" });
         expect(await readLibrary(user.id)).toEqual([]);
         expect(await listStoredFiles(user.id)).toEqual([]);
+    });
+
+    it("makes each file's thumbnail as soon as it lands, without showing anything of the Restore before it completes", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const photos = [];
+        for (const colour of ["#ff0000", "#00ff00", "#0000ff", "#ffff00"]) {
+            photos.push(
+                await addFile(user.id, trip.id, `${colour.slice(1)}.png`, await pngImage(colour), {
+                    mimeType: "image/png"
+                })
+            );
+        }
+        const zipPath = await placeInRestoreFolder("alice", await makeBackup(user.id));
+        await deleteAllContent(user.id);
+        const zipOrder = (await readZip(zipPath))
+            .map(({ name }) => path.basename(name))
+            .filter((name) => name.endsWith(".png"));
+        const last = photos.find(({ name }) => name === zipOrder.at(-1))!;
+        const early = photos.filter((photo) => photo !== last);
+        const { copyEntry: hold, release } = createHoldingCopy();
+        const service = new RestoreService(user.id, {
+            copyEntry: (entry, content) =>
+                entry.fileId === last.id ? hold(entry, content) : content
+        });
+        const fileSystem = new UserFileSystem(user.id);
+        const readThumbnail = (fileId: string) =>
+            readFile(fileSystem.getThumbnailPath(trip.id, fileId)).catch(() => null);
+
+        const started = await service.start("backup.zip");
+        const earlyThumbnails = await waitFor(
+            () => Promise.all(early.map(({ id }) => readThumbnail(id))),
+            (thumbnails) => thumbnails.every((thumbnail) => thumbnail !== null),
+            30_000
+        );
+        expect(await readLibrary(user.id)).toEqual([]);
+        expect(await new ThumbnailService(user.id).getStatus()).toEqual({
+            pending: 0,
+            failed: 0
+        });
+        expect((await service.getJob(started.id)).status).toBe("running");
+        release();
+        const job = await waitFor(
+            () => service.getJob(started.id),
+            (job) => !isActiveRestoreJobStatus(job.status)
+        );
+        const thumbnails = new ThumbnailService(user.id);
+        await waitFor(
+            () => thumbnails.getStatus(),
+            (status) => status.pending === 0,
+            30_000
+        );
+
+        expect(job.status).toBe("completed");
+        expect(await thumbnails.getStatus()).toEqual({ pending: 0, failed: 0 });
+        // Made once, while the Restore ran, rather than again afterwards
+        const thumbnailsAfter = await Promise.all(early.map(({ id }) => readThumbnail(id)));
+        thumbnailsAfter.forEach((thumbnail, index) =>
+            expect(thumbnail?.equals(earlyThumbnails[index]!)).toBe(true)
+        );
+        const collections = new CollectionService(user.id);
+        for (const photo of photos) {
+            const { placeholder } = await collections.getThumbnail(trip.id, photo.id);
+            expect(placeholder).toBe(false);
+        }
+    });
+
+    it("copies files four at a time in zip order, with the same result as one at a time, Unrestored files included", async () => {
+        const user = await createUser("alice");
+        const holiday = await createCollection(user.id, "Holiday");
+        const pets = await createCollection(user.id, "Pets");
+        const files = [];
+        for (let i = 0; i < 10; i++) {
+            const collection = i % 3 === 0 ? pets : holiday;
+            files.push(
+                await addFile(user.id, collection.id, `${i}.jpg`, crypto.randomBytes(1_000 + i))
+            );
+        }
+        const corrupted = [files[2], files[7]];
+        const before = await readLibrary(user.id);
+        const zipPath = await placeInRestoreFolder("alice", await makeBackup(user.id));
+        await deleteAllContent(user.id);
+        const zipOrder = (await readZip(zipPath))
+            .map(({ name }) => path.basename(name))
+            .filter((name) => name.endsWith(".jpg"));
+        const corrupt = corruptEntries(corrupted.map(({ id }) => id));
+        const { copyEntry: hold, release } = createHoldingCopy();
+        const startedNames: string[] = [];
+        const service = new RestoreService(user.id, {
+            copyEntry: (entry, content) => {
+                startedNames.push(entry.name);
+                return hold(entry, corrupt(entry, content));
+            }
+        });
+
+        const started = await service.start("backup.zip");
+        await waitFor(
+            async () => startedNames.length,
+            (count) => count >= 4
+        );
+        await sleep(300);
+        const startedWhileHeld = [...startedNames];
+        release();
+        const job = await waitFor(
+            () => service.getJob(started.id),
+            (job) => !isActiveRestoreJobStatus(job.status)
+        );
+
+        // The first four in the zip, in whichever order their copies got going
+        expect(startedWhileHeld.sort()).toEqual(zipOrder.slice(0, 4).sort());
+        expect([...startedNames].sort()).toEqual([...zipOrder].sort());
+        expect(job.status).toBe("completedWithErrors");
+        const corruptedInZipOrder = [...corrupted].sort(
+            (a, b) => zipOrder.indexOf(a.name) - zipOrder.indexOf(b.name)
+        );
+        expect(job.unrestoredFiles).toEqual(
+            corruptedInZipOrder.map((file) => ({
+                fileId: file.id,
+                collectionId: file.CollectionId,
+                name: file.name,
+                reason: expect.stringContaining("checksum")
+            }))
+        );
+        const corruptedIds = corrupted.map(({ id }) => id);
+        expect(await readLibrary(user.id)).toEqual(
+            before.map((collection) => ({
+                ...collection,
+                files: collection.files.filter(({ id }) => !corruptedIds.includes(id))
+            }))
+        );
+        expect(await listStoredFiles(user.id)).toHaveLength(8);
     });
 
     describe("files that do not come back", () => {

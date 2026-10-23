@@ -47,8 +47,8 @@ const realDependencies: WorkerDependencies = {
 /** Where the worker stages a video's plaintext while processing it; only ever holds the video in progress */
 const PROCESSING_DIR_NAME = "processing";
 
-/** How often the worker checks again whether the Backup job it waits for has finished */
-const BACKUP_CHECK_INTERVAL_MS = 2_000;
+/** How often the worker checks again whether the Backup or Restore job it waits for has finished */
+const JOB_CHECK_INTERVAL_MS = 2_000;
 
 const logger = new Log("VIDEO", LogColor.CYAN);
 
@@ -155,7 +155,7 @@ export class VideoProcessingService {
 class VideoProcessingWorker {
     private draining = false;
     private queueChanged = false;
-    private waitingForBackup = false;
+    private waitingForJob = false;
     private recoveryRequests: {
         resolve: () => void;
         reject: (error: unknown) => void;
@@ -225,16 +225,16 @@ class VideoProcessingWorker {
         if (!next) {
             return false;
         }
-        if (await isBackupJobActive()) {
-            // Backups need the disk and CPU more; check again after a while
-            if (!this.waitingForBackup) {
-                logger.info("Waiting for the Backup job to finish");
-                this.waitingForBackup = true;
+        if (await isBackupOrRestoreJobActive()) {
+            // Backups and Restores need the disk and CPU more; check again after a while
+            if (!this.waitingForJob) {
+                logger.info("Waiting for the Backup or Restore job to finish");
+                this.waitingForJob = true;
             }
-            await sleep(BACKUP_CHECK_INTERVAL_MS);
+            await sleep(JOB_CHECK_INTERVAL_MS);
             return true;
         }
-        this.waitingForBackup = false;
+        this.waitingForJob = false;
         // Conditional, so another instance's worker cannot process it too
         const [claimed] = await db.models.CollectionFile.update(
             { processingStatus: "processing" },
@@ -408,14 +408,15 @@ async function processVideo(
     }
 }
 
-/** Whether any Backup job on the instance is queued or running */
-async function isBackupJobActive() {
+/** Whether any Backup or Restore job on the instance is queued or running */
+async function isBackupOrRestoreJobActive() {
     const db = await Database.getInstance();
-    const activeJob = await db.models.BackupJob.findOne({
-        attributes: ["id"],
-        where: { status: ["queued", "running"] }
-    });
-    return activeJob !== null;
+    const query = { attributes: ["id"], where: { status: ["queued", "running"] } };
+    const [backupJob, restoreJob] = await Promise.all([
+        db.models.BackupJob.findOne(query),
+        db.models.RestoreJob.findOne(query)
+    ]);
+    return backupJob !== null || restoreJob !== null;
 }
 
 function sleep(ms: number) {

@@ -26,7 +26,7 @@ import {
     ProgressSaver,
     throwIfAborted
 } from "./job-runner";
-import { ThumbnailService } from "./thumbnail.service";
+import { ThumbnailResult, ThumbnailService } from "./thumbnail.service";
 import { VideoProcessingService } from "./video-processing.service";
 import { isCompletedBackupJobStatus } from "../types/backup-job-dto";
 import {
@@ -47,6 +47,8 @@ const ENCRYPTION_OVERHEAD_BYTES = 16;
 const THUMBNAIL_MARGIN_BYTES = 256 * 1_024;
 /** Required beyond the restored files and their thumbnails, for other writers on the volume */
 const FREE_SPACE_MARGIN_BYTES = 100 * MEBIBYTE;
+/** Files copied at once: enough to overlap hashing, encrypting and writing, few enough to keep reading the zip close to sequential */
+const COPY_CONCURRENCY = 4;
 /** Rows per insert statement when the restored library is inserted */
 const INSERT_BATCH_SIZE = 1_000;
 
@@ -94,6 +96,47 @@ interface CopyProgress {
 }
 
 type RestoreJobFields = Partial<InferAttributes<RestoreJob>>;
+
+/**
+ * Thumbnails a job has the thumbnail worker make as soon as each file is in
+ * storage, before its row exists, so most are ready when the job completes.
+ */
+class EarlyThumbnails {
+    private readonly made = new Map<string, ThumbnailResult>();
+    private readonly making = new Set<Promise<void>>();
+
+    constructor(private readonly userId: string) {}
+
+    /** Stops handing files over once `signal` aborts */
+    handOver({ collectionId, metadata }: IncludedFile, signal: AbortSignal) {
+        const making: Promise<void> = ThumbnailService.makeEarly(
+            {
+                id: metadata.id,
+                collectionId,
+                userId: this.userId,
+                mimeType: metadata.mimeType
+            },
+            signal
+        )
+            .then((result) => {
+                if (result) {
+                    this.made.set(metadata.id, result);
+                }
+            })
+            .finally(() => this.making.delete(making));
+        this.making.add(making);
+    }
+
+    /** The file's thumbnail if it has been made already */
+    get(fileId: string) {
+        return this.made.get(fileId);
+    }
+
+    /** Resolves once no thumbnail is being made, so a job deletes its files only after */
+    async settle() {
+        await Promise.all(this.making);
+    }
+}
 
 const logger = new Log("RESTORE", LogColor.MAGENTA);
 
@@ -219,8 +262,8 @@ export class RestoreService {
     }
 
     /**
-     * Run once on server start: fails Restore jobs a previous process left
-     * running, deletes the files they wrote and starts queued jobs in order.
+     * Run once on server start: continues Restore jobs a previous process
+     * left running, then starts queued jobs in order. Resolves once recovery is done.
      */
     static recover(): Promise<void> {
         return getRunner().recover();
@@ -246,6 +289,43 @@ export class RestoreService {
     }
 
     async getJob(jobId: string): Promise<RestoreJobDto> {
+        const job = await this.findUserJob(jobId);
+        return job.toDto();
+    }
+
+    /**
+     * Cancels a queued job, or stops a running one, waiting until it has
+     * stopped and deleted every file it wrote. A finished job is returned unchanged.
+     */
+    async cancel(jobId: string): Promise<RestoreJobDto> {
+        const job = await this.findUserJob(jobId);
+        const db = await Database.getInstance();
+        if (job.status === "queued") {
+            // Conditional, so a job the runner claims meanwhile is stopped below instead
+            const [cancelled] = await db.models.RestoreJob.update(
+                { status: "cancelled", finishedAt: new Date() },
+                { where: { id: job.id, status: "queued" } }
+            );
+            // A job resumed after a restart is queued with the files it already wrote
+            if (cancelled > 0) {
+                await removeWrittenFiles(job.UserId, job.collectionIds);
+            }
+        }
+        const stopped = await getRunner().cancel(job.id);
+        if (!stopped) {
+            // Running but not in this process: left over from before a restart, not yet recovered
+            const [cancelled] = await db.models.RestoreJob.update(
+                { status: "cancelled", finishedAt: new Date(), currentFileName: null },
+                { where: { id: job.id, status: "running" } }
+            );
+            if (cancelled > 0) {
+                await removeWrittenFiles(job.UserId, job.collectionIds);
+            }
+        }
+        return (await this.findUserJob(jobId)).toDto();
+    }
+
+    private async findUserJob(jobId: string) {
         const db = await Database.getInstance();
         const job = isUuidv4(jobId)
             ? await db.models.RestoreJob.findOne({
@@ -255,7 +335,7 @@ export class RestoreService {
         if (!job) {
             throw new NotFoundError(`Restore job '${jobId}' not found`);
         }
-        return job.toDto();
+        return job;
     }
 
     private async getUserFolder() {
@@ -492,24 +572,35 @@ function getRunner() {
     return globalThis.holviRestoreJobRunner;
 }
 
-/** Fails jobs a previous server process left running and deletes the files they wrote */
+/**
+ * Queues jobs a previous server process left running again, keeping their
+ * place at the front of the queue, so each continues where it left off: its
+ * partial files are deleted and the files it renamed into place are kept.
+ * A job whose source changed meanwhile fails once run, like any other.
+ */
 async function recoverInterruptedJobs() {
     const db = await Database.getInstance();
     const interrupted = await db.models.RestoreJob.findAll({
         where: { status: "running" }
     });
     for (const job of interrupted) {
-        await removeWrittenFiles(job.UserId, job.collectionIds);
-        await updateJob(job.id, {
-            status: "failed",
-            finishedAt: new Date(),
-            currentFileName: null,
-            errorMessage: "Server restarted while the Restore job was running"
-        });
+        await removePartialFiles(job.UserId, job.collectionIds);
+        await updateJob(job.id, { status: "queued", currentFileName: null });
     }
     logger.info(
-        `Recovered Restore jobs: ${interrupted.length} interrupted jobs failed`
+        `Recovered Restore jobs: ${interrupted.length} interrupted jobs queued to continue`
     );
+}
+
+/** Deletes the files a job was writing when it stopped, which never passed their checks */
+async function removePartialFiles(userId: string, collectionIds: string[]) {
+    for (const collectionId of collectionIds) {
+        const dir = path.join(appConfig.dataDir, userId, collectionId);
+        const names = await readdir(dir).catch(() => []);
+        for (const name of names.filter((name) => name.endsWith(".partial"))) {
+            await rm(path.join(dir, name), { force: true });
+        }
+    }
 }
 
 /**
@@ -549,6 +640,7 @@ async function runRestoreJob(
         logger,
         `Restore job '${job.id}'`
     );
+    const thumbnails = new EarlyThumbnails(job.UserId);
     // Set once the restored library is in the database, after which its files must stay
     let unrestoredFiles: UnrestoredFile[] | null = null;
     try {
@@ -556,7 +648,8 @@ async function runRestoreJob(
         await checkSourceUnchanged(job);
         await withBackup(job.zipPath, async (backup, zip) => {
             await updateJob(job.id, {
-                startedAt: new Date(),
+                // A job continued after a restart keeps when it first started
+                startedAt: job.startedAt ?? new Date(),
                 collectionsTotal: backup.collections.length,
                 filesTotal: backup.includedFiles.length,
                 bytesTotal: backup.includedFiles.reduce(
@@ -573,11 +666,12 @@ async function runRestoreJob(
                 zip,
                 dependencies,
                 progress,
+                thumbnails,
                 signal
             );
             await progressSaver.stop();
             throwIfAborted(signal);
-            await insertLibrary(job.UserId, backup, unrestored);
+            await insertLibrary(job.UserId, backup, unrestored, thumbnails);
             unrestoredFiles = unrestored;
         });
         await finishCompletedJob(job.id, progress, unrestoredFiles!);
@@ -591,6 +685,8 @@ async function runRestoreJob(
             );
             return;
         }
+        // Thumbnails being made would otherwise land after their files are deleted
+        await thumbnails.settle();
         await removeWrittenFiles(job.UserId, job.collectionIds);
         const cancelled = signal.aborted;
         if (cancelled) {
@@ -651,16 +747,20 @@ async function checkSourceUnchanged(job: RestoreJob) {
     }
 }
 
-/** Copies every included file into storage, in zip order; returns those whose content did not match */
+/**
+ * Copies every included file into storage, a few at a time in zip order, so
+ * reading stays close to sequential while hashing, encrypting and writing
+ * overlap. Returns the files whose content did not match, in zip order.
+ */
 async function copyFiles(
     userId: string,
     backup: BackupContents,
     zip: ZipReader,
     dependencies: RestoreJobDependencies,
     progress: CopyProgress,
+    thumbnails: EarlyThumbnails,
     signal: AbortSignal
 ) {
-    const unrestored: UnrestoredFile[] = [];
     const remainingByCollection = new Map(
         backup.collections.map(({ id }) => [id, 0])
     );
@@ -676,33 +776,75 @@ async function copyFiles(
         ).length;
     progress.collectionsDone = countDoneCollections();
 
-    for (const file of backup.includedFiles) {
-        throwIfAborted(signal);
-        progress.currentFileName = file.metadata.name;
-        const reason = await copyFile(
-            userId,
-            file,
-            zip,
-            dependencies.copyEntry,
-            (count) => (progress.bytesDone += count),
-            signal
-        );
-        if (reason) {
-            unrestored.push({
-                fileId: file.metadata.id,
-                collectionId: file.collectionId,
-                name: file.metadata.name,
-                reason
-            });
-        }
-        progress.filesDone += 1;
-        remainingByCollection.set(
-            file.collectionId,
-            remainingByCollection.get(file.collectionId)! - 1
-        );
-        progress.collectionsDone = countDoneCollections();
+    // Also stops the other copies once one fails, so the job cleans up only after every copy has stopped
+    const controller = new AbortController();
+    const abort = () => controller.abort(signal.reason);
+    signal.addEventListener("abort", abort);
+    if (signal.aborted) {
+        abort();
     }
-    return unrestored;
+    const reasons = new Map<IncludedFile, string>();
+    const copying = new Set<Promise<void>>();
+    const failures: unknown[] = [];
+    try {
+        for (const file of backup.includedFiles) {
+            if (controller.signal.aborted) {
+                break;
+            }
+            progress.currentFileName = file.metadata.name;
+            const copy: Promise<void> = copyFile(
+                userId,
+                file,
+                zip,
+                dependencies.copyEntry,
+                (count) => (progress.bytesDone += count),
+                controller.signal
+            )
+                .then((reason) => {
+                    if (reason) {
+                        reasons.set(file, reason);
+                    } else {
+                        thumbnails.handOver(file, controller.signal);
+                    }
+                    progress.filesDone += 1;
+                    remainingByCollection.set(
+                        file.collectionId,
+                        remainingByCollection.get(file.collectionId)! - 1
+                    );
+                    progress.collectionsDone = countDoneCollections();
+                })
+                .catch((error) => {
+                    failures.push(error);
+                    controller.abort(error);
+                })
+                .finally(() => copying.delete(copy));
+            copying.add(copy);
+            if (copying.size >= COPY_CONCURRENCY) {
+                await Promise.race(copying);
+            }
+        }
+    } finally {
+        await Promise.all(copying);
+        signal.removeEventListener("abort", abort);
+    }
+    throwIfAborted(signal);
+    if (failures.length > 0) {
+        // The first; the others are copies it stopped
+        throw failures[0];
+    }
+    return backup.includedFiles.flatMap((file) => {
+        const reason = reasons.get(file);
+        return reason
+            ? [
+                  {
+                      fileId: file.metadata.id,
+                      collectionId: file.collectionId,
+                      name: file.metadata.name,
+                      reason
+                  }
+              ]
+            : [];
+    });
 }
 
 /**
@@ -723,6 +865,11 @@ async function copyFile(
         return "The Backup has no content for this file";
     }
     const storedPath = path.join(appConfig.dataDir, userId, collectionId, metadata.id);
+    if (await exists(storedPath)) {
+        // Renamed into place, so checked, before the job was interrupted by a restart
+        onBytes(metadata.sizeBytes);
+        return null;
+    }
     const partialPath = `${storedPath}.partial`;
     await mkdir(path.dirname(storedPath), { recursive: true });
     const hash = crypto.createHash("sha256");
@@ -772,6 +919,13 @@ async function copyFile(
     }
 }
 
+function exists(filePath: string) {
+    return stat(filePath).then(
+        () => true,
+        () => false
+    );
+}
+
 async function flushToDisk(filePath: string) {
     const handle = await open(filePath, "r+");
     try {
@@ -784,12 +938,14 @@ async function flushToDisk(filePath: string) {
 /**
  * Inserts every collection, restored file, tag and link in one transaction,
  * with their original ids and timestamps, so the whole library appears at
- * once. Chosen covers whose file did not come back are cleared.
+ * once. Chosen covers whose file did not come back are cleared. Files whose
+ * thumbnail was made during the job are inserted with it.
  */
 async function insertLibrary(
     userId: string,
     { collections, includedFiles }: BackupContents,
-    unrestored: UnrestoredFile[]
+    unrestored: UnrestoredFile[],
+    thumbnails: EarlyThumbnails
 ) {
     const unrestoredIds = new Set(unrestored.map(({ fileId }) => fileId));
     const restoredFiles = includedFiles.filter(
@@ -839,6 +995,9 @@ async function insertLibrary(
                     height: metadata.height,
                     thumbnailWidth: metadata.thumbnailWidth,
                     thumbnailHeight: metadata.thumbnailHeight,
+                    // Made again, during the job or by the thumbnail worker afterwards; the blur placeholder shows meanwhile
+                    thumbnailStatus: "pending" as const,
+                    ...thumbnails.get(metadata.id),
                     takenAt: toDateOrNull(metadata.takenAt),
                     durationInSeconds: metadata.durationInSeconds,
                     gpsLatitude: metadata.gpsLatitude,
@@ -846,8 +1005,6 @@ async function insertLibrary(
                     gpsAltitude: metadata.gpsAltitude,
                     gpsLabel: metadata.gpsLabel,
                     blurDataUrl: metadata.blurDataUrl,
-                    // Made again by the thumbnail worker; the blur placeholder shows meanwhile
-                    thumbnailStatus: "pending",
                     // Video processing gives every video its Scrub preview, and a Rendition if needed
                     processingStatus: metadata.mimeType.startsWith("video")
                         ? "pending"

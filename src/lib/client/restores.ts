@@ -64,3 +64,13 @@ export async function startRestore(sourceId: string) {
     );
     return job;
 }
+
+/** Resolves once a running job has stopped and deleted what it wrote */
+export async function cancelRestoreJob(jobId: string) {
+    const { job } = await request<{ job: RestoreJobDto }>(
+        "POST",
+        `${RESTORE_JOBS_URL}/${jobId}/cancel`,
+        "Could not cancel the restore"
+    );
+    return job;
+}

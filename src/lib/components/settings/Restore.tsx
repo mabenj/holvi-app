@@ -1,5 +1,10 @@
-import { inspectRestoreSource, startRestore } from "@/lib/client/restores";
+import {
+    cancelRestoreJob,
+    inspectRestoreSource,
+    startRestore
+} from "@/lib/client/restores";
 import { formatBytes, getErrorMessage, plural } from "@/lib/common/utilities";
+import { refreshActivity } from "@/lib/hooks/useActivity";
 import { useRestore } from "@/lib/hooks/useRestore";
 import {
     RestoreInspection,
@@ -17,7 +22,7 @@ import {
     Stack,
     Text
 } from "@chakra-ui/react";
-import { mdiBackupRestore, mdiChevronDown } from "@mdi/js";
+import { mdiBackupRestore, mdiChevronDown, mdiClose } from "@mdi/js";
 import Icon from "@mdi/react";
 import { useEffect, useRef, useState } from "react";
 import ConfirmationSurface from "../surfaces/ConfirmationSurface";
@@ -41,6 +46,7 @@ export default function Restore() {
     const [inspecting, setInspecting] = useState<string>();
     const [confirming, setConfirming] = useState(false);
     const [starting, setStarting] = useState(false);
+    const [cancelling, setCancelling] = useState(false);
     const [actionError, setActionError] = useState<string>();
 
     // A finished job changes what can be restored: the account now has collections
@@ -77,7 +83,20 @@ export default function Restore() {
         } finally {
             setConfirming(false);
             setStarting(false);
-            await refresh();
+            await Promise.all([refresh(), refreshActivity()]);
+        }
+    };
+
+    const onCancel = async (job: RestoreJobDto) => {
+        setCancelling(true);
+        setActionError(undefined);
+        try {
+            await cancelRestoreJob(job.id);
+        } catch (error) {
+            setActionError(getErrorMessage(error));
+        } finally {
+            await Promise.all([refresh(), refreshActivity()]);
+            setCancelling(false);
         }
     };
 
@@ -104,7 +123,11 @@ export default function Restore() {
                 </Text>
             )}
             {activeJob ? (
-                <ActiveJob job={activeJob} />
+                <ActiveJob
+                    job={activeJob}
+                    cancelling={cancelling}
+                    onCancel={() => onCancel(activeJob)}
+                />
             ) : (
                 <>
                     {unavailableReason && (
@@ -293,7 +316,15 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
     );
 }
 
-function ActiveJob({ job }: { job: RestoreJobDto }) {
+function ActiveJob({
+    job,
+    cancelling,
+    onCancel
+}: {
+    job: RestoreJobDto;
+    cancelling: boolean;
+    onCancel: () => void;
+}) {
     const { progress } = job;
     return (
         <Stack
@@ -343,6 +374,15 @@ function ActiveJob({ job }: { job: RestoreJobDto }) {
                 Your collections appear all at once when the Restore has
                 finished.
             </Text>
+            <Button
+                variant="outline"
+                size="lg"
+                colorPalette="red"
+                loading={cancelling}
+                onClick={onCancel}>
+                <Icon path={mdiClose} size="20px" aria-hidden />
+                Cancel restore
+            </Button>
         </Stack>
     );
 }
