@@ -5,6 +5,11 @@ const GIGABYTE = 1_000 * MEGABYTE;
 const HOUR = 60 * 60;
 
 const dataDir = getEnvVariable("HOLVI_DATA_DIR");
+const backupDir = getEnvVariable(
+    "HOLVI_BACKUP_DIR",
+    "string",
+    `${dataDir.replace(/[\\/]+$/, "")}/backups`
+);
 
 const appConfig = {
     connectionString: getEnvVariable("HOLVI_DB_CONNECTION_STRING"),
@@ -19,10 +24,12 @@ const appConfig = {
         16 * GIGABYTE
     ),
     dataDir: dataDir,
-    backupDir: getEnvVariable(
-        "HOLVI_BACKUP_DIR",
+    backupDir: backupDir,
+    /** Where an operator places each user's Backups for a Restore, in a folder named by username; only ever read */
+    restoreDir: getEnvVariable(
+        "HOLVI_RESTORE_DIR",
         "string",
-        `${dataDir.replace(/[\\/]+$/, "")}/backups`
+        `${backupDir.replace(/[\\/]+$/, "")}/restore`
     ),
     sessionOptions: {
         password: getEnvVariable("HOLVI_SESSION_PASSWORD"),

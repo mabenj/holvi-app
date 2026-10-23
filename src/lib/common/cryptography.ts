@@ -53,6 +53,32 @@ export default class Cryptography {
     });
   }
 
+  /**
+   * Encrypts a stream of plaintext into the at-rest format, so it can be
+   * written straight to storage with no plaintext on disk: the random IV,
+   * then the ciphertext.
+   */
+  static createEncryptionStream(): Transform {
+    const iv = crypto.randomBytes(IV_SIZE);
+    const cipher = Cryptography.getCipher(iv);
+    let ivWritten = false;
+    const withIv = (data: Buffer) => {
+      if (ivWritten) {
+        return data;
+      }
+      ivWritten = true;
+      return Buffer.concat([iv, data]);
+    };
+    return new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        callback(null, withIv(cipher.update(chunk)));
+      },
+      flush(callback) {
+        callback(null, withIv(cipher.final()));
+      },
+    });
+  }
+
   static decrypt(buffer: Buffer) {
     const iv = buffer.subarray(0, IV_SIZE);
     buffer = buffer.subarray(IV_SIZE);

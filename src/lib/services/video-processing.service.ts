@@ -238,7 +238,7 @@ class VideoProcessingWorker {
         // Conditional, so another instance's worker cannot process it too
         const [claimed] = await db.models.CollectionFile.update(
             { processingStatus: "processing" },
-            { where: { id: next.id, processingStatus: "pending" } }
+            { where: { id: next.id, processingStatus: "pending" }, silent: true }
         );
         if (claimed > 0) {
             const ref = {
@@ -274,7 +274,7 @@ async function recoverInterruptedVideos() {
     const db = await Database.getInstance();
     const [requeuedCount] = await db.models.CollectionFile.update(
         { processingStatus: "pending" },
-        { where: { processingStatus: "processing" } }
+        { where: { processingStatus: "processing" }, silent: true }
     );
     const processingDir = path.join(appConfig.dataDir, PROCESSING_DIR_NAME);
     await rm(processingDir, { recursive: true, force: true });
@@ -444,7 +444,9 @@ async function recordResult(
 ) {
     const db = await Database.getInstance();
     const [updated] = await db.models.CollectionFile.update(fields, {
-        where: { id: fileId, processingStatus: "processing" }
+        where: { id: fileId, processingStatus: "processing" },
+        // Not an edit of the file, so a restored video keeps its update time
+        silent: true
     });
     return updated > 0;
 }

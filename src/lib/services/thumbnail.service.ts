@@ -277,7 +277,9 @@ async function recordResult(
 ) {
     const db = await Database.getInstance();
     const [updated] = await db.models.CollectionFile.update(fields, {
-        where: { id: fileId, thumbnailStatus: "pending" }
+        where: { id: fileId, thumbnailStatus: "pending" },
+        // Not an edit of the file, so a restored file keeps its update time
+        silent: true
     });
     return updated > 0;
 }

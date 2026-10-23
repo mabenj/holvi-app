@@ -9,6 +9,7 @@ import { CollectionFile } from "./models/CollectionFile";
 import { CollectionFileTag } from "./models/CollectionFileTag";
 import { CollectionTag } from "./models/CollectionTag";
 import { DatabaseInfo } from "./models/DatabaseInfo";
+import { RestoreJob } from "./models/RestoreJob";
 import { Tag } from "./models/Tag";
 import { User } from "./models/User";
 
@@ -30,6 +31,7 @@ export default class Database {
       CollectionTag: CollectionTag,
       CollectionFileTag: CollectionFileTag,
       BackupJob: BackupJob,
+      RestoreJob: RestoreJob,
     };
   }
 
@@ -91,6 +93,7 @@ export default class Database {
       CollectionTag.initModel(Database.instance.sequelize);
       CollectionFileTag.initModel(Database.instance.sequelize);
       BackupJob.initModel(Database.instance.sequelize);
+      RestoreJob.initModel(Database.instance.sequelize);
 
       User.hasMany(Collection);
       Collection.belongsTo(User, {
@@ -101,6 +104,13 @@ export default class Database {
 
       User.hasMany(BackupJob, { onDelete: "CASCADE" });
       BackupJob.belongsTo(User, {
+        foreignKey: {
+          allowNull: false,
+        },
+      });
+
+      User.hasMany(RestoreJob, { onDelete: "CASCADE" });
+      RestoreJob.belongsTo(User, {
         foreignKey: {
           allowNull: false,
         },
