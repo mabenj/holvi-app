@@ -70,7 +70,7 @@ _Avoid_: sprite, storyboard
 ### Backup
 
 **Backup**:
-A single zip archive containing all of one user's files in decrypted form plus all their metadata, produced so the user holds a complete copy of their data outside Holvi. Designed so it could be restored later, although restore does not exist yet.
+A single zip archive containing all of one user's files in decrypted form plus all their metadata, produced so the user holds a complete copy of their data outside Holvi. Designed so it can be restored later.
 _Avoid_: export
 
 **Backup job**:
@@ -95,11 +95,38 @@ A Skipped file or a Damaged file. A backup job with any problem files ends as co
 **Current backup**:
 The most recent completed backup for a user. It is the only one kept; it replaces the previous one when it completes.
 
+**Restore**:
+Bringing the collections and files of a Backup back into a user's own account, started by that user, for when their data has been lost. The Backup must already be on the instance; it is never uploaded through the app. Only possible while the account has no collections. Nothing of it appears in the account until it has finished. Takes the metadata from the Backup as it is rather than reading it again from the files. Thumbnails, Renditions and Scrub previews are made again in the background.
+_Avoid_: import
+
+**Restore job**:
+One run of a Restore. Reads a Backup the operator placed in the user's own folder on the instance, or the user's Current backup. Waits as queued until no other Restore job is running on the instance, then runs in the background, reports progress, and ends as completed, completed with errors, failed, or cancelled. Continues where it left off if the instance restarts. Only a completed job (with or without errors) leaves anything in the account; a failed or cancelled one leaves nothing behind.
+
+**Unrestored file**:
+A file of a Backup whose content did not match the checksum its metadata records, so a Restore job left it out. Listed for the user; makes the job complete with errors.
+
 ### Activity
 
 **Activity**:
-The background work Holvi is doing for a user right now: their queued or running **Backup job**, and their videos waiting for or undergoing video processing. Failed videos are not Activity.
+The background work Holvi is doing for a user right now: their queued or running **Backup job** or **Restore job**, and their videos waiting for or undergoing video processing, and their files waiting for a thumbnail. Failed videos and failed thumbnails are not Activity.
 _Avoid_: jobs, tasks
+
+### Operations
+
+**Instance**:
+One running installation of Holvi, with its own database, stored files and Instance configuration. Production, the demo and a developer's local setup are separate instances.
+
+**Instance configuration**:
+The settings an operator gives an instance when starting it: its secrets (encryption key, session password, database password), how it is reached, and limits and defaults that apply to every user. Not changed by users in the app.
+_Avoid_: settings (ambiguous with what users change in the app)
+
+**Update**:
+Moving an instance to a newer version of Holvi while keeping its data and Instance configuration.
+_Avoid_: redeploy, reinstall
+
+**Snapshot**:
+A copy of an instance's database taken just before an Update, so the instance can be returned to how it was if the Update goes wrong. Covers the database only, never the stored files, and is for the operator, not for users.
+_Avoid_: backup (a Backup is one user's own copy of their files)
 
 ## Relationships
 
@@ -117,9 +144,14 @@ _Avoid_: jobs, tasks
 - A **User** has at most one **Current backup**
 - A **Backup** captures the user's data as it was when its **Backup job** started
 - A **Backup** contains original **Files** only, never **Renditions** or **Scrub previews**
+- A **Restore** brings back every **File** of a **Backup** except its **Problem files** and its **Unrestored files**
+- A **User** has at most one queued or running **Restore job** at a time, and cannot start a **Backup job** while it is
+- At most one **Restore job** runs at a time across the whole instance, independently of **Backup jobs**
+- A **Restore** keeps the identity of every **Collection** and **File** it brings back
 
 ## Flagged ambiguities
 
+- "Settings" was used for what an operator configures an instance with — resolved: it is **Instance configuration**, distinct from what users change in the app.
 - "export" and "backup" were both used for this feature — resolved: it is a **Backup**, since it is intended to be restorable in future.
 - "All media" was the working name for the view of every file — resolved: it is the **Timeline**, since this glossary avoids "media" for File.
 - "Newest" collections meant the collection's own creation time — resolved: collections are ordered by **Last added to**, which falls back to creation time only for empty collections.

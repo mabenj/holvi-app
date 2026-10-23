@@ -8,28 +8,21 @@ import crypto from "crypto";
 import { createWriteStream, WriteStream } from "fs";
 import { mkdir, open, readdir, rename, rm, stat, statfs } from "fs/promises";
 import path from "path";
-import { InferAttributes, Op, Transaction } from "sequelize";
+import { Op, Transaction } from "sequelize";
 import { Readable } from "stream";
 import appConfig from "../common/app-config";
 import { UniqueSafeNames } from "../common/backup-paths";
-import { NotFoundError } from "../common/errors";
+import { InvalidArgumentError, NotFoundError } from "../common/errors";
 import Log, { LogColor } from "../common/log";
 import { UserFileSystem } from "../common/user-file-system";
-import {
-    formatBytes,
-    getErrorMessage,
-    isUuidv4,
-    timestamp
-} from "../common/utilities";
-import {
-    BackupJobDto,
-    BackupJobStatus,
-    BackupProblem,
-    isCompletedBackupJobStatus
-} from "../types/backup-job-dto";
+import { formatBytes, getErrorMessage, timestamp } from "../common/utilities";
+import { getJobRunner, ProgressSaver, throwIfAborted } from "./job-runner";
+import { JobStore } from "./job-store";
+import { BackupJobDto, BackupProblem } from "../types/backup-job-dto";
+import { isCompletedJobStatus, JobStatus } from "../types/job-dto";
 
-const BACKUP_FORMAT_VERSION = 1;
-const PROGRESS_SAVE_INTERVAL_MS = 1_000;
+/** Version 2 adds each collection's Chosen cover, Open count and Last opened */
+const BACKUP_FORMAT_VERSION = 2;
 const MEBIBYTE = 1_024 * 1_024;
 /** Local and central directory headers of one entry, with ZIP64 fields and a long path */
 const ZIP_ENTRY_OVERHEAD_BYTES = 1_024;
@@ -88,9 +81,9 @@ interface WriteProgress {
     currentFileName: string | null;
 }
 
-type BackupJobFields = Partial<InferAttributes<BackupJob>>;
-
 const logger = new Log("BACKUP", LogColor.GREEN);
+
+const backupJobs = new JobStore(BackupJob, "Backup job");
 
 export class BackupService {
     private readonly dependencies: BackupJobDependencies;
@@ -110,14 +103,15 @@ export class BackupService {
 
     /**
      * Queues a backup job to run in the background and returns it immediately,
-     * or returns the user's job that is already queued or running.
+     * or returns the user's job that is already queued or running. Refused
+     * while the user's Restore job is queued or running.
      */
     async start(): Promise<BackupJobDto> {
         const db = await Database.getInstance();
         const transaction = await db.transaction();
         let job: BackupJob;
         try {
-            // Serialises starts per user, so concurrent requests cannot both create a job
+            // Serialises starts per user, Restore job starts included, so concurrent requests cannot both create a job
             await db.models.BackupJob.sequelize!.query(
                 "SELECT pg_advisory_xact_lock(hashtext(:userId))",
                 { replacements: { userId: this.userId }, transaction }
@@ -129,6 +123,17 @@ export class BackupService {
             if (activeJob) {
                 await transaction.commit();
                 return activeJob.toDto();
+            }
+            // A Backup of a half-restored account would be missing what the Restore has yet to bring back
+            const activeRestore = await db.models.RestoreJob.findOne({
+                attributes: ["id"],
+                where: { UserId: this.userId, status: ["queued", "running"] },
+                transaction
+            });
+            if (activeRestore) {
+                throw new InvalidArgumentError(
+                    "A Backup cannot start while your Restore job is queued or running"
+                );
             }
             job = await db.models.BackupJob.create(
                 {
@@ -158,20 +163,13 @@ export class BackupService {
 
     /** The user's backup jobs, latest first */
     async getJobs(): Promise<BackupJobDto[]> {
-        const db = await Database.getInstance();
-        const jobs = await db.models.BackupJob.findAll({
-            where: { UserId: this.userId },
-            order: [["queuedAt", "DESC"]]
-        });
+        const jobs = await backupJobs.findUserJobs(this.userId);
         return jobs.map((job) => job.toDto());
     }
 
     /** The user's queued or running backup job, if any; a user has at most one */
     async getActiveJob(): Promise<BackupJobDto | null> {
-        const db = await Database.getInstance();
-        const job = await db.models.BackupJob.findOne({
-            where: { UserId: this.userId, status: ["queued", "running"] }
-        });
+        const job = await backupJobs.findActiveUserJob(this.userId);
         return job?.toDto() ?? null;
     }
 
@@ -213,7 +211,7 @@ export class BackupService {
     /** Locates a completed job's backup zip for download */
     async openDownload(jobId: string): Promise<BackupDownload> {
         const job = await this.findUserJob(jobId);
-        if (!isCompletedBackupJobStatus(job.status) || !job.zipFileName) {
+        if (!isCompletedJobStatus(job.status) || !job.zipFileName) {
             throw new NotFoundError(
                 `Backup job '${jobId}' has no backup to download`
             );
@@ -235,7 +233,7 @@ export class BackupService {
      */
     async deleteBackup(jobId: string): Promise<BackupJobDto> {
         const job = await this.findUserJob(jobId);
-        if (!isCompletedBackupJobStatus(job.status) || !job.zipFileName) {
+        if (!isCompletedJobStatus(job.status) || !job.zipFileName) {
             throw new NotFoundError(
                 `Backup job '${jobId}' has no backup to delete`
             );
@@ -244,17 +242,8 @@ export class BackupService {
         return (await this.findUserJob(jobId)).toDto();
     }
 
-    private async findUserJob(jobId: string) {
-        const db = await Database.getInstance();
-        const job = isUuidv4(jobId)
-            ? await db.models.BackupJob.findOne({
-                  where: { id: jobId, UserId: this.userId }
-              })
-            : null;
-        if (!job) {
-            throw new NotFoundError(`Backup job '${jobId}' not found`);
-        }
-        return job;
+    private findUserJob(jobId: string) {
+        return backupJobs.findUserJob(this.userId, jobId);
     }
 }
 
@@ -285,146 +274,6 @@ function getUserBackupDir(userId: string) {
     return path.join(appConfig.backupDir, userId);
 }
 
-/**
- * Job state is persisted with targeted updates rather than by saving a shared
- * model instance, so progress changed during an in-flight save is never lost.
- */
-async function updateJob(jobId: string, fields: BackupJobFields) {
-    const db = await Database.getInstance();
-    await db.models.BackupJob.update(fields, { where: { id: jobId } });
-}
-
-/** The job a runner is claiming or running */
-interface CurrentJob {
-    jobId: string;
-    controller: AbortController;
-    /** Resolves once the runner has let go of the job */
-    done: Promise<void>;
-}
-
-/** Runs queued backup jobs one at a time across the whole instance, in queue order */
-class BackupJobRunner {
-    private draining = false;
-    private queueChanged = false;
-    private current: CurrentJob | null = null;
-    private recoveryRequests: {
-        resolve: () => void;
-        reject: (error: unknown) => void;
-    }[] = [];
-    /** Dependencies injected by the service that queued each job; others use the real file system */
-    private readonly dependencies = new Map<string, BackupJobDependencies>();
-
-    /** Must be called before the job is committed, so no queue pass can claim it without its dependencies */
-    setDependencies(jobId: string, dependencies: BackupJobDependencies) {
-        this.dependencies.set(jobId, dependencies);
-    }
-
-    /**
-     * Aborts the job if this runner is claiming or running it, and waits until
-     * it has stopped. Returns false if this runner does not have the job.
-     */
-    async cancel(jobId: string) {
-        this.dependencies.delete(jobId);
-        const current = this.current;
-        if (current?.jobId !== jobId) {
-            return false;
-        }
-        current.controller.abort();
-        await current.done;
-        return true;
-    }
-
-    /**
-     * Recovers from a previous server process once no job of this runner is
-     * running, then goes on to run queued jobs. Resolves once recovery is done.
-     */
-    recover() {
-        const recovered = new Promise<void>((resolve, reject) =>
-            this.recoveryRequests.push({ resolve, reject })
-        );
-        this.kick();
-        return recovered;
-    }
-
-    /** Starts running queued jobs unless they are already being run */
-    kick() {
-        this.queueChanged = true;
-        if (this.draining) {
-            return;
-        }
-        this.draining = true;
-        void this.drain();
-    }
-
-    private async drain() {
-        try {
-            // A job queued while the last lookup was in flight must not be missed
-            while (this.queueChanged) {
-                this.queueChanged = false;
-                while (await this.runNextQueuedJob()) {}
-            }
-        } catch (error) {
-            logger.error("Backup job queue stopped", error);
-        } finally {
-            // Synchronous with the last check above, so no kick is lost
-            this.draining = false;
-        }
-    }
-
-    /** Claims and runs the oldest queued job; returns false if none is queued */
-    private async runNextQueuedJob() {
-        // Between jobs, so recovery never touches a job this process is running
-        await this.runRequestedRecovery();
-        const db = await Database.getInstance();
-        const job = await db.models.BackupJob.findOne({
-            where: { status: "queued" },
-            order: [
-                ["queuedAt", "ASC"],
-                ["createdAt", "ASC"]
-            ]
-        });
-        if (!job) {
-            return false;
-        }
-        let markDone = () => {};
-        const done = new Promise<void>((resolve) => (markDone = resolve));
-        const controller = new AbortController();
-        // Registered before claiming, so a cancel that finds the job running can abort it
-        this.current = { jobId: job.id, controller, done };
-        try {
-            // Conditional, so a job cancelled meanwhile is not started
-            const [claimed] = await db.models.BackupJob.update(
-                { status: "running" },
-                { where: { id: job.id, status: "queued" } }
-            );
-            const dependencies =
-                this.dependencies.get(job.id) ?? realDependencies;
-            this.dependencies.delete(job.id);
-            if (claimed > 0) {
-                await runBackupJob(job, dependencies, controller.signal);
-            }
-        } finally {
-            this.current = null;
-            markDone();
-        }
-        return true;
-    }
-
-    private async runRequestedRecovery() {
-        const requests = this.recoveryRequests.splice(0);
-        if (requests.length === 0) {
-            return;
-        }
-        try {
-            await recoverInterruptedJobs();
-            requests.forEach((request) => request.resolve());
-        } catch (error) {
-            logger.error("Could not recover backup jobs", error);
-            requests.forEach((request) => request.reject(error));
-        }
-    }
-}
-
 /** Fails jobs a previous server process left running and removes every partial zip */
 async function recoverInterruptedJobs() {
     const db = await Database.getInstance();
@@ -448,6 +297,10 @@ async function recoverInterruptedJobs() {
     let removedCount = 0;
     for (const userDir of userDirs.filter((entry) => entry.isDirectory())) {
         const dir = path.join(appConfig.backupDir, userDir.name);
+        // Inside the backup directory by default, but only ever read
+        if (path.resolve(dir) === path.resolve(appConfig.restoreDir)) {
+            continue;
+        }
         for (const fileName of await readdir(dir)) {
             if (fileName.endsWith(".partial")) {
                 await rm(path.join(dir, fileName), { force: true });
@@ -460,24 +313,18 @@ async function recoverInterruptedJobs() {
     );
 }
 
-declare global {
-    // eslint-disable-next-line no-var
-    var holviBackupJobRunner: BackupJobRunner | undefined;
-}
-
-/**
- * The instance's one runner. Kept on globalThis because Next.js may load this
- * module more than once (per API route bundle, instrumentation, hot reload).
- */
+/** The instance's one Backup job runner */
 function getRunner() {
-    globalThis.holviBackupJobRunner ??= new BackupJobRunner();
-    return globalThis.holviBackupJobRunner;
-}
-
-function throwIfAborted(signal: AbortSignal) {
-    if (signal.aborted) {
-        throw signal.reason;
-    }
+    return getJobRunner<BackupJob, BackupJobDependencies>({
+        kind: "backup",
+        logger,
+        realDependencies,
+        findNextQueued: () => backupJobs.findNextQueued(),
+        claim: (jobId) => backupJobs.claim(jobId),
+        run: (job, dependencies, signal) =>
+            runBackupJob(job, dependencies, signal),
+        recoverInterrupted: () => recoverInterruptedJobs()
+    });
 }
 
 /** Runs a job already marked running; aborting `signal` cancels it */
@@ -492,7 +339,12 @@ async function runBackupJob(
         bytesDone: 0,
         currentFileName: null
     };
-    const progressSaver = new ProgressSaver(job.id, progress);
+    const progressSaver = new ProgressSaver(
+        progress,
+        (current) => backupJobs.update(job.id, current),
+        logger,
+        `backup job '${job.id}'`
+    );
     // Set once the partial zip is complete and so only removed by this function
     let finishedPartialZipPath: string | null = null;
     try {
@@ -511,7 +363,7 @@ async function runBackupJob(
         let bytesTotal = 0;
         fileSizes.forEach((size) => (bytesTotal += size));
         throwIfAborted(signal);
-        await updateJob(job.id, {
+        await backupJobs.update(job.id, {
             startedAt,
             collectionsTotal: snapshot.collections.length,
             filesTotal: snapshot.collections.reduce(
@@ -546,12 +398,12 @@ async function runBackupJob(
         const { size } = await stat(zipPath);
         // Recorded before the backups it replaces are deleted, so that a crash
         // in between can never leave the user with neither
-        await updateJob(job.id, { zipFileName, zipSizeBytes: size });
+        await backupJobs.update(job.id, { zipFileName, zipSizeBytes: size });
         // Deleted before the job reports completion, so that a job seen as
         // completed has left exactly one backup behind
         await deletePreviousBackups(job.UserId, job.id);
 
-        await updateJob(job.id, {
+        await backupJobs.update(job.id, {
             ...progress,
             status: outcome,
             finishedAt,
@@ -574,7 +426,7 @@ async function runBackupJob(
         } else {
             logger.error(`Backup job '${job.id}' failed`, error);
         }
-        await updateJob(job.id, {
+        await backupJobs.update(job.id, {
             status: cancelled ? "cancelled" : "failed",
             finishedAt: new Date(),
             currentFileName: null,
@@ -601,7 +453,7 @@ async function deleteBackupZip(job: BackupJob) {
     await rm(path.join(getUserBackupDir(job.UserId), job.zipFileName), {
         force: true
     });
-    await updateJob(job.id, { zipFileName: null });
+    await backupJobs.update(job.id, { zipFileName: null });
 }
 
 /**
@@ -798,7 +650,7 @@ async function writeBackupZip(
     signal: AbortSignal
 ): Promise<{
     finishedAt: Date;
-    outcome: BackupJobStatus;
+    outcome: JobStatus;
     problems: BackupProblem[];
 }> {
     const output = openZipOutput(partialZipPath);
@@ -951,7 +803,7 @@ async function writeBackupZip(
         }
 
         const finishedAt = new Date();
-        const outcome: BackupJobStatus =
+        const outcome: JobStatus =
             problems.length > 0 ? "completedWithErrors" : "completed";
         const manifest = {
             formatVersion: BACKUP_FORMAT_VERSION,
@@ -1125,6 +977,12 @@ function toCollectionMetadata(
         description: collection.description ?? null,
         createdAt: toIsoString(collection.createdAt),
         updatedAt: toIsoString(collection.updatedAt),
+        // Null for a Rotating cover, including a Chosen cover whose file is gone
+        coverFileId: files.some((file) => file.id === collection.coverFileId)
+            ? collection.coverFileId
+            : null,
+        openCount: collection.openCount,
+        lastOpened: toIsoString(collection.lastOpened),
         tags: toTagNames(collection.Tags),
         files
     };
@@ -1178,46 +1036,4 @@ function toNumberOrNull(value: number | string | null | undefined) {
 
 function toTagNames(tags: Tag[] | undefined) {
     return (tags ?? []).map((tag) => tag.name).sort();
-}
-
-/** Persists a running job's in-memory progress periodically instead of per chunk */
-class ProgressSaver {
-    private timer: NodeJS.Timeout | null = null;
-    private saving: Promise<void> = Promise.resolve();
-    private lastSaved = "";
-
-    constructor(
-        private readonly jobId: string,
-        private readonly progress: WriteProgress
-    ) {}
-
-    start() {
-        this.timer = setInterval(() => this.save(), PROGRESS_SAVE_INTERVAL_MS);
-    }
-
-    async stop() {
-        if (this.timer) {
-            clearInterval(this.timer);
-            this.timer = null;
-        }
-        await this.saving;
-    }
-
-    private save() {
-        const current = { ...this.progress };
-        const serialised = JSON.stringify(current);
-        if (serialised === this.lastSaved) {
-            return;
-        }
-        this.lastSaved = serialised;
-        this.saving = this.saving
-            .then(() => updateJob(this.jobId, current))
-            .catch((error) =>
-                logger.warn(
-                    `Could not save progress of backup job '${
-                        this.jobId
-                    }' (${getErrorMessage(error)})`
-                )
-            );
-    }
 }

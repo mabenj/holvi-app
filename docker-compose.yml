@@ -27,6 +27,10 @@ services:
             # their own volume: set this to /app/backups and mount the
             # backup-data volume below at that path
             - HOLVI_BACKUP_DIR=/app/data/backups
+            # Where you place a user's Backup zip for a Restore, in a folder
+            # named after their username. Only ever read: to mount one
+            # read-only, set this to /app/restore and mount restore-data below
+            - HOLVI_RESTORE_DIR=/app/data/backups/restore
             - HOLVI_USE_HTTPS=false
             - HOLVI_SESSION_TTL_SECONDS=7200
             - HOLVI_MAX_FILE_SIZE_KB=4294967296
@@ -40,6 +44,7 @@ services:
         volumes:
             - app-data:/app/data
             # - backup-data:/app/backups
+            # - restore-data:/app/restore:ro
         ports:
             - 7000:3000
         networks:
@@ -50,6 +55,7 @@ volumes:
     db-data:
     app-data:
     # backup-data:
+    # restore-data:
 
 networks:
     holvi-net:

@@ -85,6 +85,21 @@ export async function generateVideo({
     });
 }
 
+/**
+ * A video whose header ffprobe reads but whose frames are zeroed out, so
+ * ffmpeg cannot take a screenshot of it, as for its thumbnail
+ */
+export async function generateUnscreenshottableVideo() {
+    const content = await generateVideo({
+        videoCodec: "h264",
+        audio: "none",
+        container: "mp4"
+    });
+    const mdat = findBox(content, ["mdat"]);
+    content.fill(0, mdat.start, mdat.end);
+    return content;
+}
+
 /** Seconds from the QuickTime epoch (1904) to the Unix epoch */
 const QUICKTIME_EPOCH_OFFSET_SECONDS = 2_082_844_800;
 

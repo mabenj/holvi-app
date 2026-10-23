@@ -37,7 +37,7 @@ import appConfig from "../common/app-config";
 import { ByteRange, parseByteRange } from "../common/byte-range";
 import { NotFoundError } from "../common/errors";
 import { UserFileSystem } from "../common/user-file-system";
-import { isActiveBackupJobStatus } from "../types/backup-job-dto";
+import { isActiveJobStatus } from "../types/job-dto";
 import { BackupFileRef, BackupService } from "./backup.service";
 
 function sha256(data: Buffer) {
@@ -48,7 +48,7 @@ async function runBackup(service: BackupService) {
     const started = await service.start();
     return waitFor(
         () => service.getJob(started.id),
-        (job) => !isActiveBackupJobStatus(job.status)
+        (job) => !isActiveJobStatus(job.status)
     );
 }
 
@@ -114,8 +114,8 @@ describe("BackupService (integration)", () => {
         const manifest = JSON.parse(last.data.toString("utf8"));
         const isoUtc = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
         expect(manifest).toEqual({
-            formatVersion: 1,
-            schemaVersion: 6,
+            formatVersion: 2,
+            schemaVersion: 7,
             snapshotAt: expect.stringMatching(isoUtc),
             startedAt: new Date(job.startedAt!).toISOString(),
             finishedAt: new Date(job.finishedAt!).toISOString(),
@@ -203,6 +203,11 @@ describe("BackupService (integration)", () => {
             crypto.randomBytes(3_000),
             { mimeType: "video/mp4", durationInSeconds: 42 }
         );
+        await holiday.update({
+            coverFileId: clip.id,
+            openCount: 7,
+            lastOpened: new Date("2024-02-03T04:05:06.789Z")
+        });
         const service = new BackupService(user.id);
 
         const job = await runBackup(service);
@@ -219,6 +224,9 @@ describe("BackupService (integration)", () => {
             description: "Summer 2023",
             createdAt: holiday.createdAt.toISOString(),
             updatedAt: holiday.updatedAt.toISOString(),
+            coverFileId: clip.id,
+            openCount: 7,
+            lastOpened: "2024-02-03T04:05:06.789Z",
             tags: ["family", "summer"],
             files: [
                 {
@@ -275,6 +283,9 @@ describe("BackupService (integration)", () => {
             description: null,
             createdAt: empty.createdAt.toISOString(),
             updatedAt: empty.updatedAt.toISOString(),
+            coverFileId: null,
+            openCount: 0,
+            lastOpened: null,
             tags: [],
             files: []
         });
@@ -282,6 +293,31 @@ describe("BackupService (integration)", () => {
         expect(names.indexOf("metadata/Holiday.json")).toBeGreaterThan(
             names.indexOf("files/Holiday/clip.mp4")
         );
+    });
+
+    it("records a Chosen cover whose file is gone as a Rotating cover", async () => {
+        const user = await createUser("alice");
+        const holiday = await createCollection(user.id, "Holiday");
+        await addFile(user.id, holiday.id, "beach.jpg", crypto.randomBytes(1_000));
+        const gone = await addFile(
+            user.id,
+            holiday.id,
+            "gone.jpg",
+            crypto.randomBytes(1_000)
+        );
+        await holiday.update({ coverFileId: gone.id });
+        await gone.destroy();
+        const service = new BackupService(user.id);
+
+        const job = await runBackup(service);
+
+        const entries = await readZip((await service.openDownload(job.id)).filePath);
+        const metadata = JSON.parse(
+            entries
+                .find((entry) => entry.name === "metadata/Holiday.json")!
+                .data.toString("utf8")
+        );
+        expect(metadata.coverFileId).toBeNull();
     });
 
     it("records each included file's SHA-256, matching its original plaintext and its zip entry", async () => {
@@ -350,7 +386,7 @@ describe("BackupService (integration)", () => {
         }
     });
 
-    it("records metadata as it was when the job started, even if files are renamed or retagged during the run", async () => {
+    it("records metadata as it was when the job started, even if it is renamed, retagged, opened or given a new cover during the run", async () => {
         const user = await createUser("alice");
         const holiday = await createCollection(user.id, "Holiday", {
             description: "Before",
@@ -360,6 +396,11 @@ describe("BackupService (integration)", () => {
             tags: ["before"]
         });
         const b = await addFile(user.id, holiday.id, "b.jpg", crypto.randomBytes(50_000));
+        await holiday.update({
+            coverFileId: a.id,
+            openCount: 2,
+            lastOpened: new Date("2024-01-01T00:00:00.000Z")
+        });
         const opener = createHoldingOpener();
         const service = new BackupService(user.id, {
             openDecryptedFile: opener.openDecryptedFile
@@ -376,7 +417,13 @@ describe("BackupService (integration)", () => {
             { where: { id: b.id } }
         );
         await db.models.Collection.update(
-            { name: "Renamed", description: "After" },
+            {
+                name: "Renamed",
+                description: "After",
+                coverFileId: b.id,
+                openCount: 3,
+                lastOpened: new Date()
+            },
             { where: { id: holiday.id } }
         );
         await setFileTags(a.id, ["after"]);
@@ -384,7 +431,7 @@ describe("BackupService (integration)", () => {
         opener.release();
         const job = await waitFor(
             () => service.getJob(started.id),
-            (current) => !isActiveBackupJobStatus(current.status)
+            (current) => !isActiveJobStatus(current.status)
         );
 
         expect(job.status).toBe("completed");
@@ -399,6 +446,9 @@ describe("BackupService (integration)", () => {
         expect(metadata).toMatchObject({
             name: "Holiday",
             description: "Before",
+            coverFileId: a.id,
+            openCount: 2,
+            lastOpened: "2024-01-01T00:00:00.000Z",
             tags: ["before"],
             files: [
                 { id: a.id, name: "a.jpg", tags: ["before"] },
@@ -443,7 +493,7 @@ describe("BackupService (integration)", () => {
         opener.release();
         const finished = await waitFor(
             () => service.getJob(started.id),
-            (job) => !isActiveBackupJobStatus(job.status)
+            (job) => !isActiveJobStatus(job.status)
         );
 
         expect(finished.status).toBe("completed");
@@ -1052,7 +1102,7 @@ describe("BackupService (integration)", () => {
             opener.release();
             const job = await waitFor(
                 () => service.getJob(started.id),
-                (current) => !isActiveBackupJobStatus(current.status)
+                (current) => !isActiveJobStatus(current.status)
             );
 
             expect(job.status).toBe("completedWithErrors");
@@ -1110,7 +1160,7 @@ describe("BackupService (integration)", () => {
             opener.release();
             const job = await waitFor(
                 () => service.getJob(started.id),
-                (current) => !isActiveBackupJobStatus(current.status)
+                (current) => !isActiveJobStatus(current.status)
             );
 
             expect(job.status).toBe("completedWithErrors");
@@ -1247,7 +1297,7 @@ describe("BackupService (integration)", () => {
         async function waitUntilFinished(service: BackupService, jobId: string) {
             return waitFor(
                 () => service.getJob(jobId),
-                (job) => !isActiveBackupJobStatus(job.status)
+                (job) => !isActiveJobStatus(job.status)
             );
         }
 
@@ -1404,7 +1454,7 @@ describe("BackupService (integration)", () => {
             opener.release();
             const aliceJob = await waitFor(
                 () => aliceService.getJob(aliceStarted.id),
-                (job) => !isActiveBackupJobStatus(job.status)
+                (job) => !isActiveJobStatus(job.status)
             );
             expect(aliceJob.status).toBe("completed");
             // Give a wrongly started job time to show up
@@ -1456,7 +1506,7 @@ describe("BackupService (integration)", () => {
                 );
                 const bobJob = await waitFor(
                     () => bobService.getJob(bobQueued.id),
-                    (job) => !isActiveBackupJobStatus(job.status)
+                    (job) => !isActiveJobStatus(job.status)
                 );
                 expect(bobJob.status).toBe("completed");
                 expect((await aliceService.getJob(started.id)).status).toBe("cancelled");
@@ -1488,7 +1538,7 @@ describe("BackupService (integration)", () => {
             opener.release();
             const job = await waitFor(
                 () => aliceService.getJob(started.id),
-                (current) => !isActiveBackupJobStatus(current.status)
+                (current) => !isActiveJobStatus(current.status)
             );
             expect(job.status).toBe("completed");
         });
@@ -1588,16 +1638,33 @@ describe("BackupService (integration)", () => {
             const carolService = new BackupService(carol.id);
             const bobJob = await waitFor(
                 () => bobService.getJob(bobQueued.id),
-                (job) => !isActiveBackupJobStatus(job.status)
+                (job) => !isActiveJobStatus(job.status)
             );
             const carolJob = await waitFor(
                 () => carolService.getJob(carolQueued.id),
-                (job) => !isActiveBackupJobStatus(job.status)
+                (job) => !isActiveJobStatus(job.status)
             );
             expect(bobJob.status).toBe("completed");
             expect(carolJob.status).toBe("completed");
             expect(carolJob.startedAt!).toBeGreaterThanOrEqual(bobJob.finishedAt!);
             expect(await listUserBackupDir(bob.id)).toEqual([bobJob.zipFileName]);
+        });
+
+        it("leaves the restore directory alone, though by default it is inside the backup directory", async () => {
+            const placed = [
+                path.join(appConfig.restoreDir, "upload.zip.partial"),
+                path.join(appConfig.restoreDir, "alice", "backup.zip.partial")
+            ];
+            for (const filePath of placed) {
+                await mkdir(path.dirname(filePath), { recursive: true });
+                await writeFile(filePath, "placed by the operator");
+            }
+
+            await BackupService.recover();
+
+            for (const filePath of placed) {
+                expect(existsSync(filePath)).toBe(true);
+            }
         });
     });
 

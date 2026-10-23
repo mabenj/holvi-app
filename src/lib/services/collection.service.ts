@@ -41,6 +41,12 @@ export type {
   FileSort,
 } from "./file-browsing";
 
+/** A transparent 1×1 PNG, served for a file with neither a ready thumbnail nor a blur placeholder */
+const NEUTRAL_PLACEHOLDER = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+  "base64"
+);
+
 /** A saved collection's id, or why its name was rejected */
 type SaveResult = { id: string; nameError?: never } | { id?: never; nameError: string };
 
@@ -321,10 +327,42 @@ export class CollectionService {
     };
   }
 
+  /**
+   * A file's thumbnail, or its blur placeholder while its thumbnail is not
+   * ready: still pending, or failed. One without a blur placeholder gets a
+   * neutral one.
+   */
+  async getThumbnail(
+    collectionId: string,
+    fileId: string
+  ): Promise<GetBufferResult & { placeholder: boolean }> {
+    const fileInfo = await this.getCollectionFileInfo(collectionId, fileId);
+    if (!fileInfo) {
+      throw new NotFoundError(`File not found '${fileId}'`);
+    }
+    const filename = `thumbnail_${fileInfo.label}`;
+    if (fileInfo.thumbnailStatus !== "ready") {
+      const blur = /^data:([^;,]+);base64,(.*)$/.exec(
+        fileInfo.blurDataUrl ?? ""
+      );
+      return {
+        mimeType: blur?.[1] ?? "image/png",
+        file: blur ? Buffer.from(blur[2], "base64") : NEUTRAL_PLACEHOLDER,
+        filename,
+        placeholder: true,
+      };
+    }
+    const file = await new UserFileSystem(this.userId).readFile(
+      collectionId,
+      fileInfo.id,
+      true
+    );
+    return { mimeType: "image/png", file, filename, placeholder: false };
+  }
+
   async getFileBuffer(
     collectionId: string,
-    fileId: string,
-    thumbnail: boolean = false
+    fileId: string
   ): Promise<GetBufferResult> {
     const fileInfo = await this.getCollectionFileInfo(collectionId, fileId);
     if (!fileInfo) {
@@ -332,11 +370,7 @@ export class CollectionService {
     }
 
     const fileSystem = new UserFileSystem(this.userId);
-    const file = await fileSystem.readFile(
-      collectionId,
-      fileInfo.id,
-      thumbnail
-    );
+    const file = await fileSystem.readFile(collectionId, fileInfo.id);
     if (!file) {
       throw new HolviError(`Could not read file '${fileId}'`);
     }
@@ -590,6 +624,8 @@ export class CollectionService {
         "name",
         "hasRendition",
         "scrubPreviewLayout",
+        "thumbnailStatus",
+        "blurDataUrl",
       ],
       include: {
         model: db.models.Collection,
@@ -609,6 +645,8 @@ export class CollectionService {
       mimeType: collectionFile.mimeType,
       hasRendition: collectionFile.hasRendition,
       hasScrubPreview: collectionFile.scrubPreviewLayout !== null,
+      thumbnailStatus: collectionFile.thumbnailStatus,
+      blurDataUrl: collectionFile.blurDataUrl,
     };
   }
 

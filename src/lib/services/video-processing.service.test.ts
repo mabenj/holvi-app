@@ -20,6 +20,14 @@ import {
 } from "../../../test/backup-fixtures";
 import { getTestDatabase, resetDatabase } from "../../../test/database";
 import {
+    clearRestoreDir,
+    createHoldingCopy,
+    deleteAllContent,
+    makeBackup,
+    placeInRestoreFolder,
+    releaseHoldingCopies
+} from "../../../test/restore-fixtures";
+import {
     addVideo,
     CaptureDateTags,
     generateVideo,
@@ -29,9 +37,10 @@ import {
 } from "../../../test/video-fixtures";
 import appConfig from "../common/app-config";
 import { UserFileSystem } from "../common/user-file-system";
-import { isActiveBackupJobStatus } from "../types/backup-job-dto";
+import { isActiveJobStatus } from "../types/job-dto";
 import { BackupService } from "./backup.service";
 import { CollectionService } from "./collection.service";
+import { RestoreService } from "./restore.service";
 import {
     VideoProcessingService,
     VideoProcessingStatus
@@ -159,6 +168,7 @@ describe("VideoProcessingService (integration)", () => {
 
     afterEach(() => {
         releaseHoldingOpeners();
+        releaseHoldingCopies();
     });
 
     it("gives a web-safe MP4 a Scrub preview but no Rendition, so it plays from its original", async () => {
@@ -483,7 +493,7 @@ describe("VideoProcessingService (integration)", () => {
         const started = await backups.start();
         const job = await waitFor(
             () => backups.getJob(started.id),
-            (job) => !isActiveBackupJobStatus(job.status)
+            (job) => !isActiveJobStatus(job.status)
         );
 
         expect(job.status).toBe("completed");
@@ -615,6 +625,64 @@ describe("VideoProcessingService (integration)", () => {
             "completed"
         );
         expect((await aliceBackups.getJob(aliceJob.id)).status).toBe("completed");
+    });
+
+    it("waits while a Restore job is queued or running, and processes the video once none is", async () => {
+        await clearRestoreDir();
+        const db = await getTestDatabase();
+        const alice = await createUser("alice");
+        const bob = await createUser("bob");
+        const carol = await createUser("carol");
+        const trip = await createCollection(alice.id, "Trip");
+        const bobsTrip = await createCollection(bob.id, "Bob's trip");
+        await addFile(bob.id, bobsTrip.id, "a.jpg", Buffer.from("photo"));
+        await placeInRestoreFolder("bob", await makeBackup(bob.id));
+        await deleteAllContent(bob.id);
+        await addVideo(alice.id, trip.id, "clip", {
+            videoCodec: "h264",
+            audio: "none",
+            container: "mp4"
+        });
+        // Queued, and not yet started by the instance's restore runner; its zip is gone, so it fails once run
+        const queued = await db.models.RestoreJob.create({
+            UserId: carol.id,
+            status: "queued",
+            queuedAt: new Date(),
+            sourceId: "backup.zip",
+            sourceName: "backup.zip",
+            zipPath: path.join(appConfig.restoreDir, "carol", "backup.zip"),
+            zipSizeBytes: 1,
+            zipModifiedAt: new Date(),
+            collectionIds: []
+        });
+        const service = new VideoProcessingService(alice.id);
+
+        await service.processVideos();
+        await sleep(WAIT_LONGER_THAN_A_BACKUP_CHECK_MS);
+        const whileQueued = await service.getStatus();
+        // Starting Bob's restore starts the runner, which runs Carol's queued job first
+        const holding = createHoldingCopy();
+        const bobsRestores = new RestoreService(bob.id, {
+            copyEntry: holding.copyEntry
+        });
+        const bobsJob = await bobsRestores.start("backup.zip");
+        await holding.holding;
+        await sleep(WAIT_LONGER_THAN_A_BACKUP_CHECK_MS);
+        const whileRunning = await service.getStatus();
+        holding.release();
+        const finished = await waitFor(() => service.getStatus(), isIdle, 60_000);
+
+        expect(whileQueued).toMatchObject({ pending: 1, processing: 0, done: 0 });
+        expect(whileRunning).toMatchObject({ pending: 1, processing: 0, done: 0 });
+        expect(finished).toMatchObject({ done: 1, failed: 0 });
+        expect((await new RestoreService(carol.id).getJob(queued.id)).status).toBe(
+            "failed"
+        );
+        const bobsFinished = await waitFor(
+            () => bobsRestores.getJob(bobsJob.id),
+            (job) => !isActiveJobStatus(job.status)
+        );
+        expect(bobsFinished.status).toBe("completed");
     });
 
     it("on startup returns videos left processing to pending, empties the processing directory and resumes", async () => {

@@ -19,7 +19,8 @@ export default class DatabaseUpgrade {
             2: DatabaseUpgrade.performUpgrade2,
             3: DatabaseUpgrade.performUpgrade3,
             4: DatabaseUpgrade.performUpgrade4,
-            5: DatabaseUpgrade.performUpgrade5
+            5: DatabaseUpgrade.performUpgrade5,
+            6: DatabaseUpgrade.performUpgrade6
         };
 
     static async upgrade(from: number, to: number, db: Database) {
@@ -184,6 +185,11 @@ export default class DatabaseUpgrade {
 
     private static async performUpgrade5(): Promise<boolean> {
         // Version 6 marks the UI rewrite's schema: its browsing and video processing columns and indexes are added to the models, which model sync creates with defaults; no data to migrate
+        return true;
+    }
+
+    private static async performUpgrade6(): Promise<boolean> {
+        // Version 7 adds the files' thumbnail state, which model sync creates with every existing file ready, as each got its thumbnail on upload; no data to migrate
         return true;
     }
 }

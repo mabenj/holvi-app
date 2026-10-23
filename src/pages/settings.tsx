@@ -2,6 +2,7 @@ import { SignedInPageProps, signedInPageProps } from "@/lib/common/signed-in-pag
 import AppShell from "@/lib/components/app-shell/AppShell";
 import Activity from "@/lib/components/settings/Activity";
 import Backups from "@/lib/components/settings/Backups";
+import Restore from "@/lib/components/settings/Restore";
 import VideoProcessing from "@/lib/components/settings/VideoProcessing";
 import {
     GRID_DENSITIES,
@@ -23,6 +24,9 @@ export default function SettingsTab({ user }: SignedInPageProps) {
                 </Section>
                 <Section title="Backups">
                     <Backups />
+                </Section>
+                <Section title="Restore">
+                    <Restore />
                 </Section>
                 <Section title="Video processing">
                     <VideoProcessing />

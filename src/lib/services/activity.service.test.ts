@@ -116,6 +116,7 @@ describe("ActivityService", () => {
 
         expect(activity).toEqual({
             backupJob: null,
+            restoreJob: null,
             videoProcessing: {
                 pending: 0,
                 processing: 0,
@@ -123,7 +124,74 @@ describe("ActivityService", () => {
                 failed: 1,
                 currentFile: null
             },
+            pendingThumbnails: 0,
             active: false
         });
+    });
+
+    it("reports only the requesting user's queued or running Restore job", async () => {
+        const db = await getTestDatabase();
+        const alice = await createUser("alice");
+        const bob = await createUser("bob");
+        // Rows only, so the instance's restore runner does not pick them up
+        const restoreJob = (
+            userId: string,
+            status: "completed" | "running",
+            queuedAt: string
+        ) =>
+            db.models.RestoreJob.create({
+                UserId: userId,
+                status,
+                queuedAt: new Date(queuedAt),
+                sourceId: "backup.zip",
+                sourceName: "backup.zip",
+                zipPath: "/restore/backup.zip",
+                zipSizeBytes: 10_000,
+                zipModifiedAt: new Date(queuedAt),
+                collectionIds: [],
+                filesDone: status === "running" ? 4 : 0,
+                filesTotal: status === "running" ? 8 : 0,
+                currentFileName: status === "running" ? "beach.jpg" : null
+            });
+        await restoreJob(alice.id, "completed", "2026-01-01T00:00:00Z");
+        await restoreJob(bob.id, "running", "2026-01-15T00:00:00Z");
+        const alices = new ActivityService(alice.id);
+        const withoutRestore = await alices.getActivity();
+        const aliceJob = await restoreJob(alice.id, "running", "2026-02-01T00:00:00Z");
+
+        const withRestore = await alices.getActivity();
+
+        expect(withoutRestore).toMatchObject({ restoreJob: null, active: false });
+        expect(withRestore).toMatchObject({
+            restoreJob: {
+                id: aliceJob.id,
+                status: "running",
+                sourceName: "backup.zip",
+                progress: { filesDone: 4, filesTotal: 8, currentFileName: "beach.jpg" }
+            },
+            active: true
+        });
+    });
+
+    it("counts the user's pending thumbnails as Activity, and not failed ones", async () => {
+        const alice = await createUser("alice");
+        const bob = await createUser("bob");
+        const trip = await createCollection(alice.id, "Trip");
+        const bobsTrip = await createCollection(bob.id, "Bob's trip");
+        const photo = (userId: string, collectionId: string, name: string, thumbnailStatus: CollectionFile["thumbnailStatus"]) =>
+            addFile(userId, collectionId, name, Buffer.from(name), { thumbnailStatus });
+        await photo(alice.id, trip.id, "a-ready.jpg", "ready");
+        await photo(alice.id, trip.id, "a-failed.jpg", "failed");
+        await photo(bob.id, bobsTrip.id, "b-pending.jpg", "pending");
+        const alices = new ActivityService(alice.id);
+        // Rows only: the thumbnail worker is not kicked
+        const withoutPending = await alices.getActivity();
+        await photo(alice.id, trip.id, "a-pending.jpg", "pending");
+        await photo(alice.id, trip.id, "a-pending-2.jpg", "pending");
+
+        const withPending = await alices.getActivity();
+
+        expect(withoutPending).toMatchObject({ pendingThumbnails: 0, active: false });
+        expect(withPending).toMatchObject({ pendingThumbnails: 2, active: true });
     });
 });

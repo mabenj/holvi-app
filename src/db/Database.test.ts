@@ -32,14 +32,14 @@ describe("Database (integration)", () => {
         expect(await db.models.User.count()).toBe(0);
     });
 
-    it("reports version 6 after start", async () => {
+    it("reports version 7 after start", async () => {
         await getTestDatabase();
 
         const info = await DatabaseInfo.findByPk(1);
-        expect(info?.version).toBe(6);
+        expect(info?.version).toBe(7);
     });
 
-    it("upgrades a version 5 database to version 6 without changing its data", async () => {
+    it("upgrades a version 5 database to version 7 without changing its data", async () => {
         const db = await getTestDatabase();
         const user = await createUser("alice");
         const holiday = await createCollection(user.id, "Holiday", {
@@ -59,7 +59,36 @@ describe("Database (integration)", () => {
 
         await Database.ensureUpToDate();
 
-        expect((await DatabaseInfo.findByPk(1))?.version).toBe(6);
+        expect((await DatabaseInfo.findByPk(1))?.version).toBe(7);
         expect(await snapshot()).toEqual(before);
+    });
+
+    it("upgrades a version 6 database to version 7 with every existing file's thumbnail ready", async () => {
+        const db = await getTestDatabase();
+        const user = await createUser("alice");
+        const holiday = await createCollection(user.id, "Holiday");
+        const beach = await addFile(
+            user.id,
+            holiday.id,
+            "beach.jpg",
+            Buffer.from("beach")
+        );
+        // The schema of version 6, which had no thumbnail state
+        const queryInterface = db.models.CollectionFile.sequelize!.getQueryInterface();
+        await queryInterface.removeColumn("CollectionFiles", "thumbnailStatus");
+        await queryInterface.removeColumn("CollectionFiles", "thumbnailError");
+        await DatabaseInfo.update({ version: 6 }, { where: { id: 1 } });
+
+        // As on start: the models are synced, then the database is upgraded
+        await db.models.CollectionFile.sync({ alter: true });
+        await Database.ensureUpToDate();
+
+        expect((await DatabaseInfo.findByPk(1))?.version).toBe(7);
+        expect(
+            await db.models.CollectionFile.findByPk(beach.id, {
+                attributes: ["thumbnailStatus", "thumbnailError"],
+                raw: true
+            })
+        ).toEqual({ thumbnailStatus: "ready", thumbnailError: null });
     });
 });

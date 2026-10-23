@@ -55,6 +55,21 @@ export class UserFileSystem {
     this.logger = new Log("FS", LogColor.YELLOW);
   }
 
+  /** Where a collection's files are stored, with their thumbnails, Renditions and Scrub previews */
+  getCollectionDir(collectionId: string) {
+    return path.join(this.rootDir, collectionId);
+  }
+
+  /** Where a file's encrypted original is stored */
+  getFilePath(collectionId: string, fileId: string) {
+    return path.join(this.rootDir, collectionId, fileId);
+  }
+
+  /** Where a file's encrypted thumbnail is stored: next to its original */
+  getThumbnailPath(collectionId: string, fileId: string) {
+    return path.join(this.rootDir, collectionId, "tn", fileId);
+  }
+
   /** Where a video's encrypted Rendition is stored: next to its original */
   getRenditionPath(collectionId: string, fileId: string) {
     return path.join(this.rootDir, collectionId, "rendition", fileId);
@@ -83,8 +98,9 @@ export class UserFileSystem {
       // so they go first
       await rm(this.getRenditionPath(collectionId, fileId), { force: true });
       await rm(this.getScrubPreviewPath(collectionId, fileId), { force: true });
-      await unlink(path.join(this.rootDir, collectionId, "tn", fileId));
-      await unlink(path.join(this.rootDir, collectionId, fileId));
+      // A file whose thumbnail was never made has none
+      await rm(this.getThumbnailPath(collectionId, fileId), { force: true });
+      await unlink(this.getFilePath(collectionId, fileId));
     } catch (error) {
       this.logger.error(
         `Error deleting file and thumbnail '${collectionId}/${fileId}'`,
@@ -96,7 +112,7 @@ export class UserFileSystem {
 
   async deleteCollectionDir(collectionId: string) {
     try {
-      await deleteDirectory(path.join(this.rootDir, collectionId));
+      await deleteDirectory(this.getCollectionDir(collectionId));
     } catch (error) {
       this.logger.error(
         `Error deleting collection directory '${collectionId}'`,
@@ -116,7 +132,7 @@ export class UserFileSystem {
     try {
       const filePath = rendition
         ? this.getRenditionPath(collectionId, fileId)
-        : path.join(this.rootDir, collectionId, fileId);
+        : this.getFilePath(collectionId, fileId);
       const { stream, start, end, totalSize } =
         await Cryptography.getDecryptedStreamChunk(filePath, offset, chunkSize);
 
@@ -138,15 +154,13 @@ export class UserFileSystem {
   }
 
   getDecryptedFileSize(collectionId: string, fileId: string) {
-    return Cryptography.getDecryptedSize(
-      path.join(this.rootDir, collectionId, fileId)
-    );
+    return Cryptography.getDecryptedSize(this.getFilePath(collectionId, fileId));
   }
 
   /** Opens a file's whole decrypted content as a stream. Failures are emitted as stream errors. */
   openDecryptedFile(collectionId: string, fileId: string): Readable {
     return Cryptography.createDecryptionStream(
-      path.join(this.rootDir, collectionId, fileId)
+      this.getFilePath(collectionId, fileId)
     );
   }
 

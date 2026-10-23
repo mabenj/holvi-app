@@ -6,6 +6,7 @@ import { CollectionFile } from "./CollectionFile";
 import { CollectionFileTag } from "./CollectionFileTag";
 import { CollectionTag } from "./CollectionTag";
 import { DatabaseInfo } from "./DatabaseInfo";
+import { RestoreJob } from "./RestoreJob";
 import { Tag } from "./Tag";
 import { User } from "./User";
 
@@ -19,7 +20,8 @@ const expectedNames = [
     [Tag, "Tag", "Tags"],
     [CollectionTag, "CollectionTag", "CollectionTags"],
     [CollectionFileTag, "CollectionFileTag", "CollectionFileTags"],
-    [BackupJob, "BackupJob", "BackupJobs"]
+    [BackupJob, "BackupJob", "BackupJobs"],
+    [RestoreJob, "RestoreJob", "RestoreJobs"]
 ] as const;
 
 describe("model names", () => {
