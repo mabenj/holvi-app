@@ -154,6 +154,30 @@ export class JobRunner<Job extends QueuedJob, Dependencies> {
     }
 }
 
+declare global {
+    // eslint-disable-next-line no-var
+    var holviJobRunners: Map<string, unknown> | undefined;
+}
+
+/**
+ * The instance's one runner of a kind of job, so each kind has its own queue
+ * and neither waits for the other. Kept on globalThis because Next.js may load
+ * a module more than once (per API route bundle, instrumentation, hot reload).
+ */
+export function getJobRunner<Job extends QueuedJob, Dependencies>(
+    options: JobRunnerOptions<Job, Dependencies>
+) {
+    globalThis.holviJobRunners ??= new Map();
+    let runner = globalThis.holviJobRunners.get(options.kind) as
+        | JobRunner<Job, Dependencies>
+        | undefined;
+    if (!runner) {
+        runner = new JobRunner(options);
+        globalThis.holviJobRunners.set(options.kind, runner);
+    }
+    return runner;
+}
+
 export function throwIfAborted(signal: AbortSignal) {
     if (signal.aborted) {
         throw signal.reason;

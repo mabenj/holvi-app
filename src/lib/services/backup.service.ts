@@ -8,25 +8,16 @@ import crypto from "crypto";
 import { createWriteStream, WriteStream } from "fs";
 import { mkdir, open, readdir, rename, rm, stat, statfs } from "fs/promises";
 import path from "path";
-import { InferAttributes, Op, Transaction } from "sequelize";
+import { Op, Transaction } from "sequelize";
 import { Readable } from "stream";
 import appConfig from "../common/app-config";
 import { UniqueSafeNames } from "../common/backup-paths";
 import { InvalidArgumentError, NotFoundError } from "../common/errors";
 import Log, { LogColor } from "../common/log";
 import { UserFileSystem } from "../common/user-file-system";
-import {
-    formatBytes,
-    getErrorMessage,
-    isUuidv4,
-    timestamp
-} from "../common/utilities";
-import {
-    JobRunner,
-    JobRunnerOptions,
-    ProgressSaver,
-    throwIfAborted
-} from "./job-runner";
+import { formatBytes, getErrorMessage, timestamp } from "../common/utilities";
+import { getJobRunner, ProgressSaver, throwIfAborted } from "./job-runner";
+import { JobStore } from "./job-store";
 import { BackupJobDto, BackupProblem } from "../types/backup-job-dto";
 import { isCompletedJobStatus, JobStatus } from "../types/job-dto";
 
@@ -90,9 +81,9 @@ interface WriteProgress {
     currentFileName: string | null;
 }
 
-type BackupJobFields = Partial<InferAttributes<BackupJob>>;
-
 const logger = new Log("BACKUP", LogColor.GREEN);
+
+const backupJobs = new JobStore(BackupJob, "Backup job");
 
 export class BackupService {
     private readonly dependencies: BackupJobDependencies;
@@ -172,20 +163,13 @@ export class BackupService {
 
     /** The user's backup jobs, latest first */
     async getJobs(): Promise<BackupJobDto[]> {
-        const db = await Database.getInstance();
-        const jobs = await db.models.BackupJob.findAll({
-            where: { UserId: this.userId },
-            order: [["queuedAt", "DESC"]]
-        });
+        const jobs = await backupJobs.findUserJobs(this.userId);
         return jobs.map((job) => job.toDto());
     }
 
     /** The user's queued or running backup job, if any; a user has at most one */
     async getActiveJob(): Promise<BackupJobDto | null> {
-        const db = await Database.getInstance();
-        const job = await db.models.BackupJob.findOne({
-            where: { UserId: this.userId, status: ["queued", "running"] }
-        });
+        const job = await backupJobs.findActiveUserJob(this.userId);
         return job?.toDto() ?? null;
     }
 
@@ -258,17 +242,8 @@ export class BackupService {
         return (await this.findUserJob(jobId)).toDto();
     }
 
-    private async findUserJob(jobId: string) {
-        const db = await Database.getInstance();
-        const job = isUuidv4(jobId)
-            ? await db.models.BackupJob.findOne({
-                  where: { id: jobId, UserId: this.userId }
-              })
-            : null;
-        if (!job) {
-            throw new NotFoundError(`Backup job '${jobId}' not found`);
-        }
-        return job;
+    private findUserJob(jobId: string) {
+        return backupJobs.findUserJob(this.userId, jobId);
     }
 }
 
@@ -297,15 +272,6 @@ const realDependencies: BackupJobDependencies = {
 
 function getUserBackupDir(userId: string) {
     return path.join(appConfig.backupDir, userId);
-}
-
-/**
- * Job state is persisted with targeted updates rather than by saving a shared
- * model instance, so progress changed during an in-flight save is never lost.
- */
-async function updateJob(jobId: string, fields: BackupJobFields) {
-    const db = await Database.getInstance();
-    await db.models.BackupJob.update(fields, { where: { id: jobId } });
 }
 
 /** Fails jobs a previous server process left running and removes every partial zip */
@@ -347,46 +313,18 @@ async function recoverInterruptedJobs() {
     );
 }
 
-const runnerOptions: JobRunnerOptions<BackupJob, BackupJobDependencies> = {
-    kind: "backup",
-    logger,
-    realDependencies,
-    findNextQueued: async () => {
-        const db = await Database.getInstance();
-        return db.models.BackupJob.findOne({
-            where: { status: "queued" },
-            order: [
-                ["queuedAt", "ASC"],
-                ["createdAt", "ASC"]
-            ]
-        });
-    },
-    claim: async (jobId) => {
-        const db = await Database.getInstance();
-        const [claimed] = await db.models.BackupJob.update(
-            { status: "running" },
-            { where: { id: jobId, status: "queued" } }
-        );
-        return claimed > 0;
-    },
-    run: (job, dependencies, signal) => runBackupJob(job, dependencies, signal),
-    recoverInterrupted: () => recoverInterruptedJobs()
-};
-
-declare global {
-    // eslint-disable-next-line no-var
-    var holviBackupJobRunner:
-        | JobRunner<BackupJob, BackupJobDependencies>
-        | undefined;
-}
-
-/**
- * The instance's one Backup job runner. Kept on globalThis because Next.js may
- * load this module more than once (per API route bundle, instrumentation, hot reload).
- */
+/** The instance's one Backup job runner */
 function getRunner() {
-    globalThis.holviBackupJobRunner ??= new JobRunner(runnerOptions);
-    return globalThis.holviBackupJobRunner;
+    return getJobRunner<BackupJob, BackupJobDependencies>({
+        kind: "backup",
+        logger,
+        realDependencies,
+        findNextQueued: () => backupJobs.findNextQueued(),
+        claim: (jobId) => backupJobs.claim(jobId),
+        run: (job, dependencies, signal) =>
+            runBackupJob(job, dependencies, signal),
+        recoverInterrupted: () => recoverInterruptedJobs()
+    });
 }
 
 /** Runs a job already marked running; aborting `signal` cancels it */
@@ -403,7 +341,7 @@ async function runBackupJob(
     };
     const progressSaver = new ProgressSaver(
         progress,
-        (current) => updateJob(job.id, current),
+        (current) => backupJobs.update(job.id, current),
         logger,
         `backup job '${job.id}'`
     );
@@ -425,7 +363,7 @@ async function runBackupJob(
         let bytesTotal = 0;
         fileSizes.forEach((size) => (bytesTotal += size));
         throwIfAborted(signal);
-        await updateJob(job.id, {
+        await backupJobs.update(job.id, {
             startedAt,
             collectionsTotal: snapshot.collections.length,
             filesTotal: snapshot.collections.reduce(
@@ -460,12 +398,12 @@ async function runBackupJob(
         const { size } = await stat(zipPath);
         // Recorded before the backups it replaces are deleted, so that a crash
         // in between can never leave the user with neither
-        await updateJob(job.id, { zipFileName, zipSizeBytes: size });
+        await backupJobs.update(job.id, { zipFileName, zipSizeBytes: size });
         // Deleted before the job reports completion, so that a job seen as
         // completed has left exactly one backup behind
         await deletePreviousBackups(job.UserId, job.id);
 
-        await updateJob(job.id, {
+        await backupJobs.update(job.id, {
             ...progress,
             status: outcome,
             finishedAt,
@@ -488,7 +426,7 @@ async function runBackupJob(
         } else {
             logger.error(`Backup job '${job.id}' failed`, error);
         }
-        await updateJob(job.id, {
+        await backupJobs.update(job.id, {
             status: cancelled ? "cancelled" : "failed",
             finishedAt: new Date(),
             currentFileName: null,
@@ -515,7 +453,7 @@ async function deleteBackupZip(job: BackupJob) {
     await rm(path.join(getUserBackupDir(job.UserId), job.zipFileName), {
         force: true
     });
-    await updateJob(job.id, { zipFileName: null });
+    await backupJobs.update(job.id, { zipFileName: null });
 }
 
 /**

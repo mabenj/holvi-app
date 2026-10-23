@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { createWriteStream } from "fs";
 import { mkdir, open, readdir, rename, rm, stat, statfs } from "fs/promises";
 import path from "path";
-import { InferAttributes, Op, Transaction } from "sequelize";
+import { Op, Transaction } from "sequelize";
 import { Readable, Transform } from "stream";
 import { pipeline } from "stream/promises";
 import appConfig from "../common/app-config";
@@ -12,7 +12,7 @@ import Cryptography from "../common/cryptography";
 import { InvalidArgumentError, NotFoundError } from "../common/errors";
 import Log, { LogColor } from "../common/log";
 import { UserFileSystem } from "../common/user-file-system";
-import { formatBytes, getErrorMessage, isUuidv4 } from "../common/utilities";
+import { formatBytes, getErrorMessage } from "../common/utilities";
 import { ZipReader } from "../common/zip-reader";
 import {
     BackupContents,
@@ -21,12 +21,8 @@ import {
     readTakenAt,
     withBackup
 } from "./backup-reader";
-import {
-    JobRunner,
-    JobRunnerOptions,
-    ProgressSaver,
-    throwIfAborted
-} from "./job-runner";
+import { getJobRunner, ProgressSaver, throwIfAborted } from "./job-runner";
+import { JobStore } from "./job-store";
 import { ThumbnailResult, ThumbnailService } from "./thumbnail.service";
 import { VideoProcessingService } from "./video-processing.service";
 import { isCompletedJobStatus, JobStatus } from "../types/job-dto";
@@ -109,8 +105,6 @@ interface CopyContext {
 /** The user and collections of a job's library, whose files it writes */
 type RestoredLibrary = Pick<RestoreJob, "UserId" | "collectionIds">;
 
-type RestoreJobFields = Partial<InferAttributes<RestoreJob>>;
-
 /**
  * Thumbnails a job has the thumbnail worker make as soon as each file is in
  * storage, before its row exists, so most are ready when the job completes.
@@ -153,6 +147,8 @@ class EarlyThumbnails {
 }
 
 const logger = new Log("RESTORE", LogColor.MAGENTA);
+
+const restoreJobs = new JobStore(RestoreJob, "Restore job");
 
 /**
  * Restores for one user: the Backups they can restore from, and Restore jobs
@@ -286,25 +282,18 @@ export class RestoreService {
 
     /** The user's Restore jobs, latest first */
     async getJobs(): Promise<RestoreJobDto[]> {
-        const db = await Database.getInstance();
-        const jobs = await db.models.RestoreJob.findAll({
-            where: { UserId: this.userId },
-            order: [["queuedAt", "DESC"]]
-        });
+        const jobs = await restoreJobs.findUserJobs(this.userId);
         return jobs.map((job) => job.toDto());
     }
 
     /** The user's queued or running Restore job, if any; a user has at most one */
     async getActiveJob(): Promise<RestoreJobDto | null> {
-        const db = await Database.getInstance();
-        const job = await db.models.RestoreJob.findOne({
-            where: { UserId: this.userId, status: ["queued", "running"] }
-        });
+        const job = await restoreJobs.findActiveUserJob(this.userId);
         return job?.toDto() ?? null;
     }
 
     async getJob(jobId: string): Promise<RestoreJobDto> {
-        const job = await this.findUserJob(jobId);
+        const job = await restoreJobs.findUserJob(this.userId, jobId);
         return job.toDto();
     }
 
@@ -313,7 +302,7 @@ export class RestoreService {
      * stopped and deleted every file it wrote. A finished job is returned unchanged.
      */
     async cancel(jobId: string): Promise<RestoreJobDto> {
-        const job = await this.findUserJob(jobId);
+        const job = await restoreJobs.findUserJob(this.userId, jobId);
         const db = await Database.getInstance();
         if (job.status === "queued") {
             // Conditional, so a job the runner claims meanwhile is stopped below instead
@@ -337,20 +326,7 @@ export class RestoreService {
                 await removeWrittenFiles(job);
             }
         }
-        return (await this.findUserJob(jobId)).toDto();
-    }
-
-    private async findUserJob(jobId: string) {
-        const db = await Database.getInstance();
-        const job = isUuidv4(jobId)
-            ? await db.models.RestoreJob.findOne({
-                  where: { id: jobId, UserId: this.userId }
-              })
-            : null;
-        if (!job) {
-            throw new NotFoundError(`Restore job '${jobId}' not found`);
-        }
-        return job;
+        return this.getJob(jobId);
     }
 
     private async getUserFolder() {
@@ -535,56 +511,18 @@ async function checkFreeSpace(
     }
 }
 
-/**
- * Job state is persisted with targeted updates rather than by saving a shared
- * model instance, so progress changed during an in-flight save is never lost.
- */
-async function updateJob(jobId: string, fields: RestoreJobFields) {
-    const db = await Database.getInstance();
-    await db.models.RestoreJob.update(fields, { where: { id: jobId } });
-}
-
-const runnerOptions: JobRunnerOptions<RestoreJob, RestoreJobDependencies> = {
-    kind: "restore",
-    logger,
-    realDependencies,
-    findNextQueued: async () => {
-        const db = await Database.getInstance();
-        return db.models.RestoreJob.findOne({
-            where: { status: "queued" },
-            order: [
-                ["queuedAt", "ASC"],
-                ["createdAt", "ASC"]
-            ]
-        });
-    },
-    claim: async (jobId) => {
-        const db = await Database.getInstance();
-        const [claimed] = await db.models.RestoreJob.update(
-            { status: "running" },
-            { where: { id: jobId, status: "queued" } }
-        );
-        return claimed > 0;
-    },
-    run: (job, dependencies, signal) => runRestoreJob(job, dependencies, signal),
-    recoverInterrupted: () => recoverInterruptedJobs()
-};
-
-declare global {
-    // eslint-disable-next-line no-var
-    var holviRestoreJobRunner:
-        | JobRunner<RestoreJob, RestoreJobDependencies>
-        | undefined;
-}
-
-/**
- * The instance's one Restore job runner, separate from the Backup job runner so
- * neither kind of job waits for the other. Kept on globalThis because Next.js
- * may load this module more than once (per API route bundle, instrumentation, hot reload).
- */
+/** The instance's one Restore job runner, separate from the Backup job runner */
 function getRunner() {
-    globalThis.holviRestoreJobRunner ??= new JobRunner(runnerOptions);
-    return globalThis.holviRestoreJobRunner;
+    return getJobRunner<RestoreJob, RestoreJobDependencies>({
+        kind: "restore",
+        logger,
+        realDependencies,
+        findNextQueued: () => restoreJobs.findNextQueued(),
+        claim: (jobId) => restoreJobs.claim(jobId),
+        run: (job, dependencies, signal) =>
+            runRestoreJob(job, dependencies, signal),
+        recoverInterrupted: () => recoverInterruptedJobs()
+    });
 }
 
 /**
@@ -600,7 +538,7 @@ async function recoverInterruptedJobs() {
     });
     for (const job of interrupted) {
         await removePartialFiles(job);
-        await updateJob(job.id, { status: "queued", currentFileName: null });
+        await restoreJobs.update(job.id, { status: "queued", currentFileName: null });
     }
     logger.info(
         `Recovered Restore jobs: ${interrupted.length} interrupted jobs queued to continue`
@@ -650,7 +588,7 @@ async function runRestoreJob(
     };
     const progressSaver = new ProgressSaver(
         progress,
-        (current) => updateJob(job.id, current),
+        (current) => restoreJobs.update(job.id, current),
         logger,
         `Restore job '${job.id}'`
     );
@@ -667,7 +605,7 @@ async function runRestoreJob(
         }
         await checkSourceUnchanged(job);
         await withBackup(job.zipPath, async (backup, zip) => {
-            await updateJob(job.id, {
+            await restoreJobs.update(job.id, {
                 // A job continued after a restart keeps when it first started
                 startedAt: job.startedAt ?? new Date(),
                 collectionsTotal: backup.collections.length,
@@ -693,7 +631,7 @@ async function runRestoreJob(
             throwIfAborted(signal);
             progress.currentFileName = null;
             // Saved before the insert, so a job interrupted right after it can still be completed
-            await updateJob(job.id, { ...progress, unrestoredFiles: unrestored });
+            await restoreJobs.update(job.id, { ...progress, unrestoredFiles: unrestored });
             await insertLibrary(job.UserId, backup, unrestored, thumbnails);
             unrestoredFiles = unrestored;
         });
@@ -715,7 +653,7 @@ async function runRestoreJob(
         } else {
             logger.error(`Restore job '${job.id}' failed`, error);
         }
-        await updateJob(job.id, {
+        await restoreJobs.update(job.id, {
             status: cancelled ? "cancelled" : "failed",
             finishedAt: new Date(),
             currentFileName: null,
@@ -741,7 +679,7 @@ async function finishCompletedJob(
     VideoProcessingService.kick();
     const status: JobStatus =
         unrestoredFiles.length > 0 ? "completedWithErrors" : "completed";
-    await updateJob(jobId, {
+    await restoreJobs.update(jobId, {
         status,
         finishedAt: new Date(),
         currentFileName: null,
