@@ -55,6 +55,11 @@ export class UserFileSystem {
     this.logger = new Log("FS", LogColor.YELLOW);
   }
 
+  /** Where a file's encrypted thumbnail is stored: next to its original */
+  getThumbnailPath(collectionId: string, fileId: string) {
+    return path.join(this.rootDir, collectionId, "tn", fileId);
+  }
+
   /** Where a video's encrypted Rendition is stored: next to its original */
   getRenditionPath(collectionId: string, fileId: string) {
     return path.join(this.rootDir, collectionId, "rendition", fileId);
@@ -83,7 +88,8 @@ export class UserFileSystem {
       // so they go first
       await rm(this.getRenditionPath(collectionId, fileId), { force: true });
       await rm(this.getScrubPreviewPath(collectionId, fileId), { force: true });
-      await unlink(path.join(this.rootDir, collectionId, "tn", fileId));
+      // A file whose thumbnail was never made has none
+      await rm(this.getThumbnailPath(collectionId, fileId), { force: true });
       await unlink(path.join(this.rootDir, collectionId, fileId));
     } catch (error) {
       this.logger.error(

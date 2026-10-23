@@ -123,7 +123,30 @@ describe("ActivityService", () => {
                 failed: 1,
                 currentFile: null
             },
+            pendingThumbnails: 0,
             active: false
         });
+    });
+
+    it("counts the user's pending thumbnails as Activity, and not failed ones", async () => {
+        const alice = await createUser("alice");
+        const bob = await createUser("bob");
+        const trip = await createCollection(alice.id, "Trip");
+        const bobsTrip = await createCollection(bob.id, "Bob's trip");
+        const photo = (userId: string, collectionId: string, name: string, thumbnailStatus: CollectionFile["thumbnailStatus"]) =>
+            addFile(userId, collectionId, name, Buffer.from(name), { thumbnailStatus });
+        await photo(alice.id, trip.id, "a-ready.jpg", "ready");
+        await photo(alice.id, trip.id, "a-failed.jpg", "failed");
+        await photo(bob.id, bobsTrip.id, "b-pending.jpg", "pending");
+        const alices = new ActivityService(alice.id);
+        // Rows only: the thumbnail worker is not kicked
+        const withoutPending = await alices.getActivity();
+        await photo(alice.id, trip.id, "a-pending.jpg", "pending");
+        await photo(alice.id, trip.id, "a-pending-2.jpg", "pending");
+
+        const withPending = await alices.getActivity();
+
+        expect(withoutPending).toMatchObject({ pendingThumbnails: 0, active: false });
+        expect(withPending).toMatchObject({ pendingThumbnails: 2, active: true });
     });
 });

@@ -82,16 +82,17 @@ async function handleGetThumbnail(
     fileId: string
 ) {
     const service = new CollectionService(req.session.user.id);
-    const { file, filename } = await service.getFileBuffer(
-        collectionId,
-        fileId,
-        true
+    const { file, filename, mimeType, placeholder } =
+        await service.getThumbnail(collectionId, fileId);
+    res.setHeader("Content-Type", mimeType);
+    // A placeholder must not outlive the thumbnail that replaces it
+    res.setHeader(
+        "Cache-Control",
+        placeholder ? "private, no-store" : PRIVATE_CACHE_CONTROL
     );
-    res.setHeader("Content-Type", "image/png");
-    res.setHeader("Cache-Control", PRIVATE_CACHE_CONTROL);
     res.setHeader(
         "Content-Disposition",
-        contentDisposition(`thumbnail_${filename}`, { type: "inline" })
+        contentDisposition(filename, { type: "inline" })
     );
     res.status(200).end(file);
 }

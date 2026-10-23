@@ -115,7 +115,7 @@ describe("BackupService (integration)", () => {
         const isoUtc = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
         expect(manifest).toEqual({
             formatVersion: 1,
-            schemaVersion: 6,
+            schemaVersion: 7,
             snapshotAt: expect.stringMatching(isoUtc),
             startedAt: new Date(job.startedAt!).toISOString(),
             finishedAt: new Date(job.finishedAt!).toISOString(),

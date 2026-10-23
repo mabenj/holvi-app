@@ -6,7 +6,11 @@ import {
     VideoProcessingStatus
 } from "@/lib/types/video-processing-status";
 import { Box, Flex, Progress, Spinner, Stack, Text } from "@chakra-ui/react";
-import { mdiArchiveArrowDownOutline, mdiMovieCogOutline } from "@mdi/js";
+import {
+    mdiArchiveArrowDownOutline,
+    mdiImageSyncOutline,
+    mdiMovieCogOutline
+} from "@mdi/js";
 import Icon from "@mdi/react";
 
 /**
@@ -38,7 +42,7 @@ export default function Activity() {
         );
     }
 
-    const { backupJob, videoProcessing } = activity;
+    const { backupJob, videoProcessing, pendingThumbnails } = activity;
     return (
         <Stack
             as="ul"
@@ -52,6 +56,17 @@ export default function Activity() {
             {backupJob && <BackupActivity job={backupJob} />}
             {isVideoProcessingActive(videoProcessing) && (
                 <VideoProcessingActivity status={videoProcessing} />
+            )}
+            {pendingThumbnails > 0 && (
+                <ActivityItem
+                    icon={mdiImageSyncOutline}
+                    title="Making thumbnails"
+                    detail={`${plural(
+                        pendingThumbnails,
+                        "thumbnail",
+                        "thumbnails"
+                    )} left`}
+                />
             )}
         </Stack>
     );

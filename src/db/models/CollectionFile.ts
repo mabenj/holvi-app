@@ -29,6 +29,15 @@ export const VIDEO_PROCESSING_STATUSES: VideoProcessingStatusValue[] = [
     "failed"
 ];
 
+/** Whether a file's thumbnail is ready; pending files wait for the thumbnail worker, and show their blur placeholder until then */
+export type ThumbnailStatusValue = "ready" | "pending" | "failed";
+
+export const THUMBNAIL_STATUSES: ThumbnailStatusValue[] = [
+    "ready",
+    "pending",
+    "failed"
+];
+
 export class CollectionFile extends Model<
     InferAttributes<CollectionFile>,
     InferCreationAttributes<CollectionFile>
@@ -54,6 +63,9 @@ export class CollectionFile extends Model<
     declare hasRendition: CreationOptional<boolean>;
     /** How the video's Scrub preview is tiled; null while it has none */
     declare scrubPreviewLayout: CreationOptional<ScrubPreviewLayout | null>;
+    declare thumbnailStatus: CreationOptional<ThumbnailStatusValue>;
+    /** Why the thumbnail worker could not make the file's thumbnail */
+    declare thumbnailError: CreationOptional<string | null>;
 
     declare createdAt: CreationOptional<Date>;
     declare updatedAt: CreationOptional<Date>;
@@ -103,7 +115,14 @@ export class CollectionFile extends Model<
                     allowNull: false,
                     defaultValue: false
                 },
-                scrubPreviewLayout: DataTypes.JSONB
+                scrubPreviewLayout: DataTypes.JSONB,
+                thumbnailStatus: {
+                    type: DataTypes.STRING,
+                    allowNull: false,
+                    defaultValue: "ready",
+                    validate: { isIn: [THUMBNAIL_STATUSES] }
+                },
+                thumbnailError: DataTypes.TEXT
             },
             {
                 sequelize,
@@ -136,7 +155,9 @@ export class CollectionFile extends Model<
                     // newest file, which most collection sorts order by
                     { fields: ["CollectionId", "createdAt"] },
                     // The video processing worker takes the oldest pending video
-                    { fields: ["processingStatus", "createdAt", "id"] }
+                    { fields: ["processingStatus", "createdAt", "id"] },
+                    // The thumbnail worker takes the oldest pending files
+                    { fields: ["thumbnailStatus", "createdAt", "id"] }
                 ]
             }
         );

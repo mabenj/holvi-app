@@ -108,7 +108,7 @@ A file of a Backup whose content did not match the checksum its metadata records
 ### Activity
 
 **Activity**:
-The background work Holvi is doing for a user right now: their queued or running **Backup job** or **Restore job**, and their videos waiting for or undergoing video processing. Failed videos are not Activity.
+The background work Holvi is doing for a user right now: their queued or running **Backup job** or **Restore job**, and their videos waiting for or undergoing video processing, and their files waiting for a thumbnail. Failed videos and failed thumbnails are not Activity.
 _Avoid_: jobs, tasks
 
 ### Operations

@@ -6,6 +6,8 @@ export interface Activity {
     /** The user's queued or running Backup job, if any */
     backupJob: BackupJobDto | null;
     videoProcessing: VideoProcessingStatus;
-    /** Whether a Backup job is queued or running, or videos are pending or processing */
+    /** How many of the user's files are waiting for their thumbnail; failed thumbnails are not counted */
+    pendingThumbnails: number;
+    /** Whether a Backup job is queued or running, videos are pending or processing, or thumbnails are pending */
     active: boolean;
 }

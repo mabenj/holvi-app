@@ -1,6 +1,7 @@
 import appConfig from "@/lib/common/app-config";
 import { existsSync } from "fs";
 import path from "path";
+import sharp from "sharp";
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetDatabase } from "../../../test/database";
 import {
@@ -26,6 +27,7 @@ import {
     CollectionService,
     FileSort
 } from "./collection.service";
+import { ThumbnailService } from "./thumbnail.service";
 
 describe("CollectionService (integration)", () => {
     beforeEach(async () => {
@@ -90,7 +92,7 @@ describe("CollectionService (integration)", () => {
                 service.getFileBuffer(collectionId, fileId)
             ).rejects.toThrow(NotFoundError);
             await expect(
-                service.getFileBuffer(collectionId, fileId, true)
+                service.getThumbnail(collectionId, fileId)
             ).rejects.toThrow(NotFoundError);
             await expect(
                 service.getScrubPreview(collectionId, fileId)
@@ -1239,6 +1241,35 @@ describe("Creating collections and uploading files (integration)", () => {
         );
         expect(await service.getCollection(trip.id)).toMatchObject({
             imageCount: 2
+        });
+    });
+
+    it("serves an uploaded file's thumbnail, made during the upload, with none left pending", async () => {
+        const user = await createUser("alice");
+        const trip = await createCollection(user.id, "Trip");
+        const service = new CollectionService(user.id);
+
+        const { files } = await service.uploadFiles(
+            trip.id,
+            uploadRequest([
+                {
+                    name: "a.png",
+                    content: await pngImage(),
+                    mimeType: "image/png",
+                    lastModified: new Date("2024-06-01T12:00:00Z")
+                }
+            ])
+        );
+
+        expect(await new ThumbnailService(user.id).getStatus()).toEqual({
+            pending: 0,
+            failed: 0
+        });
+        const thumbnail = await service.getThumbnail(trip.id, files[0].id);
+        expect(thumbnail.placeholder).toBe(false);
+        expect(await sharp(thumbnail.file).metadata()).toMatchObject({
+            width: 600,
+            height: 450
         });
     });
 

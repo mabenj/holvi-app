@@ -389,21 +389,29 @@ export class VideoHelper {
                     const thumbnailTime =
                         (metadata.format.duration || 1) *
                         (thumbnailTimePercentage / 100);
+                    // Both handlers run outside this try, so they reject rather than throw
+                    const fail = (error: unknown) =>
+                        reject(
+                            new HolviError(
+                                "Error generating video thumbnail",
+                                error
+                            )
+                        );
                     ffmpeg(sourcePath)
-                        .on("end", async () => {
+                        .on("end", () =>
                             // takeScreenshots() will add an unwanted .png extension
-                            await rename(targetPath + ".png", targetPath);
-                            resolve({
-                                width: videoWidth,
-                                height: videoHeight,
-                                thumbnailWidth,
-                                thumbnailHeight
-                                // durationInSeconds: metadata.format.duration
-                            });
-                        })
-                        .on("error", (error) => {
-                            throw error;
-                        })
+                            rename(targetPath + ".png", targetPath).then(
+                                () =>
+                                    resolve({
+                                        width: videoWidth,
+                                        height: videoHeight,
+                                        thumbnailWidth,
+                                        thumbnailHeight
+                                    }),
+                                fail
+                            )
+                        )
+                        .on("error", fail)
                         .takeScreenshots(
                             {
                                 count: 1,

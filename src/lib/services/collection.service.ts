@@ -321,10 +321,44 @@ export class CollectionService {
     };
   }
 
+  /**
+   * A file's thumbnail, or its blur placeholder while its thumbnail is not
+   * ready: still pending, or failed
+   */
+  async getThumbnail(
+    collectionId: string,
+    fileId: string
+  ): Promise<GetBufferResult & { placeholder: boolean }> {
+    const fileInfo = await this.getCollectionFileInfo(collectionId, fileId);
+    if (!fileInfo) {
+      throw new NotFoundError(`File not found '${fileId}'`);
+    }
+    const filename = `thumbnail_${fileInfo.label}`;
+    if (fileInfo.thumbnailStatus !== "ready") {
+      const blur = /^data:([^;,]+);base64,(.*)$/.exec(
+        fileInfo.blurDataUrl ?? ""
+      );
+      if (!blur) {
+        throw new NotFoundError(`File '${fileId}' has no thumbnail yet`);
+      }
+      return {
+        mimeType: blur[1],
+        file: Buffer.from(blur[2], "base64"),
+        filename,
+        placeholder: true,
+      };
+    }
+    const file = await new UserFileSystem(this.userId).readFile(
+      collectionId,
+      fileInfo.id,
+      true
+    );
+    return { mimeType: "image/png", file, filename, placeholder: false };
+  }
+
   async getFileBuffer(
     collectionId: string,
-    fileId: string,
-    thumbnail: boolean = false
+    fileId: string
   ): Promise<GetBufferResult> {
     const fileInfo = await this.getCollectionFileInfo(collectionId, fileId);
     if (!fileInfo) {
@@ -332,11 +366,7 @@ export class CollectionService {
     }
 
     const fileSystem = new UserFileSystem(this.userId);
-    const file = await fileSystem.readFile(
-      collectionId,
-      fileInfo.id,
-      thumbnail
-    );
+    const file = await fileSystem.readFile(collectionId, fileInfo.id);
     if (!file) {
       throw new HolviError(`Could not read file '${fileId}'`);
     }
@@ -590,6 +620,8 @@ export class CollectionService {
         "name",
         "hasRendition",
         "scrubPreviewLayout",
+        "thumbnailStatus",
+        "blurDataUrl",
       ],
       include: {
         model: db.models.Collection,
@@ -609,6 +641,8 @@ export class CollectionService {
       mimeType: collectionFile.mimeType,
       hasRendition: collectionFile.hasRendition,
       hasScrubPreview: collectionFile.scrubPreviewLayout !== null,
+      thumbnailStatus: collectionFile.thumbnailStatus,
+      blurDataUrl: collectionFile.blurDataUrl,
     };
   }
 
