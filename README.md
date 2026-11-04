@@ -10,6 +10,13 @@ A self-hosted home for your photos and videos: collections, a timeline, encrypte
 
 <sub>Screenshots are from the [demo environment](#demo-environment), with CC0 sample media.</sub>
 
+- **Collections** of photos and videos, with tags, search, sorting, and a cover you choose or one that rotates.
+- **Timeline** of every file by when it was taken, with place names for photos with GPS.
+- **Encrypted at rest**: files are stored encrypted with your key; originals are never modified.
+- **Videos that play anywhere**: videos a browser can't play, such as HEVC from iPhones, get a web-playable Rendition in the background.
+- **Backups and Restore**: one zip per user with every file decrypted, restorable into an empty account.
+- **Several users** on one instance, each seeing only their own collections.
+
 ## Deploy Docker
 
 Adjust `docker-compose.yml` as desired and run:
@@ -34,33 +41,32 @@ docker run -d --name holvi-db-dev -p 5432:5432 -v holvi-db-data-dev:/var/lib/pos
 
 ### Setup environment variables
 
-Create a `.env.local` file in the root of the project and add the following variables:
+Create a `.env.local` file in the root of the project. The first five are required:
 
-`HOLVI_DB_CONNECTION_STRING=postgres://admin:<db_password>@localhost:5432/holvi`
+| Variable | What it is | Default |
+|---|---|---|
+| `HOLVI_DB_CONNECTION_STRING` | Postgres connection string, e.g. `postgres://admin:<db password>@localhost:5432/holvi` | — |
+| `HOLVI_DATA_DIR` | Directory that holds the app's data | — |
+| `HOLVI_SESSION_PASSWORD` | 32-character password that seals the session cookie | — |
+| `HOLVI_ENCRYPTION_KEY` | 32-character key that files are encrypted with | — |
+| `HOLVI_GEO_API_KEY` | [BigDataCloud reverse geocoding](https://www.bigdatacloud.com/packages/reverse-geocoding) key, for place names of photos with GPS | — |
+| `HOLVI_BACKUP_DIR` | Directory Backups are written to | `<HOLVI_DATA_DIR>/backups` |
+| `HOLVI_RESTORE_DIR` | Directory Backups to restore are read from | `<HOLVI_BACKUP_DIR>/restore` |
+| `HOLVI_SHUFFLE_PERIOD_MINUTES` | How long the random order of the collections, and Rotating covers, stay the same | `60` |
+| `HOLVI_RENDITION_MAX_BITRATE_KBPS` | Highest bitrate, in kbit/s, of a Rendition | `10000` |
+| `HOLVI_USE_HTTPS` | Whether the session cookie is HTTPS-only in production; set `false` behind plain HTTP | `true` |
+| `HOLVI_SESSION_TTL_SECONDS` | How long a sign-in lasts | `7200` |
+| `HOLVI_MAX_FILE_SIZE_KB` | Largest single upload, in **bytes** despite the name | `4000000000` |
+| `HOLVI_MAX_TOTAL_FILE_SIZE_KB` | Largest upload in one go, in **bytes** despite the name | `16000000000` |
+| `HOLVI_STREAM_CHUNK_SIZE_KB` | Chunk size for streaming encrypted files, in **bytes** despite the name | `3000000` |
 
-`HOLVI_DATA_DIR=<directory to hold app data>`
+**Backups.** A backup is a zip holding decrypted copies of every file, so point `HOLVI_BACKUP_DIR` at a separate disk or network mount to keep backups off the data disk; `docker-compose.yml` carries a commented-out `backup-data` volume showing how. Each user keeps only their newest backup, which they can download or delete from the Backups panel.
 
-`HOLVI_BACKUP_DIR=<directory to write backups to (optional, defaults to a backups directory inside HOLVI_DATA_DIR)>`
+**Restore.** To restore a user's backup, copy its zip (with rsync, scp, a USB drive…) into that user's folder inside `HOLVI_RESTORE_DIR`, named exactly after their username, e.g. `<restore dir>/alice/holvi-backup-alice.zip`. The user then restores it from the Restore panel in Settings, which also offers their Current backup if its zip is still on the server. Restore is only possible into an account with no collections. Holvi only ever reads from the restore directory, so it can be mounted read-only; see ADR-0004.
 
-A backup is a zip holding decrypted copies of every file, so point `HOLVI_BACKUP_DIR` at a separate disk or network mount to keep backups off the data disk; `docker-compose.yml` carries a commented-out `backup-data` volume showing how. Each user keeps only their newest backup, which they can download or delete from the Backups panel.
+**Video processing** gives every video whose original is not web-safe (H.264 with AAC or no audio, in MP4) an encrypted Rendition stored next to the original, which is never modified. It runs in the background, one video at a time: new uploads are processed automatically, and existing videos when their user chooses "Process videos" in Settings. Backups contain originals only.
 
-`HOLVI_RESTORE_DIR=<directory to read backups to restore from (optional, defaults to a restore directory inside HOLVI_BACKUP_DIR)>`
-
-To restore a user's backup, copy its zip (with rsync, scp, a USB drive…) into that user's folder inside `HOLVI_RESTORE_DIR`, named exactly after their username, e.g. `<restore dir>/alice/holvi-backup-alice.zip`. The user then restores it from the Restore panel in Settings, which also offers their Current backup if its zip is still on the server. Restore is only possible into an account with no collections. Holvi only ever reads from the restore directory, so it can be mounted read-only; see ADR-0004.
-
-`HOLVI_SESSION_PASSWORD=<32 character long session password>`
-
-`HOLVI_GEO_API_KEY=<reverse geocoding API key (https://www.bigdatacloud.com/packages/reverse-geocoding)>`
-
-`HOLVI_ENCRYPTION_KEY=<32 character long encryption key>`
-
-`HOLVI_SHUFFLE_PERIOD_MINUTES=<minutes the random order of each user's collections, and each collection's rotating cover, stay the same (optional, defaults to 60)>`
-
-`HOLVI_RENDITION_MAX_BITRATE_KBPS=<highest bitrate, in kbit/s, of the web-playable Rendition made for a video the browser may not play, such as HEVC (optional, defaults to 10000)>`
-
-Video processing gives every video whose original is not web-safe (H.264 with AAC or no audio, in MP4) an encrypted Rendition stored next to the original, which is never modified. It runs in the background, one video at a time: new uploads are processed automatically, and existing videos when their user chooses "Process videos" in Settings. Backups contain originals only.
-
-The Collections tab opens in random order. Within one Shuffle period a refresh gives the same order; when the next period starts, the order changes by itself. So does the cover of every collection whose cover the user has not chosen: each period it shows another of the collection's files, and every file gets a turn before any repeats.
+**Shuffle.** The Collections tab opens in random order. Within one Shuffle period a refresh gives the same order; when the next period starts, the order changes by itself. So does the cover of every collection whose cover the user has not chosen: each period it shows another of the collection's files, and every file gets a turn before any repeats.
 
 ### Install dependencies
 
@@ -75,7 +81,7 @@ npm install
 ```bash
 yarn dev
 # or
-npm dev
+npm run dev
 ```
 
 ### Open browser
@@ -120,3 +126,7 @@ A local, production-built Holvi for trying out features with known data. It buil
 - `up` seeds only an empty demo, so what you change while testing survives `down` and later `up`s, including on other branches, whose database upgrades then run against the existing demo data. If seeding or its checks fail, `up` says the demo is not ready and exits non-zero without opening the browser. Run `reset` and then `up` to seed it again from scratch; until then, `up` keeps failing on the half-seeded demo. The seed recognises a finished seed by a row it writes into a table of its own, `demo_seed`, once every check has passed; a demo with User `demo` but without that row is half-seeded. Only `reset` deletes demo data.
 - The Shuffle period is 1 minute, so the random collection order and Rotating covers change during one session. Override it for one run with `HOLVI_SHUFFLE_PERIOD_MINUTES=60 ./demo.sh up`.
 - For place names on files with GPS, put a reverse geocoding key in `demo/.env.local` (git-ignored) as `HOLVI_GEO_API_KEY=<key>`. Without it the demo still starts; those files just have no place name.
+
+## License
+
+[MIT](LICENSE)
