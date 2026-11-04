@@ -65,7 +65,10 @@ export const COLLECTIONS = [
         added: daysAgo(20),
         cover: "aegina-harbour-night.jpg",
         opens: [daysAgo(320), daysAgo(100), daysAgo(19), daysAgo(5), daysAgo(1)],
-        files: samples("aegina-sunset.jpg", "aegina-harbour-night.jpg")
+        files: samples(
+            "aegina-harbour-night.jpg",
+            "markellos-tower-aegina-greece.jpg"
+        )
     },
     {
         owner: "demo",
@@ -95,7 +98,11 @@ export const COLLECTIONS = [
         // A Forgotten collection never opened
         created: daysAgo(700),
         added: daysAgo(700),
-        files: samples("labrador.jpg", "waterfall-glandieu.jpg", "tabby-cat.jpg")
+        files: samples(
+            "street-in-ishkashim.jpg",
+            "pavillon-de-flore.jpg",
+            "miri-city-council.jpg"
+        )
     },
     {
         owner: "demo",
@@ -123,9 +130,9 @@ export const COLLECTIONS = [
         added: 15,
         opens: [150, 14],
         files: [
-            "horseshoe-falls.jpg",
             "waterfall-glandieu.jpg",
-            "waterfall-vertical.mp4"
+            "parc-de-la-chute.jpg",
+            "waterfall-seydisfjordur.jpg"
         ]
     }),
     everyday({
@@ -154,9 +161,9 @@ export const COLLECTIONS = [
         added: 60,
         opens: [59, 10],
         files: [
-            "beach-parasols-evening.jpg",
             "beach-steps.jpg",
-            "dog-on-beach.jpg"
+            "lords-beach-sandy-bay.jpg",
+            "fishing-boat-aground.jpg"
         ]
     }),
     everyday({
@@ -165,7 +172,10 @@ export const COLLECTIONS = [
         created: 310,
         added: 305,
         opens: [304],
-        files: ["dog-on-beach.jpg", "beach-steps.jpg"]
+        files: [
+            "dog-on-beach.jpg",
+            "danish-coast.jpg"
+        ]
     }),
     everyday({
         name: "Swedish forests",
@@ -180,7 +190,11 @@ export const COLLECTIONS = [
         created: 90,
         added: 10,
         opens: [9, 2],
-        files: ["rose-hips.jpg", "quebec-autumn.jpg", "monschau-autumn.jpg"]
+        files: [
+            "rose-hips.jpg",
+            "autumn-leaves.jpg",
+            "autumn-leaves-dumitru-rascanu.jpg"
+        ]
     }),
     everyday({
         name: "Snow days",
@@ -190,8 +204,8 @@ export const COLLECTIONS = [
         opens: [4, 0.5],
         files: [
             "snowy-trees.jpg",
-            "quebec-snow-fog.jpg",
-            "red-fox-in-snow.jpg"
+            "photo-of-dutch-winter.jpg",
+            "berismenil-forest-in-snow.jpg"
         ]
     }),
     everyday({
@@ -211,14 +225,20 @@ export const COLLECTIONS = [
         created: 340,
         added: 200,
         opens: [199, 100],
-        files: ["labrador.jpg", "dog-on-beach.jpg"]
+        files: [
+            "labrador.jpg",
+            "dogs-in-serles.jpg"
+        ]
     }),
     everyday({
         name: "Birds",
         tags: ["Birds"],
         created: 100,
         added: 95,
-        files: ["go-away-bird.jpg", "flamingos-sao-paulo-zoo.jpg"]
+        files: [
+            "go-away-bird.jpg",
+            "eisvogel-kingfisher.jpg"
+        ]
     }),
     everyday({
         name: "Christmas 2011",
@@ -233,7 +253,10 @@ export const COLLECTIONS = [
         created: 260,
         added: 30,
         opens: [29],
-        files: ["paella.jpg", "buche-de-noel.jpg"]
+        files: [
+            "sour-pasta-with-tomatoes.jpg",
+            "chocolate-raspberry-dessert.jpg"
+        ]
     }),
     everyday({
         name: "Quebec City",
@@ -277,7 +300,11 @@ export const COLLECTIONS = [
         created: 110,
         added: 25,
         opens: [24, 12, 6],
-        files: ["marigolds.jpg", "rose-hips.jpg", "water-lily-alhambra.jpg"]
+        files: [
+            "marigolds.jpg",
+            "flower-garden-hopewell-furnace.jpg",
+            "english-flower-garden-hamilton.jpg"
+        ]
     }),
     everyday({
         name: "Sunsets",
@@ -286,9 +313,9 @@ export const COLLECTIONS = [
         added: 7,
         opens: [6, 3],
         files: [
-            "aegina-sunset.jpg",
-            "rio-sugarloaf-sunset.jpg",
-            "beach-parasols-evening.jpg"
+            "juan-griego-sunset.jpg",
+            "erechtheum-acropolis-athens-evening.jpg",
+            "altmunster-pink-mountain-sunset.jpg"
         ]
     }),
     everyday({
@@ -296,8 +323,8 @@ export const COLLECTIONS = [
         created: 140,
         added: 130,
         files: [
-            "chain-bridge-budapest-night.jpg",
-            "aegina-harbour-night.jpg"
+            "price-building-at-night.jpg",
+            "hong-kong-skyscrapers.jpg"
         ]
     }),
     everyday({
@@ -306,7 +333,11 @@ export const COLLECTIONS = [
         created: 80,
         added: 4,
         opens: [3.5],
-        files: ["red-fox-in-snow.jpg", "go-away-bird.jpg", "loons.mp4"]
+        files: [
+            "red-fox-in-snow.jpg",
+            "nara-deer.jpg",
+            "hedgehog-in-ball.jpg"
+        ]
     }),
     everyday({
         name: "Sea foam",
@@ -327,9 +358,9 @@ export const COLLECTIONS = [
         created: 130,
         added: 125,
         files: [
-            "lake-khovsgol.jpg",
-            "lake-terkhiin-tsagaan.jpg",
-            "water-lily-alhambra.jpg"
+            "lake-ontario-shoreline.jpg",
+            "boat-on-emre-lake.jpg",
+            "white-rock-lake.jpg"
         ]
     }),
     everyday({
@@ -338,44 +369,47 @@ export const COLLECTIONS = [
         created: 125,
         added: 50,
         files: [
-            "snowy-trees.jpg",
-            "spruce-forest.jpg",
-            "beech-and-ferns.jpg"
+            "tree-with-red-apples.jpg",
+            "trees-along-the-hald.jpg",
+            "birch-tree-in-gyumri.jpg"
         ]
     }),
     everyday({
         name: "Bridges",
         created: 115,
         added: 115,
-        files: ["chain-bridge-budapest-night.jpg"]
+        files: ["general-rafael-urdaneta-bridge.jpg"]
     }),
     everyday({
         name: "Harbours",
         tags: ["Greece"],
         created: 105,
         added: 105,
-        files: ["aegina-harbour-night.jpg"]
+        files: ["boat-harbour-beach.jpg"]
     }),
     everyday({
         name: "Winter 2021",
         tags: ["Winter"],
         created: 95,
         added: 95,
-        files: ["snowy-trees.jpg"]
+        files: ["winter-riverscape-with-parhelion.jpg"]
     }),
     everyday({
         name: "Summer 2022",
         tags: ["Flowers"],
         created: 85,
         added: 85,
-        files: ["marigolds.jpg"]
+        files: ["ile-d-orleans.jpg"]
     }),
     everyday({
         name: "Holiday 2023",
         tags: ["Travel"],
         created: 75,
         added: 72,
-        files: ["rio-sugarloaf-sunset.jpg", "lake-khovsgol.jpg"]
+        files: [
+            "echo-park-lake.jpg",
+            "coast-near-yamabare.jpg"
+        ]
     }),
     everyday({
         name: "Canada",
@@ -383,7 +417,11 @@ export const COLLECTIONS = [
         created: 65,
         added: 12,
         opens: [11],
-        files: ["horseshoe-falls.jpg", "quebec-autumn.jpg", "loons.mp4"]
+        files: [
+            "gazania-krebsiana-quebec-city.jpg",
+            "banff-river.jpg",
+            "notre-dame-de-montreal.jpg"
+        ]
     }),
     everyday({
         name: "Pets",
@@ -391,58 +429,68 @@ export const COLLECTIONS = [
         created: 55,
         added: 3,
         opens: [2.5],
-        files: ["tabby-cat.jpg", "labrador.jpg", "cat-asleep-on-bench.jpg"]
+        files: [
+            "ginger-kitten-with-an.jpg",
+            "bunny-in-a-basket.jpg",
+            "dog-puppy-poodle.jpg"
+        ]
     }),
     everyday({
         name: "Greece",
         tags: ["Greece"],
         created: 45,
         added: 44,
-        files: ["aegina-sunset.jpg"]
+        files: ["cliffs-over-eretria-euboea.jpg"]
     }),
     everyday({
         name: "Hungary",
         tags: ["Hungary"],
         created: 35,
         added: 34,
-        files: ["chain-bridge-budapest-night.jpg"]
+        files: ["balaton-and-badacsony-june.jpg"]
     }),
     everyday({
         name: "Brazil",
         tags: ["Brazil"],
         created: 28,
         added: 27,
-        files: ["rio-sugarloaf-sunset.jpg", "flamingos-sao-paulo-zoo.jpg"]
+        files: [
+            "brazil-nordest-house-interior.jpg",
+            "hydrochoeris-hydrochaeris-in-brazil.jpg"
+        ]
     }),
     everyday({
         name: "Germany",
         tags: ["Germany"],
         created: 25,
         added: 24,
-        files: ["monschau-autumn.jpg"]
+        files: ["geyersworthplatz-in-bamberg-as.jpg"]
     }),
     everyday({
         name: "Japan",
         tags: ["Japan"],
         created: 22,
         added: 21,
-        files: ["waterfall-vertical.mp4"]
+        files: ["mount-fuji-at-sunset.jpg"]
     }),
     everyday({
         name: "Water",
         tags: ["Water"],
         created: 18,
         added: 17,
-        files: ["sea-foam.mp4", "waterfall-glandieu.jpg"]
+        files: [
+            "ja1271-crossing-the-otaki.jpg",
+            "waves-in-sea.jpg"
+        ]
     }),
     everyday({
         name: "Wallpapers",
         created: 16,
         added: 2,
         files: [
-            "lake-terkhiin-tsagaan.jpg",
-            "spruce-forest.jpg",
-            "monschau-autumn.jpg"
+            "mountain-and-landscape.jpg",
+            "mountain-landscape.jpg",
+            "landscape-mountains-phaistos.jpg"
         ]
     }),
     everyday({
@@ -451,9 +499,9 @@ export const COLLECTIONS = [
         added: 6,
         opens: [5, 4, 3, 2, 1, 0.25],
         files: [
-            "go-away-bird.jpg",
-            "monschau-autumn.jpg",
-            "red-fox-in-snow.jpg"
+            "smart-city-by-night.jpg",
+            "flowers-of-gomphocarpus-kaessneri.jpg",
+            "calm-sea-san-antonio.jpg"
         ]
     }),
     everyday({
@@ -461,9 +509,9 @@ export const COLLECTIONS = [
         created: 11,
         added: 9,
         files: [
-            "paella.jpg",
-            "buche-de-noel.jpg",
-            "chain-bridge-budapest-night.jpg"
+            "beach-near-otaru.jpg",
+            "rideau-river-ottawa-canada.jpg",
+            "suzuka-mountains-from-mount.jpg"
         ]
     }),
     everyday({
@@ -471,13 +519,19 @@ export const COLLECTIONS = [
         tags: ["France"],
         created: 9,
         added: 8,
-        files: ["cat-asleep-on-bench.jpg", "waterfall-glandieu.jpg"]
+        files: [
+            "punta-di-a-coscia.jpg",
+            "pont-de-bercy-paris.jpg"
+        ]
     }),
     everyday({
         name: "Print these",
         created: 6,
         added: 0.5,
-        files: ["quebec-autumn.jpg", "labrador.jpg"]
+        files: [
+            "cruiser-butterfly.jpg",
+            "monarch-butterfly-on-butterfly.jpg"
+        ]
     }),
     // The second User's own few, with tags demo never uses
     {
@@ -518,37 +572,64 @@ export const COLLECTIONS = [
         opens: [daysAgo(600), daysAgo(200), daysAgo(30), daysAgo(2, 5)],
         files: withTags(
             {
-                "aegina-sunset.jpg": ["Favourite"],
-                "red-fox-in-snow.jpg": ["Favourite", "Animals"],
-                "loons.mp4": ["Favourite", "Animals"],
-                "labrador.jpg": ["Animals"],
-                "tabby-cat (2).jpg": ["Animals"]
+                "princes-road-synagogue-nave.jpg": ["Favourite"],
+                "titus-railroad-park.jpg": ["Favourite"],
+                "train-at-east-croydon.jpg": ["Favourite", "Animals"],
+                "fishing-hut-and-jetties.jpg": ["Animals"],
+                "snowy-forest-path.jpg": ["Animals"]
             },
-            [
-                ...samples(
-                    ...Object.keys(SAMPLES).filter((name) => name !== BROKEN_VIDEO)
-                ),
-                ...copies(
-                    "sea-foam.mov",
-                    "loons.mov",
-                    "waterfall-vertical.mov",
-                    "paella.jpg",
-                    "chain-bridge-budapest-night.jpg",
-                    "aegina-sunset.jpg",
-                    "dog-on-beach.jpg",
-                    "spruce-forest.jpg",
-                    "horseshoe-falls.jpg",
-                    "labrador.jpg",
-                    "snowy-trees.jpg",
-                    "marigolds.jpg",
-                    "lake-khovsgol.jpg",
-                    "quebec-autumn.jpg",
-                    "go-away-bird.jpg",
-                    "monschau-autumn.jpg",
-                    "red-fox-in-snow.jpg",
-                    "tabby-cat.jpg"
-                )
-            ]
+            samples(
+                "princes-road-synagogue-nave.jpg",
+                "hmongtown-marketplace-east-building.jpg",
+                "evening-market-in-hong.jpg",
+                "sonoma-county-museum-sept.jpg",
+                "hong-kong-park.jpg",
+                "titus-railroad-park.jpg",
+                "heatherwood-park-larkspur-ca.jpg",
+                "birthday-cake-bloomsburg-pennsylvania.jpg",
+                "apple-cake-with-vanilla.jpg",
+                "bike-on-a-snowy.jpg",
+                "man-riding-a-bicycle.jpg",
+                "train-of-quebec-city.jpg",
+                "train-at-east-croydon.jpg",
+                "london-northwestern-railway-train.jpg",
+                "church-of-the-virgin.jpg",
+                "trinity-church-zverinets.jpg",
+                "koscio-najswietszego-serca-pana.jpg",
+                "neuschwanstein-castle.jpg",
+                "spanish-hall-of-ambras.jpg",
+                "castle-of-otranto.jpg",
+                "fishing-hut-and-jetties.jpg",
+                "fishing-boats-morning-beach.jpg",
+                "beached-wooden-fishing-boat.jpg",
+                "waxing-half-moon-over.jpg",
+                "entrance-la-rochelle-old.jpg",
+                "abondance-louis-petitot-pont.jpg",
+                "victoria-harbour-skyscrapers.jpg",
+                "grenade-albayzin-depuis-alhambra.jpg",
+                "verona-cityscape-sunny.jpg",
+                "horse-in-tarcoles-river.jpg",
+                "blueberries-in-pack.jpg",
+                "lighthouse-chania-evening-sun.jpg",
+                "lighthouse-harbor-saint-martin.jpg",
+                "snowy-forest-path.jpg",
+                "forest-path-ehrenbach-foliage.jpg",
+                "masoala-village.jpg",
+                "abbey-village-main-street.jpg",
+                "banad-banar-village-jodhpur.jpg",
+                "upminster-windmill.jpg",
+                "rooftop-of-shibuya-stream.jpg",
+                "bunch-tulip-paris.jpg",
+                "domestic-sheep-unidentified-breed.jpg",
+                "brussels-canal.jpg",
+                "snowman-on-a-foggy.jpg",
+                "fishermen-with-his-son.jpg",
+                "nikolauskapelle-between-the-vineyards.jpg",
+                "sea-sky-and-clouds.jpg",
+                "donkmeer-from-a-balloon.jpg",
+                "landmannalaugar-desert-road.jpg",
+                "konrad-steffen-glacier-christiane.jpg"
+            )
         )
     },
     // Last, and last added to of the collections with videos: the seed
@@ -563,7 +644,7 @@ export const COLLECTIONS = [
         // The most recently opened
         opens: [daysAgo(0, 1)],
         files: samples(
-            "loons.mp4",
+            "nerang-river.mp4",
             "sea-foam.mov",
             "waterfall-vertical.mov",
             BROKEN_VIDEO
@@ -574,14 +655,6 @@ export const COLLECTIONS = [
 /** The files, with file tags for those named in `tagsByName` */
 function withTags(tagsByName, files) {
     return files.map((file) => ({ ...file, tags: tagsByName[fileName(file)] }));
-}
-
-/** Second copies of the samples, named as a copied file would be */
-function copies(...names) {
-    return names.map((sample) => ({
-        sample,
-        name: sample.replace(/(\.[^.]+)$/, " (2)$1")
-    }));
 }
 
 /** Planned files of the samples, under their own names */
