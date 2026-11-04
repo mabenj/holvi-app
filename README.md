@@ -1,5 +1,15 @@
 # Holvi app
 
+A self-hosted home for your photos and videos: collections, a timeline, encrypted storage, backups, and web-playable renditions of videos the browser can't play.
+
+![The Collections tab: a grid of collection covers with photo and video counts](docs/screenshots/collections.jpg)
+
+| Viewing a photo | On a phone |
+|---|---|
+| ![A photo open in the viewer, with its date](docs/screenshots/viewer.jpg) | <img src="docs/screenshots/phone-collections.jpg" alt="Collections on a phone" width="190"> <img src="docs/screenshots/phone-collection.jpg" alt="A collection on a phone" width="190"> |
+
+<sub>Screenshots are from the [demo environment](#demo-environment), with CC0 sample media.</sub>
+
 ## Deploy Docker
 
 Adjust `docker-compose.yml` as desired and run:
