@@ -21,7 +21,7 @@ services:
         environment:
             - HOLVI_DB_CONNECTION_STRING=postgres://admin:securepassword@database:5432/holvi
             - HOLVI_SESSION_PASSWORD=generate-a-32-character-long-key-at-https://1password.com/password-generator
-            - HOLVI_ENCRYPTION_KEY=generate-an-encryption-ket-at-https://generate-random.org/encryption-key-generator?count=1&bytes=24&cipher=aes-256-ctr&string=&password=
+            - HOLVI_ENCRYPTION_KEY=generate-an-encryption-key-at-https://generate-random.org/encryption-key-generator?count=1&bytes=24&cipher=aes-256-ctr&string=&password=
             - HOLVI_DATA_DIR=/app/data
             # Backups are unencrypted. To keep them off the data disk, give them
             # their own volume: set this to /app/backups and mount the
@@ -35,7 +35,7 @@ services:
             - HOLVI_SESSION_TTL_SECONDS=7200
             - HOLVI_MAX_FILE_SIZE_KB=4294967296
             - HOLVI_MAX_TOTAL_FILE_SIZE_KB=17179869184
-            - HOLVI_GEO_API_KEY=get-free-api-key-from-https://positionstack.com/product
+            - HOLVI_GEO_API_KEY=get-free-api-key-from-https://www.bigdatacloud.com/packages/reverse-geocoding
             # Minutes the random order of each user's collections stays the same
             - HOLVI_SHUFFLE_PERIOD_MINUTES=60
             # Bitrate cap in kbit/s for the web-playable Renditions of videos
